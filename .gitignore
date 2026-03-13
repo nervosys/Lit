@@ -1,0 +1,14 @@
+# Build artifacts
+/target
+
+# Lit repository data
+.lit/
+
+# Test artifacts
+test_output*.txt
+test_full_output.txt
+*.log
+
+# Dev scripts
+fix_*.ps1
+append_responses.ps1

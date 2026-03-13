@@ -1,0 +1,28 @@
+# Lit Configuration File
+# Place this file at ~/.litconfig
+
+[network]
+# Whitelist of allowed intranet IP ranges (CIDR notation)
+# Default private network ranges
+allowed_networks = [
+    "10.0.0.0/8",        # Class A private network
+    "172.16.0.0/12",     # Class B private network
+    "192.168.0.0/16",    # Class C private network
+]
+
+# Specific allowed hosts/domains for your intranet
+# Add your organization's internal Git servers here
+allowed_hosts = [
+    # Examples:
+    # "git.internal.company.com",
+    # "repo.intranet.local",
+    # "192.168.1.100",
+]
+
+[security]
+# Enable audit logging of all network operations
+audit_log = true
+
+# Path to audit log file
+# Use ~ for home directory
+audit_log_path = "~/.lit/audit.log"

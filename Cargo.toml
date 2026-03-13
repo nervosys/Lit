@@ -1,0 +1,59 @@
+[package]
+name = "lit"
+version = "1.0.0"
+edition = "2021"
+authors = ["Nervosys"]
+description = "Lit - The agentic-first distributed version control system. A complete Git replacement designed for AI agents first and humans second."
+license = "MIT"
+repository = "https://github.com/nervosys/lit"
+homepage = "https://github.com/nervosys/lit"
+keywords = ["vcs", "git", "quantum-resistant", "post-quantum", "version-control"]
+categories = ["command-line-utilities", "development-tools"]
+
+[dependencies]
+clap = { version = "4.5", features = ["derive", "env"] }
+# FIPS 140-2 Approved Algorithms
+sha2 = "0.10" # SHA-256/384/512 (FIPS 180-4)
+sha3 = "0.10" # SHA-3 (NIST FIPS 202) - primary hash
+blake3 = "1.5" # BLAKE3 for additional security
+aes = "0.8" # AES encryption (FIPS 197)
+aes-gcm = "0.10" # AES-GCM authenticated encryption (NIST SP 800-38D)
+hmac = "0.12" # HMAC (FIPS 198-1)
+pbkdf2 = { version = "0.12", features = [
+    "simple",
+] } # PBKDF2 key derivation (NIST SP 800-132)
+rpassword = "7.3" # Secure password prompting
+flate2 = "1.0"
+hex = "0.4"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+walkdir = "2.4"
+chrono = "0.4"
+lazy_static = "1.4" # Static initialization for caching
+uuid = { version = "1.6", features = ["v4"] }
+toml = "0.8"
+regex = "1.10"
+dirs = "5.0"
+shellexpand = "3.1"
+# Post-Quantum Cryptography (NIST standards)
+pqcrypto-kyber = "0.8"     # ML-KEM (Kyber) - NIST post-quantum KEM
+pqcrypto-dilithium = "0.5" # ML-DSA (Dilithium) - NIST post-quantum signatures
+pqcrypto-traits = "0.3"
+# Phase 3: API Server
+tiny_http = "0.12" # Lightweight sync HTTP server
+# FIPS 140-2 compliance
+zeroize = { version = "1.8", features = ["derive"] } # Secure memory clearing
+subtle = "2.6"                                       # Constant-time comparisons for cryptographic operations
+sha1 = "0.10"
+crc32fast = "1.4"
+rayon = "1.10"
+memmap2 = "0.9"
+rmp-serde = "1.3"
+byteorder = "1.5"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = ["Win32_Storage_FileSystem"] }
+
+[dev-dependencies]
+tempfile = "3.8"
+rand = "0.8"
