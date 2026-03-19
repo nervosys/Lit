@@ -5,7 +5,10 @@ use crate::response::CommitResponse;
 use crate::storage::{Index, ObjectStore};
 use std::collections::HashMap;
 
-pub fn execute(message: String, author: Option<String>) -> Result<CommitResponse, crate::errors::LitError> {
+pub fn execute(
+    message: String,
+    author: Option<String>,
+) -> Result<CommitResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
     let store = ObjectStore::new(&repo_root);
     let index = Index::load(&repo_root)?;
@@ -65,7 +68,10 @@ pub fn execute(message: String, author: Option<String>) -> Result<CommitResponse
     })
 }
 
-fn build_tree_from_index(index: &Index, store: &ObjectStore) -> Result<ObjectHash, crate::errors::LitError> {
+fn build_tree_from_index(
+    index: &Index,
+    store: &ObjectStore,
+) -> Result<ObjectHash, crate::errors::LitError> {
     // Group files by directory
     let mut tree_map: HashMap<String, Vec<(String, String, String)>> = HashMap::new();
 

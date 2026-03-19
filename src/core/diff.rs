@@ -2,7 +2,7 @@
 ///
 /// Provides line-level diffing between blobs and tree-level diffing
 /// between commits/branches. All output is structured for agent consumption.
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 /// A single diff hunk representing a contiguous region of changes
 #[derive(Debug, Clone, Serialize, Deserialize)]
