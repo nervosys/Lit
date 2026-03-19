@@ -117,6 +117,7 @@ lit search <query>                 # Full-text search across history
 lit watch                          # Emit filesystem change events
 lit swarm <join|status|sync>       # Multi-agent swarm coordination
 lit ontology                       # Output command ontology for agent discovery
+lit schema [--command <id>]        # Generate JSON Schema (draft 2020-12) from ontology
 ```
 
 ### Maintenance & Migration
@@ -131,6 +132,38 @@ lit export-git <destination>       # Export to Git format
 lit rotate-key                     # Rotate encryption passphrase
 lit config [get|set|list]          # Manage configuration settings
 ```
+
+## Structured Errors
+
+All commands return typed `LitError` values with machine-actionable codes, not freeform strings:
+
+```json
+{
+  "status": "error",
+  "command": "commit",
+  "code": "REPO_NOT_FOUND",
+  "message": "Not a lit repository (or any parent up to /)",
+  "suggestions": ["Run 'lit init' to create a new repository"]
+}
+```
+
+Error codes: `ENCRYPTION_ERROR`, `IO_ERROR`, `CONFIG_ERROR`, `NETWORK_ERROR`, `REPO_NOT_FOUND`, `OBJECT_NOT_FOUND`, `INDEX_ERROR`, `MERGE_CONFLICT`, `AUTH_FAILURE`, `INVALID_INPUT`, `PERMISSION_DENIED`, `TIMEOUT`, `PROTOCOL_ERROR`, `INTERNAL_ERROR`, `GENERAL_ERROR`.
+
+## JSON Schema
+
+Generate standard JSON Schema (draft 2020-12) from the ontology for agent SDK discovery and input validation:
+
+```bash
+# Full schema — all types and command interfaces
+lit schema
+
+# Single command schema
+lit schema --command commit
+# → {"$schema": "https://json-schema.org/draft/2020-12/schema",
+#    "input": {"properties": {"message": {"type": "string"}, ...}}}
+```
+
+The schema is auto-generated from the ontology — types map to `$defs`, commands map to input/output schemas with metadata (idempotent, safe, side_effects, preconditions).
 
 ## API Server
 
@@ -155,7 +188,9 @@ lit mcp-serve --stdio    # For stdio-based MCP clients
 lit mcp-serve --port 8385  # For HTTP-based MCP clients
 ```
 
-Tools: `lit_status`, `lit_diff`, `lit_log`, `lit_commit`, `lit_branch`, `lit_checkout`, `lit_merge`, `lit_search`, `lit_read_file`, `lit_write_file`.
+Tools: `lit_status`, `lit_diff`, `lit_log`, `lit_commit`, `lit_add`, `lit_branch`, `lit_checkout`, `lit_merge`, `lit_search`, `lit_snapshot`, `lit_show`, `lit_verify`.
+
+Resources: `lit://status`, `lit://branches`, `lit://log`, `lit://ontology`, `lit://schema`.
 
 ## Configuration
 

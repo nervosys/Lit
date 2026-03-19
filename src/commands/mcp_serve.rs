@@ -1,4 +1,5 @@
 use crate::commands;
+use crate::ontology;
 use crate::response::McpServeResponse;
 use serde::{Deserialize, Serialize};
 use std::io::{self, BufRead, Read, Write};
@@ -275,6 +276,12 @@ fn handle_mcp_method(req: &JsonRpcRequest) -> JsonRpcResponse {
                         "name": "Lit Ontology",
                         "description": "Machine-readable ontology for agent discovery",
                         "mimeType": "application/json"
+                    },
+                    {
+                        "uri": "lit://schema",
+                        "name": "JSON Schema",
+                        "description": "JSON Schema (draft 2020-12) generated from the Lit ontology for input validation",
+                        "mimeType": "application/schema+json"
                     }
                 ]
             })),
@@ -324,151 +331,76 @@ fn handle_mcp_method(req: &JsonRpcRequest) -> JsonRpcResponse {
 }
 
 fn get_mcp_tools() -> Vec<McpTool> {
-    vec![
-        McpTool {
-            name: "lit_status".to_string(),
-            description: "Show repository status: current branch, staged/modified/untracked files"
-                .to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {},
-                "required": []
-            }),
-        },
-        McpTool {
-            name: "lit_diff".to_string(),
-            description: "Show changes between working tree, index, and commits".to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "staged": { "type": "boolean", "description": "Show staged changes (index vs HEAD)" },
-                    "stat": { "type": "boolean", "description": "Show summary statistics only" }
-                },
-                "required": []
-            }),
-        },
-        McpTool {
-            name: "lit_log".to_string(),
-            description: "Show commit history".to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "count": { "type": "integer", "description": "Number of commits to show", "default": 10 }
-                },
-                "required": []
-            }),
-        },
-        McpTool {
-            name: "lit_commit".to_string(),
-            description: "Record staged changes as a new commit".to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "message": { "type": "string", "description": "Commit message" },
-                    "author": { "type": "string", "description": "Author name (optional)" }
-                },
-                "required": ["message"]
-            }),
-        },
-        McpTool {
-            name: "lit_add".to_string(),
-            description: "Stage files for the next commit".to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "files": {
-                        "type": "array",
-                        "items": { "type": "string" },
-                        "description": "File paths to stage"
+    // MCP tool name → ontology command ID
+    let tool_commands: &[(&str, &str, &str)] = &[
+        ("lit_status", "status", "Show repository status: current branch, staged/modified/untracked files"),
+        ("lit_diff", "diff", "Show changes between working tree, index, and commits"),
+        ("lit_log", "log", "Show commit history"),
+        ("lit_commit", "commit", "Record staged changes as a new commit"),
+        ("lit_add", "add", "Stage files for the next commit"),
+        ("lit_branch", "branch", "List, create, or delete branches"),
+        ("lit_checkout", "checkout", "Switch branches or restore working tree files"),
+        ("lit_merge", "merge", "Merge a branch into the current branch"),
+        ("lit_search", "search", "Search file contents, commit messages, or metadata"),
+        ("lit_snapshot", "snapshot", "Atomic add-all + commit in one step (preferred for agents)"),
+        ("lit_show", "show", "Show contents of a commit, tree, or blob object"),
+        ("lit_verify", "verify", "Run full repository integrity check"),
+    ];
+
+    let ont = ontology::get_ontology();
+
+    tool_commands
+        .iter()
+        .map(|(tool_name, cmd_id, description)| {
+            // Use ontology-generated schema if available, fall back to empty object
+            let input_schema = ont
+                .commands
+                .iter()
+                .find(|c| c.id == *cmd_id)
+                .map(|cmd| {
+                    let mut properties = serde_json::Map::new();
+                    let mut required = Vec::new();
+                    for param in &cmd.parameters {
+                        let mut prop = match param.type_name.as_str() {
+                            "string" | "String" => serde_json::json!({ "type": "string" }),
+                            "boolean" | "bool" => serde_json::json!({ "type": "boolean" }),
+                            "integer" | "usize" => serde_json::json!({ "type": "integer" }),
+                            t if t.starts_with("array<") => serde_json::json!({
+                                "type": "array",
+                                "items": { "type": "string" }
+                            }),
+                            _ => serde_json::json!({ "type": "string" }),
+                        };
+                        if let Some(obj) = prop.as_object_mut() {
+                            obj.insert("description".to_string(), serde_json::Value::String(param.description.clone()));
+                            if let Some(ref default) = param.default {
+                                obj.insert("default".to_string(), serde_json::Value::String(default.clone()));
+                            }
+                        }
+                        properties.insert(param.name.clone(), prop);
+                        if param.required {
+                            required.push(serde_json::Value::String(param.name.clone()));
+                        }
                     }
-                },
-                "required": ["files"]
-            }),
-        },
-        McpTool {
-            name: "lit_branch".to_string(),
-            description: "List, create, or delete branches".to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "name": { "type": "string", "description": "Branch name (omit to list)" },
-                    "delete": { "type": "boolean", "description": "Delete the branch" }
-                },
-                "required": []
-            }),
-        },
-        McpTool {
-            name: "lit_checkout".to_string(),
-            description: "Switch branches or restore working tree files".to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "target": { "type": "string", "description": "Branch or commit to checkout" },
-                    "create": { "type": "boolean", "description": "Create new branch" }
-                },
-                "required": ["target"]
-            }),
-        },
-        McpTool {
-            name: "lit_merge".to_string(),
-            description: "Merge a branch into the current branch".to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "branch": { "type": "string", "description": "Branch to merge" },
-                    "strategy": { "type": "string", "description": "Merge strategy: recursive, ours, theirs" }
-                },
-                "required": ["branch"]
-            }),
-        },
-        McpTool {
-            name: "lit_search".to_string(),
-            description: "Search file contents, commit messages, or metadata".to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "query": { "type": "string", "description": "Search query" },
-                    "messages": { "type": "boolean", "description": "Search commit messages instead of file contents" },
-                    "metadata": { "type": "string", "description": "Search metadata key=value" },
-                    "max_results": { "type": "integer", "description": "Maximum results", "default": 100 }
-                },
-                "required": ["query"]
-            }),
-        },
-        McpTool {
-            name: "lit_snapshot".to_string(),
-            description: "Atomic add-all + commit in one step (preferred for agents)".to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "message": { "type": "string", "description": "Commit message" },
-                    "author": { "type": "string", "description": "Author name" },
-                    "metadata": { "type": "object", "description": "Agent metadata JSON (agent_id, task_id, confidence, etc.)" }
-                },
-                "required": ["message"]
-            }),
-        },
-        McpTool {
-            name: "lit_show".to_string(),
-            description: "Show contents of a commit, tree, or blob object".to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "object": { "type": "string", "description": "Object hash or reference (branch name, HEAD, tag)" }
-                },
-                "required": ["object"]
-            }),
-        },
-        McpTool {
-            name: "lit_verify".to_string(),
-            description: "Run full repository integrity check".to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {},
-                "required": []
-            }),
-        },
-    ]
+                    serde_json::json!({
+                        "type": "object",
+                        "properties": properties,
+                        "required": required
+                    })
+                })
+                .unwrap_or_else(|| serde_json::json!({
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                }));
+
+            McpTool {
+                name: tool_name.to_string(),
+                description: description.to_string(),
+                input_schema,
+            }
+        })
+        .collect()
 }
 
 fn call_tool(name: &str, args: &serde_json::Value) -> Result<serde_json::Value, crate::errors::LitError> {
@@ -623,6 +555,10 @@ fn read_resource(uri: &str) -> Result<String, crate::errors::LitError> {
         "lit://ontology" => {
             let ontology = crate::ontology::get_ontology();
             serde_json::to_string_pretty(&ontology).map_err(|e| e.to_string().into())
+        }
+        "lit://schema" => {
+            let schema = ontology::generate_schemas();
+            serde_json::to_string_pretty(&schema).map_err(|e| e.to_string().into())
         }
         _ => Err(format!("Unknown resource: {}", uri).into()),
     }

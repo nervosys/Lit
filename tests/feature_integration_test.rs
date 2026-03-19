@@ -434,3 +434,125 @@ mod error_handling_tests {
         assert!(result.unwrap_err().contains("detached"));
     }
 }
+
+// ============================================================================
+// Schema Generation Tests
+// ============================================================================
+
+#[cfg(test)]
+mod schema_tests {
+    use lit::ontology;
+
+    #[test]
+    fn test_generate_schemas_has_required_fields() {
+        let schema = ontology::generate_schemas();
+        assert_eq!(
+            schema["$schema"],
+            "https://json-schema.org/draft/2020-12/schema"
+        );
+        assert_eq!(schema["$id"], "https://lit-vcs.dev/schema/v1");
+        assert_eq!(schema["title"], "Lit VCS Schema");
+        assert!(schema["$defs"].is_object(), "$defs must be an object");
+        assert!(schema["commands"].is_object(), "commands must be an object");
+    }
+
+    #[test]
+    fn test_generate_schemas_has_types() {
+        let schema = ontology::generate_schemas();
+        let defs = schema["$defs"].as_object().unwrap();
+        // Ontology defines core types like ObjectHash, Commit, etc.
+        assert!(!defs.is_empty(), "must have at least one type def");
+        // Each type def should have "type": "object"
+        for (_name, def) in defs {
+            assert_eq!(def["type"], "object");
+            assert!(def["properties"].is_object());
+        }
+    }
+
+    #[test]
+    fn test_generate_schemas_has_commands() {
+        let schema = ontology::generate_schemas();
+        let commands = schema["commands"].as_object().unwrap();
+        // Must include core commands
+        assert!(commands.contains_key("commit"), "missing commit command");
+        assert!(commands.contains_key("status"), "missing status command");
+        assert!(commands.contains_key("add"), "missing add command");
+        assert!(commands.contains_key("branch"), "missing branch command");
+        // Each command must have description and input schema
+        for (_id, cmd) in commands {
+            assert!(cmd["description"].is_string());
+            assert!(cmd["input"].is_object());
+            assert_eq!(cmd["input"]["type"], "object");
+        }
+    }
+
+    #[test]
+    fn test_generate_command_schema_known_command() {
+        let schema = ontology::generate_command_schema("commit");
+        assert!(schema.is_some(), "commit schema should exist");
+        let schema = schema.unwrap();
+        assert_eq!(
+            schema["$schema"],
+            "https://json-schema.org/draft/2020-12/schema"
+        );
+        assert_eq!(
+            schema["$id"],
+            "https://lit-vcs.dev/schema/v1/commands/commit"
+        );
+        assert!(schema["input"]["properties"].is_object());
+        let props = schema["input"]["properties"].as_object().unwrap();
+        assert!(props.contains_key("message"), "commit must have message param");
+    }
+
+    #[test]
+    fn test_generate_command_schema_unknown_returns_none() {
+        let schema = ontology::generate_command_schema("nonexistent_command_xyz");
+        assert!(schema.is_none());
+    }
+
+    #[test]
+    fn test_command_schema_required_fields() {
+        let schema = ontology::generate_command_schema("commit").unwrap();
+        let required = schema["input"]["required"].as_array().unwrap();
+        let required_names: Vec<&str> = required.iter().filter_map(|v| v.as_str()).collect();
+        assert!(
+            required_names.contains(&"message"),
+            "commit message should be required"
+        );
+    }
+
+    #[test]
+    fn test_schema_param_types_are_valid() {
+        let schema = ontology::generate_schemas();
+        let commands = schema["commands"].as_object().unwrap();
+        let valid_types = ["string", "boolean", "integer", "number", "array", "object"];
+        for (_id, cmd) in commands {
+            if let Some(props) = cmd["input"]["properties"].as_object() {
+                for (_name, prop) in props {
+                    if let Some(ty) = prop["type"].as_str() {
+                        assert!(
+                            valid_types.contains(&ty),
+                            "invalid type '{}' in command '{}'",
+                            ty,
+                            _id
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_all_ontology_commands_in_schema() {
+        let ont = ontology::get_ontology();
+        let schema = ontology::generate_schemas();
+        let commands = schema["commands"].as_object().unwrap();
+        for cmd in &ont.commands {
+            assert!(
+                commands.contains_key(&cmd.id),
+                "ontology command '{}' missing from schema",
+                cmd.id
+            );
+        }
+    }
+}
