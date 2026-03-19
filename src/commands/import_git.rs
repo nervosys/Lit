@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 /// Import a Git repository into Lit format.
 /// Reads Git objects (SHA-1), converts them to Lit objects (SHA3-512 + BLAKE3),
 /// and imports all refs.
-pub fn execute(source: String) -> Result<ImportGitResponse, String> {
+pub fn execute(source: String) -> Result<ImportGitResponse, crate::errors::LitError> {
     let source_path = PathBuf::from(&source);
     let git_dir = find_git_dir(&source_path)?;
 
@@ -171,7 +171,7 @@ pub fn execute(source: String) -> Result<ImportGitResponse, String> {
 }
 
 /// Find the .git directory for a given path
-fn find_git_dir(path: &Path) -> Result<PathBuf, String> {
+fn find_git_dir(path: &Path) -> Result<PathBuf, crate::errors::LitError> {
     // Could be a bare repo or have .git directory
     let dot_git = path.join(".git");
     if dot_git.is_dir() {
@@ -181,7 +181,7 @@ fn find_git_dir(path: &Path) -> Result<PathBuf, String> {
     if path.join("objects").is_dir() && path.join("refs").is_dir() {
         return Ok(path.to_path_buf());
     }
-    Err(format!("Not a Git repository: {}", path.display()))
+    Err(format!("Not a Git repository: {}", path.display()).into())
 }
 
 /// Import a single loose Git object
@@ -190,7 +190,7 @@ fn import_loose_object(
     _git_hash: &str,
     store: &ObjectStore,
     hash_map: &mut HashMap<String, ObjectHash>,
-) -> Result<(), String> {
+) -> Result<(), crate::errors::LitError> {
     let compressed = fs::read(path).map_err(|e| format!("Read error: {}", e))?;
 
     // Decompress zlib
@@ -231,7 +231,7 @@ fn import_loose_object(
             // Treat as blob for now — full tag object parsing is complex
             Object::Blob(Blob::new(content.to_vec()))
         }
-        other => return Err(format!("Unknown object type: {}", other)),
+        other => return Err(format!("Unknown object type: {}", other).into()),
     };
 
     let lit_hash = store.write(&lit_obj)?;
@@ -240,7 +240,7 @@ fn import_loose_object(
 }
 
 /// Parse a Git tree object's binary content
-fn parse_git_tree(content: &[u8], hash_map: &HashMap<String, ObjectHash>) -> Result<Tree, String> {
+fn parse_git_tree(content: &[u8], hash_map: &HashMap<String, ObjectHash>) -> Result<Tree, crate::errors::LitError> {
     let mut tree = Tree::new();
     let mut pos = 0;
 
@@ -294,7 +294,7 @@ fn parse_git_tree(content: &[u8], hash_map: &HashMap<String, ObjectHash>) -> Res
 fn parse_git_commit(
     content: &[u8],
     hash_map: &HashMap<String, ObjectHash>,
-) -> Result<Commit, String> {
+) -> Result<Commit, crate::errors::LitError> {
     let text = std::str::from_utf8(content).map_err(|_| "Invalid commit: not UTF-8")?;
 
     let mut tree_hash = String::new();
@@ -378,19 +378,19 @@ fn import_pack_file(
     pack_path: &Path,
     store: &ObjectStore,
     hash_map: &mut HashMap<String, ObjectHash>,
-) -> Result<u64, String> {
+) -> Result<u64, crate::errors::LitError> {
     let data = fs::read(pack_path).map_err(|e| format!("Failed to read pack: {}", e))?;
 
     // Validate pack header: "PACK" magic, version 2/3, object count
     if data.len() < 12 {
-        return Err("Pack file too small".to_string());
+        return Err("Pack file too small".into());
     }
     if &data[0..4] != b"PACK" {
-        return Err("Invalid pack file magic".to_string());
+        return Err("Invalid pack file magic".into());
     }
     let version = u32::from_be_bytes([data[4], data[5], data[6], data[7]]);
     if version != 2 && version != 3 {
-        return Err(format!("Unsupported pack version: {}", version));
+        return Err(format!("Unsupported pack version: {}", version).into());
     }
     let num_objects = u32::from_be_bytes([data[8], data[9], data[10], data[11]]);
     let mut imported = 0u64;
@@ -419,9 +419,9 @@ fn parse_pack_entry(
     pos: &mut usize,
     store: &ObjectStore,
     hash_map: &mut HashMap<String, ObjectHash>,
-) -> Result<(), String> {
+) -> Result<(), crate::errors::LitError> {
     if *pos >= data.len() {
-        return Err("Unexpected end of pack".to_string());
+        return Err("Unexpected end of pack".into());
     }
 
     // Read type and size from variable-length header
@@ -433,7 +433,7 @@ fn parse_pack_entry(
 
     while byte & 0x80 != 0 {
         if *pos >= data.len() {
-            return Err("Truncated pack header".to_string());
+            return Err("Truncated pack header".into());
         }
         byte = data[*pos];
         _size |= ((byte & 0x7f) as u64) << shift;
@@ -501,7 +501,7 @@ fn parse_pack_entry(
         7 => {
             // REF_DELTA
             if *pos + 20 > data.len() {
-                return Err("Truncated ref delta".to_string());
+                return Err("Truncated ref delta".into());
             }
             *pos += 20; // Skip base hash
             let mut decoder = flate2::read::ZlibDecoder::new(&data[*pos..]);
@@ -510,7 +510,7 @@ fn parse_pack_entry(
             *pos += decoder.total_in() as usize;
         }
         _ => {
-            return Err(format!("Unknown pack object type: {}", obj_type));
+            return Err(format!("Unknown pack object type: {}", obj_type).into());
         }
     }
 

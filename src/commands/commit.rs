@@ -5,13 +5,13 @@ use crate::response::CommitResponse;
 use crate::storage::{Index, ObjectStore};
 use std::collections::HashMap;
 
-pub fn execute(message: String, author: Option<String>) -> Result<CommitResponse, String> {
+pub fn execute(message: String, author: Option<String>) -> Result<CommitResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
     let store = ObjectStore::new(&repo_root);
     let index = Index::load(&repo_root)?;
 
     if index.entries.is_empty() {
-        return Err("Nothing to commit (staging area is empty)".to_string());
+        return Err("Nothing to commit (staging area is empty)".into());
     }
 
     // Get author
@@ -65,7 +65,7 @@ pub fn execute(message: String, author: Option<String>) -> Result<CommitResponse
     })
 }
 
-fn build_tree_from_index(index: &Index, store: &ObjectStore) -> Result<ObjectHash, String> {
+fn build_tree_from_index(index: &Index, store: &ObjectStore) -> Result<ObjectHash, crate::errors::LitError> {
     // Group files by directory
     let mut tree_map: HashMap<String, Vec<(String, String, String)>> = HashMap::new();
 
@@ -135,5 +135,5 @@ fn build_tree_from_index(index: &Index, store: &ObjectStore) -> Result<ObjectHas
 
     // Write root tree
     let tree_object = Object::Tree(root_tree);
-    store.write(&tree_object)
+    store.write(&tree_object).map_err(Into::into)
 }

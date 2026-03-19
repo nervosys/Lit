@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 
 /// Export a Lit repository to Git format.
 /// Converts Lit objects (SHA3-512 + BLAKE3) back to Git objects (SHA-1).
-pub fn execute(destination: String) -> Result<ExportGitResponse, String> {
+pub fn execute(destination: String) -> Result<ExportGitResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
     let dest_path = PathBuf::from(&destination);
 
@@ -150,7 +150,7 @@ fn export_object(
     lit_hash: &ObjectHash,
     dest: &Path,
     hash_map: &mut HashMap<String, String>,
-) -> Result<(), String> {
+) -> Result<(), crate::errors::LitError> {
     let obj = store.read(lit_hash)?;
 
     let (type_name, content) = match &obj {
@@ -203,7 +203,7 @@ fn export_object(
 fn serialize_git_tree(
     tree: &crate::core::Tree,
     hash_map: &HashMap<String, String>,
-) -> Result<Vec<u8>, String> {
+) -> Result<Vec<u8>, crate::errors::LitError> {
     let mut buf = Vec::new();
     for entry in &tree.entries {
         // mode SP name NUL sha1-bytes
@@ -233,7 +233,7 @@ fn serialize_git_tree(
 fn serialize_git_commit(
     commit: &crate::core::Commit,
     hash_map: &HashMap<String, String>,
-) -> Result<Vec<u8>, String> {
+) -> Result<Vec<u8>, crate::errors::LitError> {
     let mut lines = Vec::new();
 
     // tree
@@ -278,7 +278,7 @@ fn serialize_git_commit(
 fn serialize_git_tag(
     tag: &crate::core::Tag,
     hash_map: &HashMap<String, String>,
-) -> Result<Vec<u8>, String> {
+) -> Result<Vec<u8>, crate::errors::LitError> {
     let target_hash = hash_map
         .get(tag.target.as_str())
         .cloned()

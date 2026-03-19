@@ -26,7 +26,7 @@ struct StashList {
 }
 
 impl StashList {
-    fn load(repo_root: &std::path::Path) -> Result<Self, String> {
+    fn load(repo_root: &std::path::Path) -> Result<Self, crate::errors::LitError> {
         let path = repo_root.join(".lit").join("stash");
         if !path.exists() {
             return Ok(StashList {
@@ -34,18 +34,18 @@ impl StashList {
             });
         }
         let data = fs::read_to_string(&path).map_err(|e| format!("Failed to read stash: {}", e))?;
-        serde_json::from_str(&data).map_err(|e| format!("Failed to parse stash: {}", e))
+        serde_json::from_str(&data).map_err(|e| format!("Failed to parse stash: {}", e).into())
     }
 
-    fn save(&self, repo_root: &std::path::Path) -> Result<(), String> {
+    fn save(&self, repo_root: &std::path::Path) -> Result<(), crate::errors::LitError> {
         let path = repo_root.join(".lit").join("stash");
         let data = serde_json::to_string_pretty(self)
             .map_err(|e| format!("Failed to serialize stash: {}", e))?;
-        fs::write(&path, data).map_err(|e| format!("Failed to write stash: {}", e))
+        fs::write(&path, data).map_err(|e| format!("Failed to write stash: {}", e).into())
     }
 }
 
-pub fn execute(command: Option<crate::StashCommands>) -> Result<StashResponse, String> {
+pub fn execute(command: Option<crate::StashCommands>) -> Result<StashResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
 
     match command {
@@ -61,14 +61,14 @@ pub fn execute(command: Option<crate::StashCommands>) -> Result<StashResponse, S
 fn build_tree_from_working_dir(
     repo_root: &std::path::Path,
     store: &ObjectStore,
-) -> Result<ObjectHash, String> {
+) -> Result<ObjectHash, crate::errors::LitError> {
     use crate::core::Tree;
 
     let mut tree = Tree::new();
     collect_files_to_tree(repo_root, repo_root, &mut tree, store)?;
 
     let tree_obj = Object::Tree(tree);
-    store.write(&tree_obj)
+    store.write(&tree_obj).map_err(Into::into)
 }
 
 fn collect_files_to_tree(
@@ -76,7 +76,7 @@ fn collect_files_to_tree(
     dir: &std::path::Path,
     tree: &mut crate::core::Tree,
     store: &ObjectStore,
-) -> Result<(), String> {
+) -> Result<(), crate::errors::LitError> {
     let entries = fs::read_dir(dir).map_err(|e| format!("Failed to read directory: {}", e))?;
 
     for entry in entries {
@@ -112,7 +112,7 @@ fn collect_files_to_tree(
 fn build_tree_from_index(
     repo_root: &std::path::Path,
     store: &ObjectStore,
-) -> Result<ObjectHash, String> {
+) -> Result<ObjectHash, crate::errors::LitError> {
     let index = Index::load(repo_root)?;
     let mut tree = crate::core::Tree::new();
 
@@ -126,13 +126,13 @@ fn build_tree_from_index(
     }
 
     let tree_obj = Object::Tree(tree);
-    store.write(&tree_obj)
+    store.write(&tree_obj).map_err(Into::into)
 }
 
 fn stash_push(
     repo_root: &std::path::Path,
     message: Option<String>,
-) -> Result<StashResponse, String> {
+) -> Result<StashResponse, crate::errors::LitError> {
     let store = ObjectStore::new(repo_root);
     let head_commit = read_head(repo_root)?;
     let branch = crate::core::get_current_branch(repo_root).ok();
@@ -169,11 +169,11 @@ fn stash_push(
     })
 }
 
-fn stash_pop(repo_root: &std::path::Path) -> Result<StashResponse, String> {
+fn stash_pop(repo_root: &std::path::Path) -> Result<StashResponse, crate::errors::LitError> {
     let mut stash_list = StashList::load(repo_root)?;
 
     if stash_list.entries.is_empty() {
-        return Err("No stash entries".to_string());
+        return Err("No stash entries".into());
     }
 
     let entry = stash_list.entries.pop().unwrap();
@@ -189,17 +189,17 @@ fn stash_pop(repo_root: &std::path::Path) -> Result<StashResponse, String> {
     })
 }
 
-fn stash_apply(repo_root: &std::path::Path, idx: Option<usize>) -> Result<StashResponse, String> {
+fn stash_apply(repo_root: &std::path::Path, idx: Option<usize>) -> Result<StashResponse, crate::errors::LitError> {
     let stash_list = StashList::load(repo_root)?;
 
     if stash_list.entries.is_empty() {
-        return Err("No stash entries".to_string());
+        return Err("No stash entries".into());
     }
 
     let index = idx.unwrap_or(stash_list.entries.len() - 1);
 
     if index >= stash_list.entries.len() {
-        return Err(format!("stash@{{{}}} does not exist", index));
+        return Err(format!("stash@{{{}}} does not exist", index).into());
     }
 
     let entry = &stash_list.entries[index];
@@ -211,7 +211,7 @@ fn stash_apply(repo_root: &std::path::Path, idx: Option<usize>) -> Result<StashR
     })
 }
 
-fn stash_list(repo_root: &std::path::Path) -> Result<StashResponse, String> {
+fn stash_list(repo_root: &std::path::Path) -> Result<StashResponse, crate::errors::LitError> {
     let stash_list = StashList::load(repo_root)?;
 
     let entries: Vec<crate::response::StashEntryInfo> = stash_list
@@ -229,17 +229,17 @@ fn stash_list(repo_root: &std::path::Path) -> Result<StashResponse, String> {
     Ok(StashResponse::List { entries })
 }
 
-fn stash_drop(repo_root: &std::path::Path, idx: Option<usize>) -> Result<StashResponse, String> {
+fn stash_drop(repo_root: &std::path::Path, idx: Option<usize>) -> Result<StashResponse, crate::errors::LitError> {
     let mut stash_list = StashList::load(repo_root)?;
 
     if stash_list.entries.is_empty() {
-        return Err("No stash entries".to_string());
+        return Err("No stash entries".into());
     }
 
     let index = idx.unwrap_or(stash_list.entries.len() - 1);
 
     if index >= stash_list.entries.len() {
-        return Err(format!("stash@{{{}}} does not exist", index));
+        return Err(format!("stash@{{{}}} does not exist", index).into());
     }
 
     stash_list.entries.remove(index);
@@ -251,13 +251,13 @@ fn stash_drop(repo_root: &std::path::Path, idx: Option<usize>) -> Result<StashRe
     })
 }
 
-fn apply_stash_entry(repo_root: &std::path::Path, entry: &StashEntry) -> Result<(), String> {
+fn apply_stash_entry(repo_root: &std::path::Path, entry: &StashEntry) -> Result<(), crate::errors::LitError> {
     let store = ObjectStore::new(repo_root);
     let worktree_hash = ObjectHash::from_hex(entry.worktree_tree.clone());
 
     let tree = match store.read(&worktree_hash)? {
         Object::Tree(t) => t,
-        _ => return Err("Invalid stash: not a tree".to_string()),
+        _ => return Err("Invalid stash: not a tree".into()),
     };
 
     // Restore files from the stashed working tree
@@ -283,7 +283,7 @@ fn apply_stash_entry(repo_root: &std::path::Path, entry: &StashEntry) -> Result<
     let index_hash = ObjectHash::from_hex(entry.index_tree.clone());
     let index_tree = match store.read(&index_hash)? {
         Object::Tree(t) => t,
-        _ => return Err("Invalid stash: index not a tree".to_string()),
+        _ => return Err("Invalid stash: index not a tree".into()),
     };
 
     let mut index = Index::new();
@@ -295,18 +295,18 @@ fn apply_stash_entry(repo_root: &std::path::Path, entry: &StashEntry) -> Result<
     Ok(())
 }
 
-fn restore_to_commit(repo_root: &std::path::Path, commit_hash: &str) -> Result<(), String> {
+fn restore_to_commit(repo_root: &std::path::Path, commit_hash: &str) -> Result<(), crate::errors::LitError> {
     let store = ObjectStore::new(repo_root);
     let hash = ObjectHash::from_hex(commit_hash.to_string());
 
     let commit = match store.read(&hash)? {
         Object::Commit(c) => c,
-        _ => return Err("Not a commit".to_string()),
+        _ => return Err("Not a commit".into()),
     };
 
     let tree = match store.read(&commit.tree)? {
         Object::Tree(t) => t,
-        _ => return Err("Not a tree".to_string()),
+        _ => return Err("Not a tree".into()),
     };
 
     // Update working directory files

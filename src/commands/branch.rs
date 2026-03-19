@@ -3,7 +3,7 @@ use crate::core::{
 };
 use crate::response::{BranchEntry, BranchResponse};
 
-pub fn execute(name: Option<String>, delete: bool, _all: bool) -> Result<BranchResponse, String> {
+pub fn execute(name: Option<String>, delete: bool, _all: bool) -> Result<BranchResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
 
     if delete {
@@ -11,13 +11,13 @@ pub fn execute(name: Option<String>, delete: bool, _all: bool) -> Result<BranchR
             // Check if trying to delete current branch
             if let Ok(current) = get_current_branch(&repo_root) {
                 if current == branch_name {
-                    return Err("Cannot delete the currently checked out branch".to_string());
+                    return Err("Cannot delete the currently checked out branch".into());
                 }
             }
             delete_ref(&repo_root, &format!("heads/{}", branch_name))?;
             Ok(BranchResponse::Delete { name: branch_name })
         } else {
-            Err("Branch name required for deletion".to_string())
+            Err("Branch name required for deletion".into())
         }
     } else if let Some(branch_name) = name {
         let head_hash = read_head(&repo_root)?;

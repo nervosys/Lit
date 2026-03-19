@@ -6,7 +6,7 @@ use crate::response::PushResponse;
 use crate::storage::ObjectStore;
 use std::collections::HashSet;
 
-pub fn execute(remote: String, branch: String, force: bool) -> Result<PushResponse, String> {
+pub fn execute(remote: String, branch: String, force: bool) -> Result<PushResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
     let remote_url = get_remote_url(&repo_root, &remote)?;
 
@@ -42,7 +42,7 @@ pub fn execute(remote: String, branch: String, force: bool) -> Result<PushRespon
             let is_ff = remote_repo.check_fast_forward(&local_store, &local_obj, &remote_obj)?;
             if !is_ff {
                 return Err(
-                    "Push rejected: non-fast-forward update. Use --force to override.".to_string(),
+                    "Push rejected: non-fast-forward update. Use --force to override.".into(),
                 );
             }
         }
@@ -99,7 +99,7 @@ pub fn execute(remote: String, branch: String, force: bool) -> Result<PushRespon
     })
 }
 
-fn get_remote_url(repo_root: &std::path::Path, remote_name: &str) -> Result<String, String> {
+fn get_remote_url(repo_root: &std::path::Path, remote_name: &str) -> Result<String, crate::errors::LitError> {
     use serde::{Deserialize, Serialize};
     use std::collections::HashMap;
     use std::fs;
@@ -120,7 +120,7 @@ fn get_remote_url(repo_root: &std::path::Path, remote_name: &str) -> Result<Stri
         return Err(format!(
             "No remotes configured. Use 'lit remote add {} <url>'",
             remote_name
-        ));
+        ).into());
     }
 
     let content = fs::read_to_string(&config_path)
@@ -133,5 +133,5 @@ fn get_remote_url(repo_root: &std::path::Path, remote_name: &str) -> Result<Stri
         .remotes
         .get(remote_name)
         .map(|r| r.url.clone())
-        .ok_or_else(|| format!("Remote '{}' not found", remote_name))
+        .ok_or_else(|| format!("Remote '{}' not found", remote_name).into())
 }

@@ -17,7 +17,7 @@ pub fn execute(
     word_diff: bool,
     ref1: Option<String>,
     ref2: Option<String>,
-) -> Result<DiffResponse, String> {
+) -> Result<DiffResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
     let store = ObjectStore::new(&repo_root);
 
@@ -62,7 +62,7 @@ pub fn execute(
 fn diff_working(
     repo_root: &std::path::Path,
     _store: &ObjectStore,
-) -> Result<Vec<FileDiff>, String> {
+) -> Result<Vec<FileDiff>, crate::errors::LitError> {
     let index = Index::load(repo_root)?;
     let mut diffs = Vec::new();
 
@@ -103,7 +103,7 @@ fn diff_working(
 }
 
 /// Diff index (staged changes) against HEAD
-fn diff_staged(repo_root: &std::path::Path, store: &ObjectStore) -> Result<Vec<FileDiff>, String> {
+fn diff_staged(repo_root: &std::path::Path, store: &ObjectStore) -> Result<Vec<FileDiff>, crate::errors::LitError> {
     let index = Index::load(repo_root)?;
 
     // Get HEAD tree files
@@ -153,18 +153,18 @@ fn diff_refs(
     store: &ObjectStore,
     ref1: &str,
     ref2: &str,
-) -> Result<Vec<FileDiff>, String> {
+) -> Result<Vec<FileDiff>, crate::errors::LitError> {
     let hash1 = resolve_ref(repo_root, ref1)?;
     let hash2 = resolve_ref(repo_root, ref2)?;
 
     let tree1 = get_commit_tree(store, &hash1)?;
     let tree2 = get_commit_tree(store, &hash2)?;
 
-    diff_trees(&tree1, &tree2, store)
+    diff_trees(&tree1, &tree2, store).map_err(Into::into)
 }
 
 /// Resolve a ref string to an ObjectHash — supports branch names, HEAD, and raw hashes
-fn resolve_ref(repo_root: &std::path::Path, reference: &str) -> Result<ObjectHash, String> {
+fn resolve_ref(repo_root: &std::path::Path, reference: &str) -> Result<ObjectHash, crate::errors::LitError> {
     if reference == "HEAD" {
         let head = crate::core::read_head(repo_root)?;
         return Ok(ObjectHash::from_hex(head));
@@ -188,15 +188,15 @@ fn resolve_ref(repo_root: &std::path::Path, reference: &str) -> Result<ObjectHas
 fn get_commit_tree(
     store: &ObjectStore,
     commit_hash: &ObjectHash,
-) -> Result<crate::core::Tree, String> {
+) -> Result<crate::core::Tree, crate::errors::LitError> {
     let commit = match store.read(commit_hash)? {
         Object::Commit(c) => c,
-        _ => return Err(format!("Expected commit object for {}", commit_hash)),
+        _ => return Err(format!("Expected commit object for {}", commit_hash).into()),
     };
 
     match store.read(&commit.tree)? {
         Object::Tree(t) => Ok(t),
-        _ => Err(format!("Expected tree object for {}", commit.tree)),
+        _ => Err(format!("Expected tree object for {}", commit.tree).into()),
     }
 }
 
@@ -204,19 +204,19 @@ fn get_commit_tree(
 fn get_head_tree_files(
     repo_root: &std::path::Path,
     store: &ObjectStore,
-) -> Result<HashMap<String, ObjectHash>, String> {
+) -> Result<HashMap<String, ObjectHash>, crate::errors::LitError> {
     let head_hash = crate::core::read_head(repo_root)?;
     let commit_hash = ObjectHash::from_hex(head_hash);
     let tree = get_commit_tree(store, &commit_hash)?;
-    let files = collect_tree_files(&tree, store, "")?;
+    let files = collect_tree_files(&tree, store, "").map_err(|e: String| -> crate::errors::LitError { e.into() })?;
     Ok(files.into_iter().collect())
 }
 
 /// Read a blob by its hash string
-fn read_blob_by_hash_str(store: &ObjectStore, hash: &str) -> Result<Vec<u8>, String> {
+fn read_blob_by_hash_str(store: &ObjectStore, hash: &str) -> Result<Vec<u8>, crate::errors::LitError> {
     let obj_hash = ObjectHash::from_hex(hash.to_string());
     match store.read(&obj_hash)? {
         Object::Blob(b) => Ok(b.content),
-        _ => Err(format!("Expected blob object for hash {}", hash)),
+        _ => Err(format!("Expected blob object for hash {}", hash).into()),
     }
 }

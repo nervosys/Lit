@@ -19,6 +19,7 @@ fn test_clone_nonexistent_repo() {
         lit::commands::clone::execute("file:///nonexistent/path/to/repo".to_string(), None);
     assert!(result.is_err(), "Clone should fail for nonexistent path");
     let error = result.unwrap_err();
+    let error = error.internal_message();
     assert!(
         error.contains("Cannot resolve")
             || error.contains("not found")

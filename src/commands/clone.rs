@@ -6,7 +6,7 @@ use crate::storage::ObjectStore;
 use std::fs;
 use std::path::Path;
 
-pub fn execute(url: String, directory: Option<String>) -> Result<CloneResponse, String> {
+pub fn execute(url: String, directory: Option<String>) -> Result<CloneResponse, crate::errors::LitError> {
     let validator = AirgapValidator::new()?;
     validator.validate_transport(&url)?;
 
@@ -36,7 +36,7 @@ pub fn execute(url: String, directory: Option<String>) -> Result<CloneResponse, 
         .join(&dir_name);
 
     if target.exists() {
-        return Err(format!("Directory '{}' already exists", dir_name));
+        return Err(format!("Directory '{}' already exists", dir_name).into());
     }
 
     // Initialize the new repo
@@ -124,19 +124,19 @@ fn checkout_tree(
     repo_path: &Path,
     commit_hash: &ObjectHash,
     store: &ObjectStore,
-) -> Result<(), String> {
+) -> Result<(), crate::errors::LitError> {
     use crate::core::Object;
 
     let commit_obj = store.read(commit_hash)?;
     let commit = match commit_obj {
         Object::Commit(c) => c,
-        _ => return Err("Expected commit object".to_string()),
+        _ => return Err("Expected commit object".into()),
     };
 
     let tree_obj = store.read(&commit.tree)?;
     let tree = match tree_obj {
         Object::Tree(t) => t,
-        _ => return Err("Expected tree object".to_string()),
+        _ => return Err("Expected tree object".into()),
     };
 
     checkout_tree_recursive(repo_path, &tree, store, repo_path)
@@ -147,7 +147,7 @@ fn checkout_tree_recursive(
     tree: &crate::core::Tree,
     store: &ObjectStore,
     _repo_path: &Path,
-) -> Result<(), String> {
+) -> Result<(), crate::errors::LitError> {
     use crate::core::Object;
 
     for entry in &tree.entries {

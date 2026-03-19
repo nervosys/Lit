@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 
 /// Output format for command responses
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -25,7 +25,7 @@ impl OutputFormat {
 }
 
 /// Unified response wrapper for all command output
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CommandOutput {
     pub status: &'static str,
     pub command: &'static str,
@@ -96,7 +96,7 @@ pub fn render_error(
 
 // â”€â”€â”€ Response types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct InitResponse {
     pub path: String,
     pub bare: bool,
@@ -115,7 +115,7 @@ impl CommandResponse for InitResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct AddResponse {
     pub files_added: usize,
 }
@@ -129,7 +129,7 @@ impl CommandResponse for AddResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CommitResponse {
     pub hash: String,
     pub short_hash: String,
@@ -149,7 +149,7 @@ impl CommandResponse for CommitResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct StatusResponse {
     pub branch: Option<String>,
     pub head: Option<String>,
@@ -198,7 +198,7 @@ impl CommandResponse for StatusResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CommitEntry {
     pub hash: String,
     pub short_hash: String,
@@ -208,7 +208,7 @@ pub struct CommitEntry {
     pub is_head: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct LogResponse {
     pub branch: Option<String>,
     pub commits: Vec<CommitEntry>,
@@ -247,13 +247,13 @@ impl CommandResponse for LogResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct BranchEntry {
     pub name: String,
     pub is_current: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "action")]
 pub enum BranchResponse {
     #[serde(rename = "list")]
@@ -287,7 +287,7 @@ impl CommandResponse for BranchResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CheckoutResponse {
     pub target: String,
     pub is_new_branch: bool,
@@ -312,7 +312,7 @@ impl CommandResponse for CheckoutResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "object_type")]
 pub enum ShowResponse {
     #[serde(rename = "commit")]
@@ -336,7 +336,7 @@ pub enum ShowResponse {
     },
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct TreeEntryInfo {
     pub mode: String,
     pub object_type: String,
@@ -398,13 +398,13 @@ impl CommandResponse for ShowResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct RemoteEntry {
     pub name: String,
     pub url: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "action")]
 pub enum RemoteResponse {
     #[serde(rename = "list")]
@@ -437,13 +437,13 @@ impl CommandResponse for RemoteResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ConfigEntry {
     pub key: String,
     pub value: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "action")]
 pub enum ConfigResponse {
     #[serde(rename = "show")]
@@ -473,7 +473,7 @@ impl CommandResponse for ConfigResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct MergeResponse {
     pub merged: bool,
     pub fast_forward: bool,
@@ -484,7 +484,7 @@ pub struct MergeResponse {
     pub strategy: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct FileMergeInfo {
     pub path: String,
     pub status: String,
@@ -517,7 +517,7 @@ impl CommandResponse for MergeResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ResolveResponse {
     pub resolved_files: Vec<String>,
     pub remaining_conflicts: usize,
@@ -549,7 +549,7 @@ impl CommandResponse for ResolveResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct PushResponse {
     pub remote: String,
     pub branch: String,
@@ -567,7 +567,7 @@ impl CommandResponse for PushResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct PullResponse {
     pub remote: String,
     pub branch: String,
@@ -587,7 +587,7 @@ impl CommandResponse for PullResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CloneResponse {
     pub url: String,
     pub directory: String,
@@ -605,7 +605,7 @@ impl CommandResponse for CloneResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct FetchResponse {
     pub remote: String,
     pub branches_updated: Vec<String>,
@@ -622,7 +622,7 @@ impl CommandResponse for FetchResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct DiffResponse {
     pub files: Vec<crate::core::diff::FileDiff>,
     pub stats: Vec<crate::core::diff::DiffStat>,
@@ -738,7 +738,7 @@ impl CommandResponse for DiffResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "action")]
 pub enum TagResponse {
     #[serde(rename = "create")]
@@ -781,7 +781,7 @@ impl CommandResponse for TagResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct RotateKeyResponse {
     pub objects_rotated: usize,
     pub refs_rotated: usize,
@@ -803,7 +803,7 @@ impl CommandResponse for RotateKeyResponse {
 // Phase 1.5-1.8 Response Types
 // ============================================================================
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct StashEntryInfo {
     pub index: usize,
     pub message: String,
@@ -811,7 +811,7 @@ pub struct StashEntryInfo {
     pub timestamp: i64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "action")]
 pub enum StashResponse {
     #[serde(rename = "push")]
@@ -862,7 +862,7 @@ impl CommandResponse for StashResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ResetResponse {
     pub target: String,
     pub mode: String,
@@ -881,7 +881,7 @@ impl CommandResponse for ResetResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct RevertResponse {
     pub reverted_commit: String,
     pub new_commit: String,
@@ -901,7 +901,7 @@ impl CommandResponse for RevertResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CherryPickResponse {
     pub source_commit: String,
     pub new_commit: String,
@@ -921,7 +921,7 @@ impl CommandResponse for CherryPickResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct RebaseResponse {
     pub rebased_commits: usize,
     pub onto: String,
@@ -953,7 +953,7 @@ impl CommandResponse for RebaseResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct BlameLineInfo {
     pub line_number: usize,
     pub content: String,
@@ -962,7 +962,7 @@ pub struct BlameLineInfo {
     pub timestamp: i64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct BlameResponse {
     pub file: String,
     pub lines: Vec<BlameLineInfo>,
@@ -987,7 +987,7 @@ impl CommandResponse for BlameResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct BisectResponse {
     pub action: String,
     pub current: Option<String>,
@@ -1012,7 +1012,7 @@ impl CommandResponse for BisectResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ReflogEntry {
     pub index: usize,
     pub old_hash: String,
@@ -1022,7 +1022,7 @@ pub struct ReflogEntry {
     pub timestamp: i64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ReflogResponse {
     pub ref_name: String,
     pub entries: Vec<ReflogEntry>,
@@ -1053,7 +1053,7 @@ impl CommandResponse for ReflogResponse {
 // Phase 2 Response Types
 // ============================================================================
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct BatchOperationResult {
     pub index: usize,
     pub command: String,
@@ -1062,7 +1062,7 @@ pub struct BatchOperationResult {
     pub error: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct BatchResponse {
     pub total: usize,
     pub succeeded: usize,
@@ -1088,7 +1088,7 @@ impl CommandResponse for BatchResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct TransactionResponse {
     pub action: String,
     pub tx_id: Option<String>,
@@ -1113,7 +1113,7 @@ impl CommandResponse for TransactionResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SnapshotResponse {
     pub hash: String,
     pub short_hash: String,
@@ -1137,7 +1137,7 @@ impl CommandResponse for SnapshotResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SearchMatch {
     pub file: String,
     pub line_number: usize,
@@ -1146,7 +1146,7 @@ pub struct SearchMatch {
     pub match_type: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SearchResponse {
     pub query: String,
     pub match_type: String,
@@ -1186,14 +1186,14 @@ impl CommandResponse for SearchResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct WatchEvent {
     pub event_type: String,
     pub path: String,
     pub timestamp: i64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct WatchResponse {
     pub events_emitted: usize,
     pub message: String,
@@ -1208,14 +1208,14 @@ impl CommandResponse for WatchResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct VerifyResult {
     pub check: String,
     pub status: String,
     pub details: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct VerifyResponse {
     pub valid: bool,
     pub checks: Vec<VerifyResult>,
@@ -1250,7 +1250,7 @@ impl CommandResponse for VerifyResponse {
 // Phase 3 Response Types
 // ============================================================================
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ServeResponse {
     pub message: String,
 }
@@ -1264,7 +1264,7 @@ impl CommandResponse for ServeResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct McpServeResponse {
     pub transport: String,
     pub message: String,
@@ -1279,7 +1279,7 @@ impl CommandResponse for McpServeResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SwarmResponse {
     pub action: String,
     pub agent_id: Option<String>,
@@ -1300,7 +1300,7 @@ impl CommandResponse for SwarmResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct OntologyResponse {
     pub ontology: serde_json::Value,
 }
@@ -1313,11 +1313,26 @@ impl CommandResponse for OntologyResponse {
         serde_json::to_string_pretty(&self.ontology).unwrap_or_else(|_| "{}".to_string())
     }
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SchemaResponse {
+    pub schema: serde_json::Value,
+}
+
+impl CommandResponse for SchemaResponse {
+    fn command_name(&self) -> &'static str {
+        "schema"
+    }
+    fn human_readable(&self) -> String {
+        serde_json::to_string_pretty(&self.schema).unwrap_or_else(|_| "{}".to_string())
+    }
+}
+
 // ============================================================================
 // Phase 4 Response Types (Git Interop)
 // ============================================================================
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ImportGitResponse {
     pub source: String,
     pub objects_imported: u64,
@@ -1338,7 +1353,7 @@ impl CommandResponse for ImportGitResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ExportGitResponse {
     pub destination: String,
     pub objects_exported: u64,
@@ -1362,7 +1377,7 @@ impl CommandResponse for ExportGitResponse {
 // Phase 5 Response Types (Performance)
 // ============================================================================
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct GcResponse {
     pub objects_packed: u64,
     pub packs_created: u64,
@@ -1387,7 +1402,7 @@ impl CommandResponse for GcResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct LfsTrackResponse {
     pub patterns: Vec<String>,
     pub message: String,
@@ -1406,7 +1421,7 @@ impl CommandResponse for LfsTrackResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct LfsMigrateResponse {
     pub files_migrated: u64,
     pub bytes_saved: u64,

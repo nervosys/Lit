@@ -88,6 +88,7 @@ fn test_push_requires_remote_configured() {
     // Should fail because no remote is configured
     assert!(result.is_err());
     let err = result.unwrap_err();
+    let err = err.internal_message();
     assert!(
         err.contains("No remotes configured") || err.contains("remote"),
         "Error should mention missing remote config, got: {}",
@@ -106,6 +107,7 @@ fn test_pull_requires_remote_configured() {
 
     assert!(result.is_err());
     let err = result.unwrap_err();
+    let err = err.internal_message();
     assert!(
         err.contains("No remotes configured") || err.contains("remote"),
         "Error should mention missing remote config, got: {}",
@@ -137,6 +139,7 @@ fn test_push_with_file_remote() {
     let result = lit::commands::push::execute("origin".to_string(), "main".to_string(), false);
     assert!(result.is_err());
     let err = result.unwrap_err();
+    let err = err.internal_message();
     assert!(
         err.contains("not appear to be a Lit repository")
             || err.contains("Cannot resolve")
@@ -168,6 +171,7 @@ fn test_pull_with_file_remote() {
     let result = lit::commands::pull::execute("origin".to_string(), "main".to_string());
     assert!(result.is_err());
     let err = result.unwrap_err();
+    let err = err.internal_message();
     assert!(
         err.contains("not appear to be a Lit repository")
             || err.contains("Cannot resolve")
@@ -212,6 +216,7 @@ fn test_push_with_network_share_remote() {
     let result = lit::commands::push::execute("share".to_string(), "main".to_string(), false);
     assert!(result.is_err());
     let err = result.unwrap_err();
+    let err = err.internal_message();
     // Should either be "not implemented" or a transport validation issue, not a panic
     assert!(
         err.contains("not yet fully implemented")
@@ -252,6 +257,7 @@ fn test_airgap_blocks_http_remote_on_push() {
     let result = lit::commands::push::execute("bad".to_string(), "main".to_string(), false);
     assert!(result.is_err());
     let err = result.unwrap_err();
+    let err = err.internal_message();
     assert!(
         err.to_lowercase().contains("http")
             || err.to_lowercase().contains("blocked")
@@ -281,6 +287,7 @@ fn test_airgap_blocks_http_remote_on_pull() {
     let result = lit::commands::pull::execute("bad".to_string(), "main".to_string());
     assert!(result.is_err());
     let err = result.unwrap_err();
+    let err = err.internal_message();
     assert!(
         err.to_lowercase().contains("https")
             || err.to_lowercase().contains("blocked")
@@ -316,6 +323,7 @@ fn test_airgap_allows_file_remote_on_push() {
     // Should NOT fail with a transport error — only with repo/branch resolution
     assert!(result.is_err());
     let err = result.unwrap_err();
+    let err = err.internal_message();
     assert!(
         err.contains("not appear to be a Lit repository")
             || err.contains("Cannot resolve")
@@ -385,6 +393,7 @@ fn test_remote_add_duplicate_fails() {
     }));
     assert!(result.is_err());
     let err = result.unwrap_err();
+    let err = err.internal_message();
     assert!(
         err.contains("already exists"),
         "Should reject duplicate remote name, got: {}",

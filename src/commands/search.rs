@@ -10,7 +10,7 @@ pub fn execute(
     messages: bool,
     metadata_filter: Option<String>,
     max_results: usize,
-) -> Result<SearchResponse, String> {
+) -> Result<SearchResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
     let store = ObjectStore::new(&repo_root);
 
@@ -30,7 +30,7 @@ fn search_file_contents(
     repo_root: &Path,
     query: &str,
     max_results: usize,
-) -> Result<SearchResponse, String> {
+) -> Result<SearchResponse, crate::errors::LitError> {
     let query_lower = query.to_lowercase();
     let mut matches = Vec::new();
 
@@ -102,7 +102,7 @@ fn search_commit_messages(
     store: &ObjectStore,
     query: &str,
     max_results: usize,
-) -> Result<SearchResponse, String> {
+) -> Result<SearchResponse, crate::errors::LitError> {
     let query_lower = query.to_lowercase();
     let mut matches = Vec::new();
 
@@ -159,7 +159,7 @@ fn search_metadata(
     store: &ObjectStore,
     filter: &str,
     max_results: usize,
-) -> Result<SearchResponse, String> {
+) -> Result<SearchResponse, crate::errors::LitError> {
     // Parse key=value filter
     let (key, value) = filter
         .split_once('=')

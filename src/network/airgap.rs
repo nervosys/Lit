@@ -555,8 +555,7 @@ mod tests {
 
     #[test]
     fn test_airgap_blocks_network_protocols() {
-        let mut config = AirgapConfig::default();
-        config.enabled = true;
+        let config = AirgapConfig { enabled: true, ..Default::default() };
         let validator = AirgapValidator { config };
 
         // Should block HTTP
@@ -573,8 +572,7 @@ mod tests {
 
     #[test]
     fn test_airgap_allows_local_filesystem() {
-        let mut config = AirgapConfig::default();
-        config.enabled = true;
+        let config = AirgapConfig { enabled: true, ..Default::default() };
         let validator = AirgapValidator { config };
 
         // Should allow local paths
@@ -585,9 +583,7 @@ mod tests {
 
     #[test]
     fn test_airgap_strict_mode_blocks_shares() {
-        let mut config = AirgapConfig::default();
-        config.enabled = true;
-        config.strict_mode = true;
+        let config = AirgapConfig { enabled: true, strict_mode: true, ..Default::default() };
         let validator = AirgapValidator { config };
 
         // Should block network shares in strict mode

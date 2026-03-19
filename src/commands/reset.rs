@@ -1,4 +1,4 @@
-﻿use crate::core::{
+use crate::core::{
     find_repo_root, get_current_branch, read_head, set_head_detached, write_ref, Object,
     ObjectHash,
 };
@@ -6,7 +6,7 @@ use crate::response::ResetResponse;
 use crate::storage::{Index, ObjectStore};
 use std::fs;
 
-pub fn execute(target: String, soft: bool, hard: bool) -> Result<ResetResponse, String> {
+pub fn execute(target: String, soft: bool, hard: bool) -> Result<ResetResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
     let store = ObjectStore::new(&repo_root);
 
@@ -17,7 +17,7 @@ pub fn execute(target: String, soft: bool, hard: bool) -> Result<ResetResponse, 
     let hash_obj = ObjectHash::from_hex(commit_hash.clone());
     let commit = match store.read(&hash_obj)? {
         Object::Commit(c) => c,
-        _ => return Err(format!("'{}' is not a commit", target)),
+        _ => return Err(format!("'{}' is not a commit", target).into()),
     };
 
     let mode = if soft {
@@ -52,7 +52,7 @@ pub fn execute(target: String, soft: bool, hard: bool) -> Result<ResetResponse, 
     })
 }
 
-pub fn execute_resolve(repo_root: &std::path::Path, target: &str) -> Result<String, String> {
+pub fn execute_resolve(repo_root: &std::path::Path, target: &str) -> Result<String, crate::errors::LitError> {
     // Try HEAD~N syntax
     if target.starts_with("HEAD~") || target.starts_with("HEAD^") {
         let count: usize = target[5..].parse().unwrap_or(1);
@@ -63,7 +63,7 @@ pub fn execute_resolve(repo_root: &std::path::Path, target: &str) -> Result<Stri
             let hash = ObjectHash::from_hex(current);
             let commit = match store.read(&hash)? {
                 Object::Commit(c) => c,
-                _ => return Err("Not a commit in history".to_string()),
+                _ => return Err("Not a commit in history".into()),
             };
             current = commit
                 .parents
@@ -76,7 +76,7 @@ pub fn execute_resolve(repo_root: &std::path::Path, target: &str) -> Result<Stri
 
     // Try HEAD
     if target == "HEAD" {
-        return read_head(repo_root);
+        return Ok(read_head(repo_root)?);
     }
 
     // Try as branch ref
@@ -94,13 +94,13 @@ pub fn execute_resolve(repo_root: &std::path::Path, target: &str) -> Result<Stri
         return Ok(target.to_string());
     }
 
-    Err(format!("Cannot resolve '{}' to a commit", target))
+    Err(format!("Cannot resolve '{}' to a commit", target).into())
 }
 
-fn move_head(repo_root: &std::path::Path, commit_hash: &str) -> Result<(), String> {
+fn move_head(repo_root: &std::path::Path, commit_hash: &str) -> Result<(), crate::errors::LitError> {
     match get_current_branch(repo_root) {
-        Ok(branch) => write_ref(repo_root, &format!("heads/{}", branch), commit_hash),
-        Err(_) => set_head_detached(repo_root, commit_hash),
+        Ok(branch) => Ok(write_ref(repo_root, &format!("heads/{}", branch), commit_hash)?),
+        Err(_) => Ok(set_head_detached(repo_root, commit_hash)?),
     }
 }
 
@@ -108,10 +108,10 @@ fn reset_index_to_tree(
     repo_root: &std::path::Path,
     store: &ObjectStore,
     tree_hash: &ObjectHash,
-) -> Result<(), String> {
+) -> Result<(), crate::errors::LitError> {
     let tree = match store.read(tree_hash)? {
         Object::Tree(t) => t,
-        _ => return Err("Not a tree".to_string()),
+        _ => return Err("Not a tree".into()),
     };
 
     let mut index = Index::new();
@@ -122,17 +122,17 @@ fn reset_index_to_tree(
             entry.mode.clone(),
         );
     }
-    index.save(repo_root)
+    index.save(repo_root).map_err(Into::into)
 }
 
 fn reset_working_tree(
     repo_root: &std::path::Path,
     store: &ObjectStore,
     tree_hash: &ObjectHash,
-) -> Result<(), String> {
+) -> Result<(), crate::errors::LitError> {
     let tree = match store.read(tree_hash)? {
         Object::Tree(t) => t,
-        _ => return Err("Not a tree".to_string()),
+        _ => return Err("Not a tree".into()),
     };
 
     // Remove tracked files that aren't in the tree

@@ -29,7 +29,7 @@ mod adversarial_tests {
         println!("[+] Target: Key file created with strong passphrase");
 
         // Attacker tries common passwords
-        let attacks = vec![
+        let attacks = [
             "passwordpassword", // Common
             "admin12345678901", // Admin
             "qwerty1234567890", // Keyboard
@@ -182,7 +182,7 @@ mod adversarial_tests {
         println!("║  ATTACK SIMULATION 5: Weak Passphrase Bypass            ║");
         println!("╚═══════════════════════════════════════════════════════════╝\n");
 
-        let weak_passphrases = vec![
+        let weak_passphrases = [
             "password123",      // Too short
             "abcdefghijklmnop", // No complexity
             "ABCDEFGHIJKLMNOP", // No complexity

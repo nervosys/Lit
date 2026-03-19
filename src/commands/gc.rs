@@ -46,7 +46,7 @@ pub struct PackIndexEntry {
 pub fn write_pack(
     objects: &[(ObjectHash, Object)],
     pack_path: &Path,
-) -> Result<Vec<PackIndexEntry>, String> {
+) -> Result<Vec<PackIndexEntry>, crate::errors::LitError> {
     let mut buf: Vec<u8> = Vec::new();
     let mut index_entries = Vec::new();
 
@@ -105,7 +105,7 @@ pub fn write_pack(
 }
 
 /// Write a pack index file
-pub fn write_pack_index(entries: &[PackIndexEntry], index_path: &Path) -> Result<(), String> {
+pub fn write_pack_index(entries: &[PackIndexEntry], index_path: &Path) -> Result<(), crate::errors::LitError> {
     let mut buf: Vec<u8> = Vec::new();
 
     // Header
@@ -135,7 +135,7 @@ pub fn write_pack_index(entries: &[PackIndexEntry], index_path: &Path) -> Result
 }
 
 /// Read a single object from a pack file by offset
-pub fn read_pack_object(pack_path: &Path, offset: u64) -> Result<Object, String> {
+pub fn read_pack_object(pack_path: &Path, offset: u64) -> Result<Object, crate::errors::LitError> {
     let pack_data = fs::read(pack_path).map_err(|e| format!("Failed to read pack: {}", e))?;
     let mut cursor = Cursor::new(&pack_data);
     cursor.set_position(offset);
@@ -157,7 +157,7 @@ pub fn read_pack_object(pack_path: &Path, offset: u64) -> Result<Object, String>
     let pos = cursor.position() as usize;
     let end = pos + compressed_size as usize;
     if end > pack_data.len() {
-        return Err("Pack data truncated".to_string());
+        return Err("Pack data truncated".into());
     }
     let compressed = &pack_data[pos..end];
 
@@ -168,7 +168,7 @@ pub fn read_pack_object(pack_path: &Path, offset: u64) -> Result<Object, String>
         .read_to_end(&mut raw)
         .map_err(|e| format!("Decompress error: {}", e))?;
 
-    Object::from_bytes(&raw)
+    Object::from_bytes(&raw).map_err(Into::into)
 }
 
 /// Load a pack index and build a hash→(pack_path, offset) map
@@ -184,7 +184,7 @@ pub fn load_pack_index(
         .read_exact(&mut magic)
         .map_err(|e| format!("Read error: {}", e))?;
     if &magic != INDEX_MAGIC {
-        return Err("Invalid pack index magic".to_string());
+        return Err("Invalid pack index magic".into());
     }
 
     let _version = cursor
@@ -204,7 +204,7 @@ pub fn load_pack_index(
 
         let pos = cursor.position() as usize;
         if pos + hash_len > data.len() {
-            return Err("Index data truncated".to_string());
+            return Err("Index data truncated".into());
         }
         let hash_str =
             String::from_utf8(data[pos..pos + hash_len].to_vec())
@@ -226,7 +226,7 @@ pub fn load_pack_index(
 
 /// Execute the `gc` (garbage collection) command.
 /// Packs all loose objects into a single pack file and removes the loose files.
-pub fn execute() -> Result<GcResponse, String> {
+pub fn execute() -> Result<GcResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
     let store = ObjectStore::new(&repo_root);
 

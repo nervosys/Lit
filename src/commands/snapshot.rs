@@ -13,7 +13,7 @@ pub fn execute(
     message: String,
     author: Option<String>,
     metadata: Option<serde_json::Value>,
-) -> Result<SnapshotResponse, String> {
+) -> Result<SnapshotResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
     let store = ObjectStore::new(&repo_root);
     let mut index = Index::load(&repo_root)?;
@@ -23,7 +23,7 @@ pub fn execute(
     index.save(&repo_root)?;
 
     if index.entries.is_empty() {
-        return Err("Nothing to snapshot (no files in working directory)".to_string());
+        return Err("Nothing to snapshot (no files in working directory)".into());
     }
 
     // Get author
@@ -82,7 +82,7 @@ fn add_all_files(
     repo_root: &Path,
     store: &ObjectStore,
     index: &mut Index,
-) -> Result<usize, String> {
+) -> Result<usize, crate::errors::LitError> {
     let mut count = 0usize;
     for entry in WalkDir::new(repo_root).into_iter().filter_entry(|e| {
         let name = e.file_name().to_string_lossy();
@@ -110,7 +110,7 @@ fn add_all_files(
     Ok(count)
 }
 
-fn build_tree_from_index(index: &Index, store: &ObjectStore) -> Result<ObjectHash, String> {
+fn build_tree_from_index(index: &Index, store: &ObjectStore) -> Result<ObjectHash, crate::errors::LitError> {
     let mut tree_map: HashMap<String, Vec<(String, String, String)>> = HashMap::new();
 
     for entry in index.sorted_entries() {
@@ -167,5 +167,5 @@ fn build_tree_from_index(index: &Index, store: &ObjectStore) -> Result<ObjectHas
         }
     }
 
-    store.write(&Object::Tree(root_tree))
+    store.write(&Object::Tree(root_tree)).map_err(Into::into)
 }

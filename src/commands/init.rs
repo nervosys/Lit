@@ -2,7 +2,7 @@ use crate::response::InitResponse;
 use std::fs;
 use std::path::PathBuf;
 
-pub fn execute(bare: bool, path: Option<String>) -> Result<InitResponse, String> {
+pub fn execute(bare: bool, path: Option<String>) -> Result<InitResponse, crate::errors::LitError> {
     let repo_path = if let Some(p) = path {
         PathBuf::from(p)
     } else {
@@ -11,10 +11,7 @@ pub fn execute(bare: bool, path: Option<String>) -> Result<InitResponse, String>
 
     // Check if already a repository
     if repo_path.join(".lit").exists() {
-        return Err(format!(
-            "Repository already exists at {}",
-            repo_path.display()
-        ));
+        return Err(format!("Repository already exists at {}", repo_path.display()).into());
     }
 
     // Create .lit directory

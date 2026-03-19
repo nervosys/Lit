@@ -6,7 +6,7 @@ use std::path::Path;
 use std::time::SystemTime;
 use walkdir::WalkDir;
 
-pub fn execute(debounce_ms: u64, filter: Option<String>) -> Result<WatchResponse, String> {
+pub fn execute(debounce_ms: u64, filter: Option<String>) -> Result<WatchResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
 
     // Build initial file state snapshot

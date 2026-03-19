@@ -25,7 +25,7 @@ pub fn append_reflog(
     new_hash: &str,
     action: &str,
     message: &str,
-) -> Result<(), String> {
+) -> Result<(), crate::errors::LitError> {
     let reflog_dir = repo_root.join(".lit").join("reflog");
     fs::create_dir_all(&reflog_dir)
         .map_err(|e| format!("Failed to create reflog directory: {}", e))?;
@@ -55,10 +55,10 @@ pub fn append_reflog(
 
     let data = serde_json::to_string_pretty(&reflog)
         .map_err(|e| format!("Failed to serialize reflog: {}", e))?;
-    fs::write(&path, data).map_err(|e| format!("Failed to write reflog: {}", e))
+    fs::write(&path, data).map_err(|e| format!("Failed to write reflog: {}", e).into())
 }
 
-pub fn execute(ref_name: Option<String>, count: usize) -> Result<ReflogResponse, String> {
+pub fn execute(ref_name: Option<String>, count: usize) -> Result<ReflogResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
 
     let target_ref = match ref_name {

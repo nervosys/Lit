@@ -930,9 +930,11 @@ mod tests {
 
         clear_passphrase_cache();
 
-        let mut config = EncryptionConfig::default();
-        config.enabled = true;
-        config.cache_timeout_secs = 300; // 5 minutes
+        let config = EncryptionConfig {
+            enabled: true,
+            cache_timeout_secs: 300, // 5 minutes
+            ..Default::default()
+        };
 
         let mut manager = EncryptionManager::new(config);
         let passphrase = "test-cache-manager-pass";

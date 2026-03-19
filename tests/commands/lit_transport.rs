@@ -36,7 +36,7 @@ fn start_daemon(repo_path: &std::path::Path, port: u16) -> std::thread::JoinHand
 
     let repo = repo_path.to_path_buf();
     let handle = std::thread::spawn(move || {
-        let _child = std::process::Command::new(&lit_exe)
+        let mut child = std::process::Command::new(&lit_exe)
             .arg("serve")
             .arg("--daemon")
             .arg("--port")
@@ -47,10 +47,11 @@ fn start_daemon(repo_path: &std::path::Path, port: u16) -> std::thread::JoinHand
             .spawn()
             .expect("Failed to spawn lit serve --daemon");
 
-        // Keep the thread alive until test completes; the daemon
-        // process will be killed when the handle is dropped.
-        // We park the thread and let it be unparked when done.
+        // Keep the thread alive until test completes; when unparked
+        // we kill and wait on the child to avoid zombie processes.
         std::thread::park();
+        let _ = child.kill();
+        let _ = child.wait();
     });
 
     // Wait for the daemon to start accepting connections
@@ -218,8 +219,12 @@ fn test_lit_tcp_negotiate_and_download() {
     let mut conn = lit::network::lit_protocol::LitConnection::open_local(port).unwrap();
 
     // Negotiate: we want the commit, we have nothing
-    let needed =
-        lit::network::lit_protocol::negotiate_lit(&mut conn, &[commit_hash.clone()], &[]).unwrap();
+    let needed = lit::network::lit_protocol::negotiate_lit(
+        &mut conn,
+        std::slice::from_ref(&commit_hash),
+        &[],
+    )
+    .unwrap();
     assert!(
         !needed.is_empty(),
         "Should need at least the commit + tree + blob"
@@ -371,9 +376,12 @@ fn test_push_fetch_roundtrip_over_lit() {
         assert_eq!(server_hash, commit_hash);
 
         // Negotiate
-        let needed =
-            lit::network::lit_protocol::negotiate_lit(&mut conn, &[server_hash.clone()], &[])
-                .unwrap();
+        let needed = lit::network::lit_protocol::negotiate_lit(
+            &mut conn,
+            std::slice::from_ref(&server_hash),
+            &[],
+        )
+        .unwrap();
 
         // Download
         let downloaded =

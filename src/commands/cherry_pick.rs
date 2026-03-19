@@ -4,7 +4,7 @@ use crate::core::{
 use crate::response::CherryPickResponse;
 use crate::storage::ObjectStore;
 
-pub fn execute(target: String) -> Result<CherryPickResponse, String> {
+pub fn execute(target: String) -> Result<CherryPickResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
     let store = ObjectStore::new(&repo_root);
 
@@ -14,7 +14,7 @@ pub fn execute(target: String) -> Result<CherryPickResponse, String> {
 
     let commit = match store.read(&hash_obj)? {
         Object::Commit(c) => c,
-        _ => return Err(format!("'{}' is not a commit", target)),
+        _ => return Err(format!("'{}' is not a commit", target).into()),
     };
 
     // Get parent tree of the commit being cherry-picked
@@ -24,7 +24,7 @@ pub fn execute(target: String) -> Result<CherryPickResponse, String> {
         .ok_or("Cannot cherry-pick a root commit")?;
     let parent_commit = match store.read(parent_hash)? {
         Object::Commit(c) => c,
-        _ => return Err("Parent is not a commit".to_string()),
+        _ => return Err("Parent is not a commit".into()),
     };
 
     // Get current HEAD
@@ -32,7 +32,7 @@ pub fn execute(target: String) -> Result<CherryPickResponse, String> {
     let head_hash = ObjectHash::from_hex(head_hash_str.clone());
     let head_commit = match store.read(&head_hash)? {
         Object::Commit(c) => c,
-        _ => return Err("HEAD is not a commit".to_string()),
+        _ => return Err("HEAD is not a commit".into()),
     };
 
     // Apply the diff (parent → commit) onto HEAD
@@ -125,7 +125,7 @@ fn load_tree_files(
 ) -> Result<std::collections::HashMap<String, (String, String)>, String> {
     let tree = match store.read(tree_hash)? {
         Object::Tree(t) => t,
-        _ => return Err("Not a tree".to_string()),
+        _ => return Err("Not a tree".into()),
     };
     let mut files = std::collections::HashMap::new();
     for entry in &tree.entries {
@@ -137,7 +137,7 @@ fn load_tree_files(
     Ok(files)
 }
 
-fn resolve_rev(repo_root: &std::path::Path, target: &str) -> Result<String, String> {
+fn resolve_rev(repo_root: &std::path::Path, target: &str) -> Result<String, crate::errors::LitError> {
     if target.starts_with("HEAD~") || target.starts_with("HEAD^") {
         let count: usize = target[5..].parse().unwrap_or(1);
         let mut current = read_head(repo_root)?;
@@ -146,7 +146,7 @@ fn resolve_rev(repo_root: &std::path::Path, target: &str) -> Result<String, Stri
             let hash = ObjectHash::from_hex(current);
             let commit = match store.read(&hash)? {
                 Object::Commit(c) => c,
-                _ => return Err("Not a commit in history".to_string()),
+                _ => return Err("Not a commit in history".into()),
             };
             current = commit
                 .parents
@@ -157,7 +157,7 @@ fn resolve_rev(repo_root: &std::path::Path, target: &str) -> Result<String, Stri
         return Ok(current);
     }
     if target == "HEAD" {
-        return read_head(repo_root);
+        return Ok(read_head(repo_root)?);
     }
     if let Ok(hash) = crate::core::read_ref(repo_root, &format!("heads/{}", target)) {
         return Ok(hash);
@@ -168,5 +168,5 @@ fn resolve_rev(repo_root: &std::path::Path, target: &str) -> Result<String, Stri
     if target.len() >= 16 && target.chars().all(|c| c.is_ascii_hexdigit()) {
         return Ok(target.to_string());
     }
-    Err(format!("Cannot resolve '{}' to a commit", target))
+    Err(format!("Cannot resolve '{}' to a commit", target).into())
 }

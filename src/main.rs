@@ -461,6 +461,12 @@ enum Commands {
     },
     /// Output the Lit ontology for agent discovery
     Ontology,
+    /// Generate JSON Schema from the ontology for agent SDK discovery
+    Schema {
+        /// Optional command ID to generate schema for a single command
+        #[arg(long)]
+        command: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -649,8 +655,7 @@ fn main() {
                     println!();
                 }
                 Err(e) => {
-                    let lit_err = errors::LitError::general(e);
-                    let output = formatter::format_error(&lit_err, lit_err.error_code(), format);
+                    let output = formatter::format_error(&e, e.error_code(), format);
                     use std::io::Write;
                     let _ = std::io::stderr().write_all(&output);
                     let _ = std::io::stderr().write_all(b"\n");
@@ -840,6 +845,31 @@ fn main() {
             let resp = response::OntologyResponse {
                 ontology: serde_json::to_value(&ont).unwrap_or_default(),
             };
+            let output = formatter::format_response(&resp, format);
+            use std::io::Write;
+            if std::io::stdout().write_all(&output).is_err() {
+                process::exit(1);
+            }
+            println!();
+        }
+
+        Commands::Schema { command } => {
+            let schema = if let Some(ref cmd_id) = command {
+                match ontology::generate_command_schema(cmd_id) {
+                    Some(s) => s,
+                    None => {
+                        let err = errors::LitError::general(format!("unknown command: {cmd_id}"));
+                        let output = formatter::format_error(&err, "schema", format);
+                        use std::io::Write;
+                        let _ = std::io::stderr().write_all(&output);
+                        eprintln!();
+                        process::exit(1);
+                    }
+                }
+            } else {
+                ontology::generate_schemas()
+            };
+            let resp = response::SchemaResponse { schema };
             let output = formatter::format_response(&resp, format);
             use std::io::Write;
             if std::io::stdout().write_all(&output).is_err() {

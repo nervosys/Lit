@@ -2,7 +2,7 @@ use crate::core::{find_repo_root, get_current_branch, read_head, Object, ObjectH
 use crate::response::{CommitEntry, LogResponse};
 use crate::storage::ObjectStore;
 
-pub fn execute(count: usize, _oneline: bool) -> Result<LogResponse, String> {
+pub fn execute(count: usize, _oneline: bool) -> Result<LogResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
     let store = ObjectStore::new(&repo_root);
 
@@ -42,7 +42,7 @@ pub fn execute(count: usize, _oneline: bool) -> Result<LogResponse, String> {
 
                 current = commit.parents[0].clone();
             }
-            Ok(_) => return Err("Expected commit object".to_string()),
+            Ok(_) => return Err("Expected commit object".into()),
             Err(_) => break,
         }
     }

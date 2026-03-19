@@ -167,7 +167,7 @@ fn test_add_nonexistent_file_fails() {
     let result = lit::commands::add::execute(vec!["nonexistent.txt".to_string()]);
     assert!(result.is_err(), "Add nonexistent file should fail");
     assert!(
-        result.unwrap_err().contains("not found"),
+        result.unwrap_err().internal_message().contains("not found"),
         "Error should mention file not found"
     );
 }

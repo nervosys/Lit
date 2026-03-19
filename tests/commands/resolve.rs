@@ -149,6 +149,7 @@ fn test_resolve_recursive_rejected() {
     );
     assert!(result.is_err(), "Resolve with recursive should be rejected");
     let err = result.unwrap_err();
+    let err = err.internal_message();
     assert!(
         err.contains("recursive"),
         "Error should mention recursive strategy: {}", err
@@ -175,6 +176,7 @@ fn test_resolve_missing_strategy() {
     );
     assert!(result.is_err(), "Resolve without strategy should fail");
     let err = result.unwrap_err();
+    let err = err.internal_message();
     assert!(
         err.contains("strategy"),
         "Error should mention --strategy: {}", err

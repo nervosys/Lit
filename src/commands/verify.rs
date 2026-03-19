@@ -2,7 +2,7 @@ use crate::core::{find_repo_root, list_refs, Object, ObjectHash};
 use crate::response::{VerifyResponse, VerifyResult};
 use crate::storage::ObjectStore;
 
-pub fn execute() -> Result<VerifyResponse, String> {
+pub fn execute() -> Result<VerifyResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
     let store = ObjectStore::new(&repo_root);
 
@@ -66,7 +66,7 @@ pub fn execute() -> Result<VerifyResponse, String> {
             checks.push(VerifyResult {
                 check: "dag_connectivity".to_string(),
                 status: "error".to_string(),
-                details: Some(e),
+                details: Some(e.internal_message().to_string()),
             });
         }
     }
@@ -84,7 +84,7 @@ pub fn execute() -> Result<VerifyResponse, String> {
             checks.push(VerifyResult {
                 check: "index".to_string(),
                 status: "error".to_string(),
-                details: Some(e),
+                details: Some(e.internal_message().to_string()),
             });
         }
     }
@@ -232,7 +232,7 @@ fn verify_refs(
 fn verify_dag(
     repo_root: &std::path::Path,
     store: &ObjectStore,
-) -> Result<VerifyResult, String> {
+) -> Result<VerifyResult, crate::errors::LitError> {
     let heads = list_refs(repo_root, "heads")
         .unwrap_or_default();
 
@@ -285,7 +285,7 @@ fn walk_commit_dag(
 fn verify_index(
     repo_root: &std::path::Path,
     store: &ObjectStore,
-) -> Result<VerifyResult, String> {
+) -> Result<VerifyResult, crate::errors::LitError> {
     let index = crate::storage::Index::load(repo_root)?;
     let mut missing = 0usize;
 

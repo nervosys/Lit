@@ -57,7 +57,7 @@ fn test_commit_fails_with_empty_staging() {
     let result = lit::commands::commit::execute("Empty commit".to_string(), None);
     assert!(result.is_err(), "Commit with empty staging should fail");
     assert!(
-        result.unwrap_err().contains("empty"),
+        result.unwrap_err().internal_message().contains("empty"),
         "Error should mention empty staging"
     );
 }

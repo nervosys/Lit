@@ -27,13 +27,13 @@ fn lock_path(repo_root: &std::path::Path) -> std::path::PathBuf {
     repo_root.join(".lit").join("transaction.lock")
 }
 
-pub fn execute_begin() -> Result<TransactionResponse, String> {
+pub fn execute_begin() -> Result<TransactionResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
     let lock = lock_path(&repo_root);
 
     if lock.exists() {
         return Err(
-            "Another transaction is in progress. Use 'lit tx rollback' to abort it.".to_string(),
+            "Another transaction is in progress. Use 'lit tx rollback' to abort it.".into(),
         );
     }
 
@@ -58,13 +58,13 @@ pub fn execute_begin() -> Result<TransactionResponse, String> {
     })
 }
 
-pub fn execute_commit_tx() -> Result<TransactionResponse, String> {
+pub fn execute_commit_tx() -> Result<TransactionResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
     let lock = lock_path(&repo_root);
     let state_path = tx_state_path(&repo_root);
 
     if !lock.exists() {
-        return Err("No transaction in progress".to_string());
+        return Err("No transaction in progress".into());
     }
 
     let data = fs::read_to_string(&state_path)
@@ -83,13 +83,13 @@ pub fn execute_commit_tx() -> Result<TransactionResponse, String> {
     })
 }
 
-pub fn execute_rollback() -> Result<TransactionResponse, String> {
+pub fn execute_rollback() -> Result<TransactionResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
     let lock = lock_path(&repo_root);
     let state_path = tx_state_path(&repo_root);
 
     if !lock.exists() {
-        return Err("No transaction in progress".to_string());
+        return Err("No transaction in progress".into());
     }
 
     let data = fs::read_to_string(&state_path)
@@ -154,7 +154,7 @@ pub fn execute_rollback() -> Result<TransactionResponse, String> {
 }
 
 /// Record a WAL entry for the current transaction (called from other commands)
-pub fn record_wal(repo_root: &std::path::Path, op: &str, path: &str) -> Result<(), String> {
+pub fn record_wal(repo_root: &std::path::Path, op: &str, path: &str) -> Result<(), crate::errors::LitError> {
     let state_path = tx_state_path(repo_root);
     if !state_path.exists() {
         return Ok(()); // No active transaction
@@ -210,7 +210,7 @@ fn base64_encode(data: &[u8]) -> String {
     result
 }
 
-fn base64_decode(s: &str) -> Result<Vec<u8>, String> {
+fn base64_decode(s: &str) -> Result<Vec<u8>, crate::errors::LitError> {
     let mut result = Vec::new();
     let chars: Vec<u8> = s.bytes().filter(|b| *b != b'\n' && *b != b'\r').collect();
     for chunk in chars.chunks(4) {

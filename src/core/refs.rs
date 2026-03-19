@@ -331,12 +331,14 @@ mod tests {
         let temp_dir = temp.path().to_path_buf();
         fs::create_dir_all(get_lit_dir(&temp_dir).join("refs/heads")).unwrap();
 
-        let mut config = EncryptionConfig::default();
-        config.enabled = true;
-        config.key_file = temp_dir
-            .join("encryption.key")
-            .to_string_lossy()
-            .to_string();
+        let config = EncryptionConfig {
+            enabled: true,
+            key_file: temp_dir
+                .join("encryption.key")
+                .to_string_lossy()
+                .to_string(),
+            ..Default::default()
+        };
 
         let mut enc_manager = EncryptionManager::new(config);
         enc_manager.initialize("test-passphrase-refs").unwrap();
@@ -360,12 +362,14 @@ mod tests {
         let temp_dir = temp.path().to_path_buf();
         fs::create_dir_all(get_lit_dir(&temp_dir).join("refs/heads")).unwrap();
 
-        let mut config = EncryptionConfig::default();
-        config.enabled = true;
-        config.key_file = temp_dir
-            .join("encryption.key")
-            .to_string_lossy()
-            .to_string();
+        let config = EncryptionConfig {
+            enabled: true,
+            key_file: temp_dir
+                .join("encryption.key")
+                .to_string_lossy()
+                .to_string(),
+            ..Default::default()
+        };
 
         let mut enc_manager = EncryptionManager::new(config);
         enc_manager.initialize("test-passphrase-head").unwrap();
@@ -395,12 +399,14 @@ mod tests {
         let temp_dir = temp.path().to_path_buf();
         fs::create_dir_all(get_lit_dir(&temp_dir)).unwrap();
 
-        let mut config = EncryptionConfig::default();
-        config.enabled = true;
-        config.key_file = temp_dir
-            .join("encryption.key")
-            .to_string_lossy()
-            .to_string();
+        let config = EncryptionConfig {
+            enabled: true,
+            key_file: temp_dir
+                .join("encryption.key")
+                .to_string_lossy()
+                .to_string(),
+            ..Default::default()
+        };
 
         let mut enc_manager = EncryptionManager::new(config);
         enc_manager.initialize("test-passphrase-detached").unwrap();
@@ -425,12 +431,14 @@ mod tests {
         let temp_dir = temp.path().to_path_buf();
         fs::create_dir_all(get_lit_dir(&temp_dir).join("refs/heads")).unwrap();
 
-        let mut config = EncryptionConfig::default();
-        config.enabled = true;
-        config.key_file = temp_dir
-            .join("encryption.key")
-            .to_string_lossy()
-            .to_string();
+        let config = EncryptionConfig {
+            enabled: true,
+            key_file: temp_dir
+                .join("encryption.key")
+                .to_string_lossy()
+                .to_string(),
+            ..Default::default()
+        };
 
         let mut enc_manager = EncryptionManager::new(config);
         enc_manager.initialize("test-passphrase-tamper").unwrap();

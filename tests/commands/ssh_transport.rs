@@ -150,7 +150,7 @@ fn test_ssh_pipe_negotiate_and_download() {
     let mut pipe = lit::network::ssh::SshPipe::open_local(server_dir.path()).unwrap();
 
     // Negotiate: we want the commit, we have nothing
-    let needed = lit::network::ssh::negotiate_ssh(&mut pipe, &[commit_hash.clone()], &[]).unwrap();
+    let needed = lit::network::ssh::negotiate_ssh(&mut pipe, std::slice::from_ref(&commit_hash), &[]).unwrap();
     assert!(
         !needed.is_empty(),
         "Should need at least the commit + tree + blob"
@@ -289,7 +289,7 @@ fn test_push_fetch_roundtrip_over_pipe() {
 
         // Negotiate
         let needed =
-            lit::network::ssh::negotiate_ssh(&mut pipe, &[server_hash.clone()], &[]).unwrap();
+            lit::network::ssh::negotiate_ssh(&mut pipe, std::slice::from_ref(&server_hash), &[]).unwrap();
 
         // Download
         let downloaded =

@@ -68,7 +68,6 @@ fn test_verify_repo_with_branches() {
     assert!(resp.valid, "Repo with branches should be valid");
 }
 
-
 #[test]
 fn test_verify_corrupt_object() {
     let temp = init_test_repo();
@@ -96,7 +95,10 @@ fn test_verify_corrupt_object() {
     assert!(corrupted, "Should have found an object to corrupt");
 
     let result = lit::commands::verify::execute();
-    assert!(result.is_ok(), "Verify should return Ok even with corruption");
+    assert!(
+        result.is_ok(),
+        "Verify should return Ok even with corruption"
+    );
     let resp = result.unwrap();
     assert!(!resp.valid, "Repo with corrupt object should be invalid");
     assert!(
@@ -124,9 +126,11 @@ fn test_verify_dangling_ref() {
     let resp = result.unwrap();
     assert!(!resp.valid, "Repo with dangling ref should be invalid");
     assert!(
-        resp.checks.iter().any(|c| c.check.contains("dangling-branch")
-            && c.status == "error"
-            && c.details.as_ref().map_or(false, |d| d.contains("Dangling"))),
+        resp.checks
+            .iter()
+            .any(|c| c.check.contains("dangling-branch")
+                && c.status == "error"
+                && c.details.as_ref().is_some_and(|d| d.contains("Dangling"))),
         "Should report dangling ref for dangling-branch"
     );
 }
@@ -147,14 +151,17 @@ fn test_verify_checks_present() {
     let check_names: Vec<&str> = result.checks.iter().map(|c| c.check.as_str()).collect();
     assert!(
         check_names.iter().any(|n| n.contains("object")),
-        "Should have object check: {:?}", check_names
+        "Should have object check: {:?}",
+        check_names
     );
     assert!(
         check_names.iter().any(|n| n.contains("ref")),
-        "Should have refs check: {:?}", check_names
+        "Should have refs check: {:?}",
+        check_names
     );
     assert!(
         check_names.iter().any(|n| n.contains("dag")),
-        "Should have DAG check: {:?}", check_names
+        "Should have DAG check: {:?}",
+        check_names
     );
 }

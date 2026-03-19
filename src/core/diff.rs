@@ -2,10 +2,10 @@
 ///
 /// Provides line-level diffing between blobs and tree-level diffing
 /// between commits/branches. All output is structured for agent consumption.
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 
 /// A single diff hunk representing a contiguous region of changes
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiffHunk {
     pub old_start: usize,
     pub old_count: usize,
@@ -15,14 +15,14 @@ pub struct DiffHunk {
 }
 
 /// A single line in a diff
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiffLine {
     pub kind: DiffLineKind,
     pub content: String,
 }
 
 /// The type of a diff line
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum DiffLineKind {
     Context,
@@ -31,7 +31,7 @@ pub enum DiffLineKind {
 }
 
 /// A file-level diff result
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileDiff {
     pub path: String,
     pub status: FileStatus,
@@ -44,7 +44,7 @@ pub struct FileDiff {
 }
 
 /// File status in a diff
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum FileStatus {
     Added,
@@ -53,7 +53,7 @@ pub enum FileStatus {
 }
 
 /// Stat summary for a file
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiffStat {
     pub path: String,
     pub additions: usize,
@@ -490,7 +490,7 @@ fn read_blob(
 }
 
 /// A segment of a word-level diff within a single line
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WordDiffSegment {
     pub kind: DiffLineKind,
     pub text: String,

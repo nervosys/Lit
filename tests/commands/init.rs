@@ -101,7 +101,7 @@ fn test_init_fails_if_already_initialized() {
     let result2 = lit::commands::init::execute(false, Some(repo_path.clone()));
     assert!(result2.is_err(), "Second init should fail");
     assert!(
-        result2.unwrap_err().contains("already exists"),
+        result2.unwrap_err().internal_message().contains("already exists"),
         "Error should mention repository already exists"
     );
 }

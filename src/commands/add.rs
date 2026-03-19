@@ -5,7 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
-pub fn execute(files: Vec<String>) -> Result<AddResponse, String> {
+pub fn execute(files: Vec<String>) -> Result<AddResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
     let store = ObjectStore::new(&repo_root);
     let mut index = Index::load(&repo_root)?;
@@ -26,7 +26,7 @@ pub fn execute(files: Vec<String>) -> Result<AddResponse, String> {
             };
 
             if !full_path.exists() {
-                return Err(format!("File not found: {}", file_pattern));
+                return Err(format!("File not found: {}", file_pattern).into());
             }
 
             if full_path.is_dir() {
@@ -50,7 +50,7 @@ fn add_file(
     file_path: &Path,
     store: &ObjectStore,
     index: &mut Index,
-) -> Result<(), String> {
+) -> Result<(), crate::errors::LitError> {
     // Skip .lit directory
     if file_path.starts_with(repo_root.join(".lit")) {
         return Ok(());
@@ -85,7 +85,7 @@ fn add_directory(
     dir_path: &Path,
     store: &ObjectStore,
     index: &mut Index,
-) -> Result<usize, String> {
+) -> Result<usize, crate::errors::LitError> {
     let mut count = 0usize;
     for entry in WalkDir::new(dir_path)
         .into_iter()

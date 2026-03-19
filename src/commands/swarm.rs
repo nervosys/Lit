@@ -35,7 +35,7 @@ fn agents_dir(repo_root: &Path) -> PathBuf {
 }
 
 /// Register an agent in the swarm — creates namespaced branch prefix
-pub fn execute_register(agent_id: String) -> Result<SwarmResponse, String> {
+pub fn execute_register(agent_id: String) -> Result<SwarmResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
     let agents = agents_dir(&repo_root);
     fs::create_dir_all(&agents).map_err(|e| format!("Failed to create swarm dir: {}", e))?;
@@ -77,7 +77,7 @@ pub fn execute_register(agent_id: String) -> Result<SwarmResponse, String> {
 }
 
 /// List registered agents
-pub fn execute_list() -> Result<SwarmResponse, String> {
+pub fn execute_list() -> Result<SwarmResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
     let agents = agents_dir(&repo_root);
 
@@ -124,7 +124,7 @@ pub fn execute_lease_acquire(
     agent_id: String,
     file_path: String,
     duration_secs: u64,
-) -> Result<SwarmResponse, String> {
+) -> Result<SwarmResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
     let leases = leases_dir(&repo_root);
     fs::create_dir_all(&leases).map_err(|e| format!("Failed to create leases dir: {}", e))?;
@@ -140,7 +140,7 @@ pub fn execute_lease_acquire(
                 return Err(format!(
                     "File '{}' is leased by agent '{}' until timestamp {}",
                     file_path, existing.agent_id, existing.expires_at
-                ));
+                ).into());
             }
         }
     }
@@ -171,12 +171,12 @@ pub fn execute_lease_acquire(
 }
 
 /// Release a file lease
-pub fn execute_lease_release(agent_id: String, file_path: String) -> Result<SwarmResponse, String> {
+pub fn execute_lease_release(agent_id: String, file_path: String) -> Result<SwarmResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
     let lease_file = leases_dir(&repo_root).join(format!("{}.json", sanitize_path(&file_path)));
 
     if !lease_file.exists() {
-        return Err(format!("No lease exists for '{}'", file_path));
+        return Err(format!("No lease exists for '{}'", file_path).into());
     }
 
     let data = fs::read_to_string(&lease_file).map_err(|e| e.to_string())?;
@@ -187,7 +187,7 @@ pub fn execute_lease_release(agent_id: String, file_path: String) -> Result<Swar
         return Err(format!(
             "Lease on '{}' is held by agent '{}', not '{}'",
             file_path, existing.agent_id, agent_id
-        ));
+        ).into());
     }
 
     fs::remove_file(&lease_file).map_err(|e| format!("Failed to remove lease: {}", e))?;
@@ -201,7 +201,7 @@ pub fn execute_lease_release(agent_id: String, file_path: String) -> Result<Swar
 }
 
 /// List all active leases
-pub fn execute_lease_list() -> Result<SwarmResponse, String> {
+pub fn execute_lease_list() -> Result<SwarmResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
     let leases = leases_dir(&repo_root);
 

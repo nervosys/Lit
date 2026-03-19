@@ -17,13 +17,13 @@ pub fn execute(
     strategy: Option<String>,
     all: bool,
     finish: bool,
-) -> Result<ResolveResponse, String> {
+) -> Result<ResolveResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
     let store = ObjectStore::new(&repo_root);
 
     let merge_dir = repo_root.join(".lit").join("merge");
     if !merge_dir.exists() {
-        return Err("No merge in progress. Nothing to resolve.".to_string());
+        return Err("No merge in progress. Nothing to resolve.".into());
     }
 
     if finish {
@@ -32,7 +32,7 @@ pub fn execute(
 
     let strategy = match &strategy {
         Some(s) => MergeStrategy::from_str(s)?,
-        None => return Err("--strategy is required for resolve (ours or theirs)".to_string()),
+        None => return Err("--strategy is required for resolve (ours or theirs)".into()),
     };
 
     // Read conflict state
@@ -82,7 +82,7 @@ pub fn execute(
             MergeStrategy::Recursive => {
                 return Err(
                     "Cannot use 'recursive' strategy for resolve. Use 'ours' or 'theirs'."
-                        .to_string(),
+                        .into(),
                 );
             }
         };
@@ -112,9 +112,9 @@ pub fn execute(
 
     if resolved_files.is_empty() {
         return Err(if let Some(f) = &file {
-            format!("No conflict found for file '{}'", f)
+            format!("No conflict found for file '{}'", f).into()
         } else {
-            "No conflicts to resolve".to_string()
+            "No conflicts to resolve".into()
         });
     }
 
@@ -160,7 +160,7 @@ pub fn execute(
 fn finalize_merge(
     repo_root: &std::path::Path,
     store: &ObjectStore,
-) -> Result<ResolveResponse, String> {
+) -> Result<ResolveResponse, crate::errors::LitError> {
     let merge_dir = repo_root.join(".lit").join("merge");
 
     // Check no remaining conflicts
@@ -178,7 +178,7 @@ fn finalize_merge(
             return Err(format!(
                 "{} unresolved conflict(s) remain. Resolve them first.",
                 conflict_count
-            ));
+            ).into());
         }
     }
 
@@ -233,19 +233,19 @@ fn finalize_merge(
 fn get_commit_tree(
     store: &ObjectStore,
     commit_hash: &ObjectHash,
-) -> Result<crate::core::Tree, String> {
+) -> Result<crate::core::Tree, crate::errors::LitError> {
     let commit = match store.read(commit_hash)? {
         Object::Commit(c) => c,
-        _ => return Err(format!("Expected commit object for {}", commit_hash)),
+        _ => return Err(format!("Expected commit object for {}", commit_hash).into()),
     };
     match store.read(&commit.tree)? {
         Object::Tree(t) => Ok(t),
-        _ => Err(format!("Expected tree object for {}", commit.tree)),
+        _ => Err(format!("Expected tree object for {}", commit.tree).into()),
     }
 }
 
 /// Build tree from index (same logic as commit command)
-fn build_tree_from_index(index: &Index, store: &ObjectStore) -> Result<ObjectHash, String> {
+fn build_tree_from_index(index: &Index, store: &ObjectStore) -> Result<ObjectHash, crate::errors::LitError> {
     use crate::core::Tree;
     use std::collections::HashMap;
 
@@ -307,5 +307,5 @@ fn build_tree_from_index(index: &Index, store: &ObjectStore) -> Result<ObjectHas
     }
 
     let tree_object = Object::Tree(root_tree);
-    store.write(&tree_object)
+    store.write(&tree_object).map_err(Into::into)
 }

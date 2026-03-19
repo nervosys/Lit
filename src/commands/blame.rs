@@ -2,7 +2,7 @@ use crate::core::{find_repo_root, read_head, Object, ObjectHash};
 use crate::response::{BlameLineInfo, BlameResponse};
 use crate::storage::ObjectStore;
 
-pub fn execute(file: String) -> Result<BlameResponse, String> {
+pub fn execute(file: String) -> Result<BlameResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
     let store = ObjectStore::new(&repo_root);
 
@@ -12,7 +12,7 @@ pub fn execute(file: String) -> Result<BlameResponse, String> {
     // Read current file content from working tree
     let file_path = repo_root.join(&file);
     if !file_path.exists() {
-        return Err(format!("File '{}' not found", file));
+        return Err(format!("File '{}' not found", file).into());
     }
 
     let content =

@@ -6,7 +6,7 @@ use crate::response::MergeResponse;
 use crate::storage::ObjectStore;
 use std::str::FromStr;
 
-pub fn execute(branch: String, strategy: Option<String>) -> Result<MergeResponse, String> {
+pub fn execute(branch: String, strategy: Option<String>) -> Result<MergeResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
     let store = ObjectStore::new(&repo_root);
 
@@ -181,13 +181,13 @@ pub fn execute(branch: String, strategy: Option<String>) -> Result<MergeResponse
 fn get_commit_tree(
     store: &ObjectStore,
     commit_hash: &ObjectHash,
-) -> Result<crate::core::Tree, String> {
+) -> Result<crate::core::Tree, crate::errors::LitError> {
     let commit = match store.read(commit_hash)? {
         Object::Commit(c) => c,
-        _ => return Err(format!("Expected commit object for {}", commit_hash)),
+        _ => return Err(format!("Expected commit object for {}", commit_hash).into()),
     };
     match store.read(&commit.tree)? {
         Object::Tree(t) => Ok(t),
-        _ => Err(format!("Expected tree object for {}", commit.tree)),
+        _ => Err(format!("Expected tree object for {}", commit.tree).into()),
     }
 }

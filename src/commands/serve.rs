@@ -10,7 +10,7 @@ use tiny_http::{Header, Method, Response, Server, StatusCode};
 /// Maximum request body size (1 MB)
 const MAX_BODY_SIZE: usize = 1_048_576;
 
-pub fn execute(port: u16, token: Option<String>) -> Result<ServeResponse, String> {
+pub fn execute(port: u16, token: Option<String>) -> Result<ServeResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
     execute_at(port, token, repo_root)
 }
@@ -21,7 +21,7 @@ pub fn execute_at(
     port: u16,
     token: Option<String>,
     repo_root: std::path::PathBuf,
-) -> Result<ServeResponse, String> {
+) -> Result<ServeResponse, crate::errors::LitError> {
     let bind_addr = format!("127.0.0.1:{}", port);
     let server = Server::http(&bind_addr)
         .map_err(|e| format!("Failed to start server on {}: {}", bind_addr, e))?;
@@ -81,7 +81,7 @@ pub fn execute_at(
             Err(e) => {
                 let body = serde_json::json!({
                     "status": "error",
-                    "error": {"message": e}
+                    "error": {"message": e.internal_message()}
                 })
                 .to_string();
                 let resp = Response::from_string(body)
@@ -100,7 +100,7 @@ pub fn execute_at(
 /// Execute the server in stdio pipe mode.
 /// Reads newline-delimited JSON requests from stdin, routes them through
 /// `route_request`, and writes JSON responses to stdout. Used by SSH transport.
-pub fn execute_stdio() -> Result<ServeResponse, String> {
+pub fn execute_stdio() -> Result<ServeResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
     let stdin = std::io::stdin();
     let stdout = std::io::stdout();
@@ -145,7 +145,7 @@ pub fn execute_stdio() -> Result<ServeResponse, String> {
             Err(e) => {
                 let err_body = serde_json::json!({
                     "status": "error",
-                    "error": {"message": e}
+                    "error": {"message": e.internal_message()}
                 })
                 .to_string();
                 (500, err_body)
@@ -165,7 +165,7 @@ pub fn execute_stdio() -> Result<ServeResponse, String> {
 /// Execute the server as a lit:// protocol TCP daemon.
 /// Accepts TCP connections and handles each with the same newline-delimited
 /// JSON protocol as stdio mode. Used by the `lit://` native transport.
-pub fn execute_daemon(port: u16) -> Result<ServeResponse, String> {
+pub fn execute_daemon(port: u16) -> Result<ServeResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
     let bind_addr = format!("0.0.0.0:{}", port);
     let listener = TcpListener::bind(&bind_addr)
@@ -242,7 +242,7 @@ fn handle_daemon_connection(stream: std::net::TcpStream, repo_root: &std::path::
             Err(e) => {
                 let err_body = serde_json::json!({
                     "status": "error",
-                    "error": {"message": e}
+                    "error": {"message": e.internal_message()}
                 })
                 .to_string();
                 (500, err_body)
@@ -263,10 +263,10 @@ fn json_content_type() -> Header {
     Header::from_bytes("Content-Type", "application/json").unwrap()
 }
 
-fn read_body(request: &mut tiny_http::Request) -> Result<String, String> {
+fn read_body(request: &mut tiny_http::Request) -> Result<String, crate::errors::LitError> {
     let content_length = request.body_length().unwrap_or(0);
     if content_length > MAX_BODY_SIZE {
-        return Err("Request body too large".to_string());
+        return Err("Request body too large".into());
     }
     let mut body = String::new();
     request
@@ -281,7 +281,7 @@ fn route_request(
     url: &str,
     body: &str,
     repo_root: &std::path::Path,
-) -> Result<(u16, String), String> {
+) -> Result<(u16, String), crate::errors::LitError> {
     let path = url.split('?').next().unwrap_or(url);
 
     match (method, path) {
@@ -706,8 +706,8 @@ fn base64_encode(data: &[u8]) -> String {
 }
 
 /// Base64 decode string to bytes
-fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
-    fn val(c: u8) -> Result<u32, String> {
+fn base64_decode(input: &str) -> Result<Vec<u8>, crate::errors::LitError> {
+    fn val(c: u8) -> Result<u32, crate::errors::LitError> {
         match c {
             b'A'..=b'Z' => Ok((c - b'A') as u32),
             b'a'..=b'z' => Ok((c - b'a' + 26) as u32),
@@ -715,14 +715,14 @@ fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
             b'+' => Ok(62),
             b'/' => Ok(63),
             b'=' => Ok(0),
-            _ => Err(format!("Invalid base64 character: {}", c as char)),
+            _ => Err(format!("Invalid base64 character: {}", c as char).into()),
         }
     }
     let bytes: Vec<u8> = input.bytes().filter(|b| !b.is_ascii_whitespace()).collect();
     let mut out = Vec::with_capacity(bytes.len() * 3 / 4);
     for chunk in bytes.chunks(4) {
         if chunk.len() < 4 {
-            return Err("Invalid base64 length".to_string());
+            return Err("Invalid base64 length".into());
         }
         let a = val(chunk[0])?;
         let b = val(chunk[1])?;

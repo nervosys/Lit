@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use std::fs;
 use walkdir::WalkDir;
 
-pub fn execute() -> Result<StatusResponse, String> {
+pub fn execute() -> Result<StatusResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
     let index = Index::load(&repo_root)?;
 
@@ -71,7 +71,7 @@ fn is_hidden(entry: &walkdir::DirEntry) -> bool {
         .unwrap_or(false)
 }
 
-fn is_modified(repo_root: &std::path::Path, file: &str, index: &Index) -> Result<bool, String> {
+fn is_modified(repo_root: &std::path::Path, file: &str, index: &Index) -> Result<bool, crate::errors::LitError> {
     let file_path = repo_root.join(file);
 
     if let Some(entry) = index.entries.get(file) {

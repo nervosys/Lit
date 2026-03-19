@@ -74,6 +74,7 @@ fn test_config_get_unknown_key() {
     }));
     assert!(result.is_err(), "Config get with unknown key should fail");
     let error = result.unwrap_err();
+    let error = error.internal_message();
     assert!(
         error.contains("Unknown configuration key"),
         "Error should mention unknown key"
@@ -168,6 +169,7 @@ fn test_config_set_invalid_boolean() {
         "Config set with invalid boolean should fail"
     );
     let error = result.unwrap_err();
+    let error = error.internal_message();
     assert!(
         error.contains("Invalid boolean"),
         "Error should mention invalid boolean"
@@ -189,6 +191,7 @@ fn test_config_set_unsupported_key() {
         "Config set with unsupported key should fail"
     );
     let error = result.unwrap_err();
+    let error = error.internal_message();
     assert!(
         error.contains("not supported"),
         "Error should mention not supported"

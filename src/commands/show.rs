@@ -2,7 +2,7 @@ use crate::core::{find_repo_root, Object, ObjectHash};
 use crate::response::{ShowResponse, TreeEntryInfo};
 use crate::storage::ObjectStore;
 
-pub fn execute(object: String) -> Result<ShowResponse, String> {
+pub fn execute(object: String) -> Result<ShowResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
     let store = ObjectStore::new(&repo_root);
 

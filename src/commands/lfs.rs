@@ -89,7 +89,7 @@ fn load_track_patterns(repo_root: &Path) -> Vec<String> {
 }
 
 /// Save LFS tracking patterns to .litattributes
-fn save_track_patterns(repo_root: &Path, patterns: &[String]) -> Result<(), String> {
+fn save_track_patterns(repo_root: &Path, patterns: &[String]) -> Result<(), crate::errors::LitError> {
     let attrs_path = repo_root.join(".litattributes");
 
     // Read existing non-LFS lines
@@ -111,7 +111,7 @@ fn save_track_patterns(repo_root: &Path, patterns: &[String]) -> Result<(), Stri
     }
 
     fs::write(&attrs_path, lines.join("\n") + "\n")
-        .map_err(|e| format!("Failed to write .litattributes: {}", e))
+        .map_err(|e| format!("Failed to write .litattributes: {}", e).into())
 }
 
 /// Check if a file matches any LFS pattern
@@ -130,7 +130,7 @@ fn matches_lfs_pattern(file_path: &str, patterns: &[String]) -> bool {
 }
 
 /// Store a large file in LFS storage
-fn store_lfs_object(repo_root: &Path, content: &[u8]) -> Result<LfsPointer, String> {
+fn store_lfs_object(repo_root: &Path, content: &[u8]) -> Result<LfsPointer, crate::errors::LitError> {
     let pointer = LfsPointer::from_content(content);
 
     // Store in .lit/lfs/objects/{oid[..4]}/{oid[4..]}
@@ -157,7 +157,7 @@ fn store_lfs_object(repo_root: &Path, content: &[u8]) -> Result<LfsPointer, Stri
 }
 
 /// Retrieve a large file from LFS storage
-pub fn read_lfs_object(repo_root: &Path, pointer: &LfsPointer) -> Result<Vec<u8>, String> {
+pub fn read_lfs_object(repo_root: &Path, pointer: &LfsPointer) -> Result<Vec<u8>, crate::errors::LitError> {
     let oid_prefix = &pointer.oid[..4.min(pointer.oid.len())];
     let oid_rest = if pointer.oid.len() > 4 {
         &pointer.oid[4..]
@@ -171,11 +171,11 @@ pub fn read_lfs_object(repo_root: &Path, pointer: &LfsPointer) -> Result<Vec<u8>
         .join(oid_prefix)
         .join(oid_rest);
 
-    fs::read(&obj_path).map_err(|e| format!("Failed to read LFS object: {}", e))
+    fs::read(&obj_path).map_err(|e| format!("Failed to read LFS object: {}", e).into())
 }
 
 /// Execute `lfs track` — add tracking patterns for large files
-pub fn execute_track(patterns: Vec<String>) -> Result<LfsTrackResponse, String> {
+pub fn execute_track(patterns: Vec<String>) -> Result<LfsTrackResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
 
     let mut current = load_track_patterns(&repo_root);
@@ -201,7 +201,7 @@ pub fn execute_track(patterns: Vec<String>) -> Result<LfsTrackResponse, String> 
 }
 
 /// Execute `lfs migrate` — convert existing large files to LFS pointers
-pub fn execute_migrate(threshold: Option<u64>) -> Result<LfsMigrateResponse, String> {
+pub fn execute_migrate(threshold: Option<u64>) -> Result<LfsMigrateResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
     let threshold = threshold.unwrap_or(10 * 1024 * 1024); // 10MB default
 

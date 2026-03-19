@@ -11,7 +11,7 @@ struct BatchOperation {
     args: serde_json::Value,
 }
 
-pub fn execute(atomic: bool, dry_run: bool) -> Result<BatchResponse, String> {
+pub fn execute(atomic: bool, dry_run: bool) -> Result<BatchResponse, crate::errors::LitError> {
     let _repo_root = find_repo_root()?;
 
     let stdin = io::stdin();
@@ -29,7 +29,7 @@ pub fn execute(atomic: bool, dry_run: bool) -> Result<BatchResponse, String> {
         .collect();
 
     if operations.is_empty() {
-        return Err("No operations provided on stdin (expected JSONL)".to_string());
+        return Err("No operations provided on stdin (expected JSONL)".into());
     }
 
     let total = operations.len();
@@ -67,7 +67,7 @@ pub fn execute(atomic: bool, dry_run: bool) -> Result<BatchResponse, String> {
                     command: op.command.clone(),
                     status: "error".to_string(),
                     result: None,
-                    error: Some(e),
+                    error: Some(e.internal_message().to_string()),
                 });
                 failed += 1;
 
@@ -99,7 +99,7 @@ pub fn execute(atomic: bool, dry_run: bool) -> Result<BatchResponse, String> {
     })
 }
 
-fn execute_single_operation(op: &BatchOperation) -> Result<serde_json::Value, String> {
+fn execute_single_operation(op: &BatchOperation) -> Result<serde_json::Value, crate::errors::LitError> {
     match op.command.as_str() {
         "add" => {
             let files: Vec<String> = op
@@ -108,10 +108,10 @@ fn execute_single_operation(op: &BatchOperation) -> Result<serde_json::Value, St
                 .and_then(|v| serde_json::from_value(v.clone()).ok())
                 .unwrap_or_default();
             if files.is_empty() {
-                return Err("'files' argument required for add".to_string());
+                return Err("'files' argument required for add".into());
             }
             let resp = crate::commands::add::execute(files)?;
-            serde_json::to_value(&resp).map_err(|e| e.to_string())
+            serde_json::to_value(&resp).map_err(|e| e.to_string().into())
         }
         "commit" => {
             let message = op
@@ -126,11 +126,11 @@ fn execute_single_operation(op: &BatchOperation) -> Result<serde_json::Value, St
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string());
             let resp = crate::commands::commit::execute(message, author)?;
-            serde_json::to_value(&resp).map_err(|e| e.to_string())
+            serde_json::to_value(&resp).map_err(|e| e.to_string().into())
         }
         "status" => {
             let resp = crate::commands::status::execute()?;
-            serde_json::to_value(&resp).map_err(|e| e.to_string())
+            serde_json::to_value(&resp).map_err(|e| e.to_string().into())
         }
         "branch" => {
             let name = op
@@ -149,7 +149,7 @@ fn execute_single_operation(op: &BatchOperation) -> Result<serde_json::Value, St
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
             let resp = crate::commands::branch::execute(name, delete, all)?;
-            serde_json::to_value(&resp).map_err(|e| e.to_string())
+            serde_json::to_value(&resp).map_err(|e| e.to_string().into())
         }
         "checkout" => {
             let target = op
@@ -164,7 +164,7 @@ fn execute_single_operation(op: &BatchOperation) -> Result<serde_json::Value, St
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
             let resp = crate::commands::checkout::execute(target, b)?;
-            serde_json::to_value(&resp).map_err(|e| e.to_string())
+            serde_json::to_value(&resp).map_err(|e| e.to_string().into())
         }
         "log" => {
             let count = op.args.get("count").and_then(|v| v.as_u64()).unwrap_or(10) as usize;
@@ -174,7 +174,7 @@ fn execute_single_operation(op: &BatchOperation) -> Result<serde_json::Value, St
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
             let resp = crate::commands::log::execute(count, oneline)?;
-            serde_json::to_value(&resp).map_err(|e| e.to_string())
+            serde_json::to_value(&resp).map_err(|e| e.to_string().into())
         }
         "snapshot" => {
             let message = op
@@ -190,8 +190,8 @@ fn execute_single_operation(op: &BatchOperation) -> Result<serde_json::Value, St
                 .map(|s| s.to_string());
             let metadata = op.args.get("metadata").cloned();
             let resp = crate::commands::snapshot::execute(message, author, metadata)?;
-            serde_json::to_value(&resp).map_err(|e| e.to_string())
+            serde_json::to_value(&resp).map_err(|e| e.to_string().into())
         }
-        _ => Err(format!("Unknown batch command: '{}'", op.command)),
+        _ => Err(format!("Unknown batch command: '{}'", op.command).into()),
     }
 }

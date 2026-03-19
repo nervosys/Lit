@@ -21,7 +21,7 @@ pub fn execute(
     onto: Option<String>,
     abort: bool,
     cont: bool,
-) -> Result<RebaseResponse, String> {
+) -> Result<RebaseResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
 
     if abort {
@@ -43,7 +43,7 @@ fn rebase_noninteractive(
     repo_root: &std::path::Path,
     base: &str,
     onto: Option<String>,
-) -> Result<RebaseResponse, String> {
+) -> Result<RebaseResponse, crate::errors::LitError> {
     let store = ObjectStore::new(repo_root);
 
     let base_hash = resolve_rev(repo_root, base)?;
@@ -116,7 +116,7 @@ fn rebase_noninteractive(
     })
 }
 
-fn rebase_interactive(repo_root: &std::path::Path, base: &str) -> Result<RebaseResponse, String> {
+fn rebase_interactive(repo_root: &std::path::Path, base: &str) -> Result<RebaseResponse, crate::errors::LitError> {
     let store = ObjectStore::new(repo_root);
 
     let base_hash = resolve_rev(repo_root, base)?;
@@ -166,10 +166,10 @@ fn rebase_interactive(repo_root: &std::path::Path, base: &str) -> Result<RebaseR
     })
 }
 
-fn rebase_continue(repo_root: &std::path::Path) -> Result<RebaseResponse, String> {
+fn rebase_continue(repo_root: &std::path::Path) -> Result<RebaseResponse, crate::errors::LitError> {
     let rebase_dir = repo_root.join(".lit").join("rebase");
     if !rebase_dir.exists() {
-        return Err("No rebase in progress".to_string());
+        return Err("No rebase in progress".into());
     }
 
     let store = ObjectStore::new(repo_root);
@@ -199,7 +199,7 @@ fn rebase_continue(repo_root: &std::path::Path) -> Result<RebaseResponse, String
                 let hash = ObjectHash::from_hex(entry.hash.clone());
                 let commit = match store.read(&hash)? {
                     Object::Commit(c) => c,
-                    _ => return Err(format!("'{}' is not a commit", entry.hash)),
+                    _ => return Err(format!("'{}' is not a commit", entry.hash).into()),
                 };
 
                 let parent_obj = ObjectHash::from_hex(current_parent.clone());
@@ -224,7 +224,7 @@ fn rebase_continue(repo_root: &std::path::Path) -> Result<RebaseResponse, String
                 let hash = ObjectHash::from_hex(entry.hash.clone());
                 let commit = match store.read(&hash)? {
                     Object::Commit(c) => c,
-                    _ => return Err(format!("'{}' is not a commit", entry.hash)),
+                    _ => return Err(format!("'{}' is not a commit", entry.hash).into()),
                 };
 
                 let parent_obj = ObjectHash::from_hex(current_parent.clone());
@@ -243,7 +243,7 @@ fn rebase_continue(repo_root: &std::path::Path) -> Result<RebaseResponse, String
                 replayed += 1;
             }
             other => {
-                return Err(format!("Unknown rebase action: '{}'", other));
+                return Err(format!("Unknown rebase action: '{}'", other).into());
             }
         }
     }
@@ -261,10 +261,10 @@ fn rebase_continue(repo_root: &std::path::Path) -> Result<RebaseResponse, String
     })
 }
 
-fn rebase_abort(repo_root: &std::path::Path) -> Result<RebaseResponse, String> {
+fn rebase_abort(repo_root: &std::path::Path) -> Result<RebaseResponse, crate::errors::LitError> {
     let rebase_dir = repo_root.join(".lit").join("rebase");
     if !rebase_dir.exists() {
-        return Err("No rebase in progress".to_string());
+        return Err("No rebase in progress".into());
     }
 
     let branch = fs::read_to_string(rebase_dir.join("branch"))
@@ -307,7 +307,7 @@ fn collect_commits_since(
         let hash = ObjectHash::from_hex(current.clone());
         let commit = match store.read(&hash)? {
             Object::Commit(c) => c,
-            _ => return Err("Not a commit in history".to_string()),
+            _ => return Err("Not a commit in history".into()),
         };
 
         let parent = commit.parents.first().map(|p| p.to_string());
@@ -326,11 +326,11 @@ fn apply_commit_onto(
     store: &ObjectStore,
     commit: &Commit,
     new_parent: &ObjectHash,
-) -> Result<ObjectHash, String> {
+) -> Result<ObjectHash, crate::errors::LitError> {
     // Get parent's tree (the new base)
     let parent_commit = match store.read(new_parent)? {
         Object::Commit(c) => c,
-        _ => return Err("Parent is not a commit".to_string()),
+        _ => return Err("Parent is not a commit".into()),
     };
 
     // Get the original parent's tree
@@ -389,16 +389,16 @@ fn apply_commit_onto(
         }
     }
 
-    store.write(&Object::Tree(result_tree))
+    store.write(&Object::Tree(result_tree)).map_err(Into::into)
 }
 
 fn load_tree_files(
     store: &ObjectStore,
     tree_hash: &ObjectHash,
-) -> Result<std::collections::HashMap<String, (String, String)>, String> {
+) -> Result<std::collections::HashMap<String, (String, String)>, crate::errors::LitError> {
     let tree = match store.read(tree_hash)? {
         Object::Tree(t) => t,
-        _ => return Err("Not a tree".to_string()),
+        _ => return Err("Not a tree".into()),
     };
     let mut files = std::collections::HashMap::new();
     for entry in &tree.entries {
@@ -415,7 +415,7 @@ fn save_rebase_state(
     branch: &str,
     orig_head: &str,
     onto: &str,
-) -> Result<(), String> {
+) -> Result<(), crate::errors::LitError> {
     let rebase_dir = repo_root.join(".lit").join("rebase");
     fs::create_dir_all(&rebase_dir)
         .map_err(|e| format!("Failed to create rebase directory: {}", e))?;
@@ -428,7 +428,7 @@ fn save_rebase_state(
     Ok(())
 }
 
-fn cleanup_rebase_state(repo_root: &std::path::Path) -> Result<(), String> {
+fn cleanup_rebase_state(repo_root: &std::path::Path) -> Result<(), crate::errors::LitError> {
     let rebase_dir = repo_root.join(".lit").join("rebase");
     if rebase_dir.exists() {
         fs::remove_dir_all(&rebase_dir)
@@ -437,7 +437,7 @@ fn cleanup_rebase_state(repo_root: &std::path::Path) -> Result<(), String> {
     Ok(())
 }
 
-fn resolve_rev(repo_root: &std::path::Path, target: &str) -> Result<String, String> {
+fn resolve_rev(repo_root: &std::path::Path, target: &str) -> Result<String, crate::errors::LitError> {
     if target.starts_with("HEAD~") || target.starts_with("HEAD^") {
         let count: usize = target[5..].parse().unwrap_or(1);
         let mut current = read_head(repo_root)?;
@@ -446,7 +446,7 @@ fn resolve_rev(repo_root: &std::path::Path, target: &str) -> Result<String, Stri
             let hash = ObjectHash::from_hex(current);
             let commit = match store.read(&hash)? {
                 Object::Commit(c) => c,
-                _ => return Err("Not a commit in history".to_string()),
+                _ => return Err("Not a commit in history".into()),
             };
             current = commit
                 .parents
@@ -457,7 +457,7 @@ fn resolve_rev(repo_root: &std::path::Path, target: &str) -> Result<String, Stri
         return Ok(current);
     }
     if target == "HEAD" {
-        return read_head(repo_root);
+        return Ok(read_head(repo_root)?);
     }
     if let Ok(hash) = crate::core::read_ref(repo_root, &format!("heads/{}", target)) {
         return Ok(hash);
@@ -468,5 +468,5 @@ fn resolve_rev(repo_root: &std::path::Path, target: &str) -> Result<String, Stri
     if target.len() >= 16 && target.chars().all(|c| c.is_ascii_hexdigit()) {
         return Ok(target.to_string());
     }
-    Err(format!("Cannot resolve '{}' to a commit", target))
+    Err(format!("Cannot resolve '{}' to a commit", target).into())
 }

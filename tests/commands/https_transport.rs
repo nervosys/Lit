@@ -184,7 +184,7 @@ fn test_http_negotiate_and_download_objects() {
 
     // Negotiate: we want the commit, we have nothing
     let needed =
-        lit::network::https::negotiate_http(&base_url, &[commit_hash.clone()], &[], None).unwrap();
+        lit::network::https::negotiate_http(&base_url, std::slice::from_ref(&commit_hash), &[], None).unwrap();
     assert!(
         !needed.is_empty(),
         "Should need at least the commit + tree + blob"

@@ -45,7 +45,7 @@ struct McpTool {
 }
 
 /// Run MCP server over stdio (JSON-RPC 2.0)
-pub fn execute_stdio() -> Result<McpServeResponse, String> {
+pub fn execute_stdio() -> Result<McpServeResponse, crate::errors::LitError> {
     let stdin = io::stdin();
     let stdout = io::stdout();
 
@@ -103,7 +103,7 @@ pub fn execute_stdio() -> Result<McpServeResponse, String> {
 }
 
 /// Run MCP server over HTTP (uses tiny_http)
-pub fn execute_http(port: u16) -> Result<McpServeResponse, String> {
+pub fn execute_http(port: u16) -> Result<McpServeResponse, crate::errors::LitError> {
     let bind_addr = format!("127.0.0.1:{}", port);
     let server = tiny_http::Server::http(&bind_addr)
         .map_err(|e| format!("Failed to start MCP HTTP server on {}: {}", bind_addr, e))?;
@@ -237,7 +237,7 @@ fn handle_mcp_method(req: &JsonRpcRequest) -> JsonRpcResponse {
                     result: Some(serde_json::json!({
                         "content": [{
                             "type": "text",
-                            "text": e
+                            "text": e.internal_message().to_string()
                         }],
                         "isError": true
                     })),
@@ -303,7 +303,7 @@ fn handle_mcp_method(req: &JsonRpcRequest) -> JsonRpcResponse {
                     result: None,
                     error: Some(JsonRpcError {
                         code: -32602,
-                        message: e,
+                        message: e.internal_message().to_string(),
                         data: None,
                     }),
                 },
@@ -471,11 +471,11 @@ fn get_mcp_tools() -> Vec<McpTool> {
     ]
 }
 
-fn call_tool(name: &str, args: &serde_json::Value) -> Result<serde_json::Value, String> {
+fn call_tool(name: &str, args: &serde_json::Value) -> Result<serde_json::Value, crate::errors::LitError> {
     match name {
         "lit_status" => {
             let resp = commands::status::execute()?;
-            serde_json::to_value(&resp).map_err(|e| e.to_string())
+            serde_json::to_value(&resp).map_err(|e| e.to_string().into())
         }
         "lit_diff" => {
             let staged = args
@@ -484,12 +484,12 @@ fn call_tool(name: &str, args: &serde_json::Value) -> Result<serde_json::Value, 
                 .unwrap_or(false);
             let stat = args.get("stat").and_then(|v| v.as_bool()).unwrap_or(false);
             let resp = commands::diff::execute(staged, stat, false, None, None)?;
-            serde_json::to_value(&resp).map_err(|e| e.to_string())
+            serde_json::to_value(&resp).map_err(|e| e.to_string().into())
         }
         "lit_log" => {
             let count = args.get("count").and_then(|v| v.as_u64()).unwrap_or(10) as usize;
             let resp = commands::log::execute(count, false)?;
-            serde_json::to_value(&resp).map_err(|e| e.to_string())
+            serde_json::to_value(&resp).map_err(|e| e.to_string().into())
         }
         "lit_commit" => {
             let message = args
@@ -502,7 +502,7 @@ fn call_tool(name: &str, args: &serde_json::Value) -> Result<serde_json::Value, 
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string());
             let resp = commands::commit::execute(message, author)?;
-            serde_json::to_value(&resp).map_err(|e| e.to_string())
+            serde_json::to_value(&resp).map_err(|e| e.to_string().into())
         }
         "lit_add" => {
             let files: Vec<String> = args
@@ -510,10 +510,10 @@ fn call_tool(name: &str, args: &serde_json::Value) -> Result<serde_json::Value, 
                 .and_then(|v| serde_json::from_value(v.clone()).ok())
                 .unwrap_or_default();
             if files.is_empty() {
-                return Err("Missing 'files' array".to_string());
+                return Err("Missing 'files' array".into());
             }
             let resp = commands::add::execute(files)?;
-            serde_json::to_value(&resp).map_err(|e| e.to_string())
+            serde_json::to_value(&resp).map_err(|e| e.to_string().into())
         }
         "lit_branch" => {
             let name = args
@@ -526,7 +526,7 @@ fn call_tool(name: &str, args: &serde_json::Value) -> Result<serde_json::Value, 
                 .unwrap_or(false);
             let list = name.is_none() && !delete;
             let resp = commands::branch::execute(name, delete, list)?;
-            serde_json::to_value(&resp).map_err(|e| e.to_string())
+            serde_json::to_value(&resp).map_err(|e| e.to_string().into())
         }
         "lit_checkout" => {
             let target = args
@@ -539,7 +539,7 @@ fn call_tool(name: &str, args: &serde_json::Value) -> Result<serde_json::Value, 
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
             let resp = commands::checkout::execute(target, create)?;
-            serde_json::to_value(&resp).map_err(|e| e.to_string())
+            serde_json::to_value(&resp).map_err(|e| e.to_string().into())
         }
         "lit_merge" => {
             let branch = args
@@ -552,7 +552,7 @@ fn call_tool(name: &str, args: &serde_json::Value) -> Result<serde_json::Value, 
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string());
             let resp = commands::merge::execute(branch, strategy)?;
-            serde_json::to_value(&resp).map_err(|e| e.to_string())
+            serde_json::to_value(&resp).map_err(|e| e.to_string().into())
         }
         "lit_search" => {
             let query = args
@@ -573,7 +573,7 @@ fn call_tool(name: &str, args: &serde_json::Value) -> Result<serde_json::Value, 
                 .and_then(|v| v.as_u64())
                 .unwrap_or(100) as usize;
             let resp = commands::search::execute(query, messages, metadata, max)?;
-            serde_json::to_value(&resp).map_err(|e| e.to_string())
+            serde_json::to_value(&resp).map_err(|e| e.to_string().into())
         }
         "lit_snapshot" => {
             let message = args
@@ -587,7 +587,7 @@ fn call_tool(name: &str, args: &serde_json::Value) -> Result<serde_json::Value, 
                 .map(|s| s.to_string());
             let metadata = args.get("metadata").cloned();
             let resp = commands::snapshot::execute(message, author, metadata)?;
-            serde_json::to_value(&resp).map_err(|e| e.to_string())
+            serde_json::to_value(&resp).map_err(|e| e.to_string().into())
         }
         "lit_show" => {
             let object = args
@@ -596,34 +596,34 @@ fn call_tool(name: &str, args: &serde_json::Value) -> Result<serde_json::Value, 
                 .ok_or("Missing 'object'")?
                 .to_string();
             let resp = commands::show::execute(object)?;
-            serde_json::to_value(&resp).map_err(|e| e.to_string())
+            serde_json::to_value(&resp).map_err(|e| e.to_string().into())
         }
         "lit_verify" => {
             let resp = commands::verify::execute()?;
-            serde_json::to_value(&resp).map_err(|e| e.to_string())
+            serde_json::to_value(&resp).map_err(|e| e.to_string().into())
         }
-        _ => Err(format!("Unknown tool: {}", name)),
+        _ => Err(format!("Unknown tool: {}", name).into()),
     }
 }
 
-fn read_resource(uri: &str) -> Result<String, String> {
+fn read_resource(uri: &str) -> Result<String, crate::errors::LitError> {
     match uri {
         "lit://status" => {
             let resp = commands::status::execute()?;
-            serde_json::to_string_pretty(&resp).map_err(|e| e.to_string())
+            serde_json::to_string_pretty(&resp).map_err(|e| e.to_string().into())
         }
         "lit://branches" => {
             let resp = commands::branch::execute(None, false, true)?;
-            serde_json::to_string_pretty(&resp).map_err(|e| e.to_string())
+            serde_json::to_string_pretty(&resp).map_err(|e| e.to_string().into())
         }
         "lit://log" => {
             let resp = commands::log::execute(50, false)?;
-            serde_json::to_string_pretty(&resp).map_err(|e| e.to_string())
+            serde_json::to_string_pretty(&resp).map_err(|e| e.to_string().into())
         }
         "lit://ontology" => {
             let ontology = crate::ontology::get_ontology();
-            serde_json::to_string_pretty(&ontology).map_err(|e| e.to_string())
+            serde_json::to_string_pretty(&ontology).map_err(|e| e.to_string().into())
         }
-        _ => Err(format!("Unknown resource: {}", uri)),
+        _ => Err(format!("Unknown resource: {}", uri).into()),
     }
 }

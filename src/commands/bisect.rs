@@ -13,7 +13,7 @@ struct BisectState {
     steps: usize,
 }
 
-pub fn execute(command: Option<crate::BisectCommands>) -> Result<BisectResponse, String> {
+pub fn execute(command: Option<crate::BisectCommands>) -> Result<BisectResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
 
     match command {
@@ -35,7 +35,7 @@ pub fn execute(command: Option<crate::BisectCommands>) -> Result<BisectResponse,
     }
 }
 
-fn bisect_start(repo_root: &std::path::Path) -> Result<BisectResponse, String> {
+fn bisect_start(repo_root: &std::path::Path) -> Result<BisectResponse, crate::errors::LitError> {
     let state = BisectState {
         good: Vec::new(),
         bad: Vec::new(),
@@ -59,7 +59,7 @@ fn bisect_mark(
     repo_root: &std::path::Path,
     commit: &str,
     is_good: bool,
-) -> Result<BisectResponse, String> {
+) -> Result<BisectResponse, crate::errors::LitError> {
     let mut state = load_bisect_state(repo_root)?;
     let store = ObjectStore::new(repo_root);
 
@@ -137,7 +137,7 @@ fn bisect_mark(
     }
 }
 
-fn bisect_reset(repo_root: &std::path::Path) -> Result<BisectResponse, String> {
+fn bisect_reset(repo_root: &std::path::Path) -> Result<BisectResponse, crate::errors::LitError> {
     let bisect_path = repo_root.join(".lit").join("bisect.json");
     if bisect_path.exists() {
         fs::remove_file(&bisect_path)
@@ -157,7 +157,7 @@ fn collect_commits_between(
     store: &ObjectStore,
     bad: &str,
     good: &str,
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<String>, crate::errors::LitError> {
     let mut commits = Vec::new();
     let mut current = bad.to_string();
 
@@ -183,19 +183,19 @@ fn collect_commits_between(
     Ok(commits)
 }
 
-fn load_bisect_state(repo_root: &std::path::Path) -> Result<BisectState, String> {
+fn load_bisect_state(repo_root: &std::path::Path) -> Result<BisectState, crate::errors::LitError> {
     let path = repo_root.join(".lit").join("bisect.json");
     if !path.exists() {
-        return Err("No bisect in progress. Run `lit bisect start` first.".to_string());
+        return Err("No bisect in progress. Run `lit bisect start` first.".into());
     }
     let data =
         fs::read_to_string(&path).map_err(|e| format!("Failed to read bisect state: {}", e))?;
-    serde_json::from_str(&data).map_err(|e| format!("Failed to parse bisect state: {}", e))
+    serde_json::from_str(&data).map_err(|e| format!("Failed to parse bisect state: {}", e).into())
 }
 
-fn save_bisect_state(repo_root: &std::path::Path, state: &BisectState) -> Result<(), String> {
+fn save_bisect_state(repo_root: &std::path::Path, state: &BisectState) -> Result<(), crate::errors::LitError> {
     let path = repo_root.join(".lit").join("bisect.json");
     let data = serde_json::to_string_pretty(state)
         .map_err(|e| format!("Failed to serialize bisect state: {}", e))?;
-    fs::write(&path, data).map_err(|e| format!("Failed to write bisect state: {}", e))
+    fs::write(&path, data).map_err(|e| format!("Failed to write bisect state: {}", e).into())
 }

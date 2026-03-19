@@ -5,7 +5,7 @@ use crate::core::{
 use crate::response::RevertResponse;
 use crate::storage::ObjectStore;
 
-pub fn execute(target: String) -> Result<RevertResponse, String> {
+pub fn execute(target: String) -> Result<RevertResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
     let store = ObjectStore::new(&repo_root);
 
@@ -15,7 +15,7 @@ pub fn execute(target: String) -> Result<RevertResponse, String> {
 
     let commit = match store.read(&hash_obj)? {
         Object::Commit(c) => c,
-        _ => return Err(format!("'{}' is not a commit", target)),
+        _ => return Err(format!("'{}' is not a commit", target).into()),
     };
 
     // Get the parent of the commit to revert
@@ -26,7 +26,7 @@ pub fn execute(target: String) -> Result<RevertResponse, String> {
 
     let parent_commit = match store.read(parent_hash)? {
         Object::Commit(c) => c,
-        _ => return Err("Parent is not a commit".to_string()),
+        _ => return Err("Parent is not a commit".into()),
     };
 
     // Get current HEAD tree
@@ -34,7 +34,7 @@ pub fn execute(target: String) -> Result<RevertResponse, String> {
     let head_obj = ObjectHash::from_hex(head_hash.clone());
     let head_commit = match store.read(&head_obj)? {
         Object::Commit(c) => c,
-        _ => return Err("HEAD is not a commit".to_string()),
+        _ => return Err("HEAD is not a commit".into()),
     };
 
     // Build the inverse: for each file changed in commit, restore to parent state
@@ -132,7 +132,7 @@ fn load_tree_files(
 ) -> Result<std::collections::HashMap<String, (String, String)>, String> {
     let tree = match store.read(tree_hash)? {
         Object::Tree(t) => t,
-        _ => return Err("Not a tree".to_string()),
+        _ => return Err("Not a tree".into()),
     };
 
     let mut files = std::collections::HashMap::new();

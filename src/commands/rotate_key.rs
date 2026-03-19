@@ -18,14 +18,14 @@ use std::fs;
 /// 5. Re-encrypts all data with new key
 /// 6. Updates encryption.key file
 /// 7. Clears passphrase cache
-pub fn rotate_key() -> Result<RotateKeyResponse, String> {
+pub fn rotate_key() -> Result<RotateKeyResponse, crate::errors::LitError> {
     let repo_path = refs::find_repo_root()?;
 
     // Load encryption config
     let config = EncryptionConfig::load(&repo_path)?;
 
     if !config.enabled {
-        return Err("Encryption is not enabled for this repository".to_string());
+        return Err("Encryption is not enabled for this repository".into());
     }
 
     // Step 1: Get current passphrase

@@ -1,7 +1,9 @@
 use crate::network::{AirgapConfig, NetworkConfig};
 use crate::response::{ConfigEntry, ConfigResponse};
 
-pub fn execute(command: Option<crate::ConfigCommands>) -> Result<ConfigResponse, String> {
+pub fn execute(
+    command: Option<crate::ConfigCommands>,
+) -> Result<ConfigResponse, crate::errors::LitError> {
     match command {
         Some(crate::ConfigCommands::Show) | None => show_config(),
         Some(crate::ConfigCommands::Get { key }) => get_config(&key),
@@ -9,7 +11,7 @@ pub fn execute(command: Option<crate::ConfigCommands>) -> Result<ConfigResponse,
     }
 }
 
-fn show_config() -> Result<ConfigResponse, String> {
+fn show_config() -> Result<ConfigResponse, crate::errors::LitError> {
     let network_config = NetworkConfig::load()?;
     let airgap_config = AirgapConfig::load()?;
 
@@ -75,7 +77,7 @@ fn show_config() -> Result<ConfigResponse, String> {
     Ok(ConfigResponse::Show { entries })
 }
 
-fn get_config(key: &str) -> Result<ConfigResponse, String> {
+fn get_config(key: &str) -> Result<ConfigResponse, crate::errors::LitError> {
     let network_config = NetworkConfig::load()?;
     let airgap_config = AirgapConfig::load()?;
 
@@ -85,10 +87,8 @@ fn get_config(key: &str) -> Result<ConfigResponse, String> {
         "network.allowed_networks" => network_config.allowed_networks.join(", "),
         "network.allowed_hosts" => network_config.allowed_hosts.join(", "),
         "security.audit_log" => network_config.audit_log.to_string(),
-        "security.audit_log_path" => network_config
-            .audit_log_path
-            .unwrap_or_default(),
-        _ => return Err(format!("Unknown configuration key: {}", key)),
+        "security.audit_log_path" => network_config.audit_log_path.unwrap_or_default(),
+        _ => return Err(format!("Unknown configuration key: {}", key).into()),
     };
 
     Ok(ConfigResponse::Get {
@@ -97,7 +97,7 @@ fn get_config(key: &str) -> Result<ConfigResponse, String> {
     })
 }
 
-fn set_config(key: &str, value: &str) -> Result<ConfigResponse, String> {
+fn set_config(key: &str, value: &str) -> Result<ConfigResponse, crate::errors::LitError> {
     match key {
         "airgap.enabled" => {
             let mut config = AirgapConfig::load()?;
@@ -126,6 +126,7 @@ fn set_config(key: &str, value: &str) -> Result<ConfigResponse, String> {
                  Supported keys: airgap.enabled, airgap.strict_mode\n\
                  For other settings, edit ~/.lit/airgap.toml or ~/.litconfig directly.",
             key
-        )),
+        )
+        .into()),
     }
 }

@@ -1387,3 +1387,166 @@ fn errc(code: &str, desc: &str, recoverable: bool, action: &str) -> ErrorCategor
         suggested_action: action.to_string(),
     }
 }
+
+// ============================================================================
+// JSON Schema Generation
+// ============================================================================
+
+/// Map an ontology type string to a JSON Schema type
+fn ontology_type_to_schema(type_name: &str) -> serde_json::Value {
+    match type_name {
+        "string" | "String" => serde_json::json!({ "type": "string" }),
+        "boolean" | "bool" => serde_json::json!({ "type": "boolean" }),
+        "integer" | "usize" | "i64" | "u64" | "i32" | "u32" => {
+            serde_json::json!({ "type": "integer" })
+        }
+        "number" | "f64" | "f32" => serde_json::json!({ "type": "number" }),
+        t if t.starts_with("array<") && t.ends_with('>') => {
+            let inner = &t[6..t.len() - 1];
+            serde_json::json!({
+                "type": "array",
+                "items": ontology_type_to_schema(inner)
+            })
+        }
+        t if t.starts_with("optional<") && t.ends_with('>') => {
+            let inner = &t[9..t.len() - 1];
+            let mut schema = ontology_type_to_schema(inner);
+            // Make nullable by allowing null
+            if let Some(obj) = schema.as_object_mut() {
+                if let Some(serde_json::Value::String(ty)) = obj.get("type").cloned() {
+                    obj.insert(
+                        "type".to_string(),
+                        serde_json::json!([ty, "null"]),
+                    );
+                }
+            }
+            schema
+        }
+        // Named types become $ref
+        other => serde_json::json!({ "$ref": format!("#/$defs/{other}") }),
+    }
+}
+
+/// Generate a JSON Schema for a single `TypeDef`
+fn type_def_to_schema(td: &TypeDef) -> serde_json::Value {
+    let mut properties = serde_json::Map::new();
+    let mut required = Vec::new();
+
+    for prop in &td.properties {
+        let mut prop_schema = ontology_type_to_schema(&prop.type_name);
+        if let Some(obj) = prop_schema.as_object_mut() {
+            obj.insert(
+                "description".to_string(),
+                serde_json::Value::String(prop.description.clone()),
+            );
+        }
+        properties.insert(prop.name.clone(), prop_schema);
+        if prop.required {
+            required.push(serde_json::Value::String(prop.name.clone()));
+        }
+    }
+
+    serde_json::json!({
+        "type": "object",
+        "description": td.description,
+        "properties": properties,
+        "required": required,
+        "additionalProperties": false
+    })
+}
+
+/// Generate a JSON Schema for a single command's input parameters
+fn command_input_schema(cmd: &CommandDef) -> serde_json::Value {
+    let mut properties = serde_json::Map::new();
+    let mut required = Vec::new();
+
+    for param in &cmd.parameters {
+        let mut param_schema = ontology_type_to_schema(&param.type_name);
+        if let Some(obj) = param_schema.as_object_mut() {
+            obj.insert(
+                "description".to_string(),
+                serde_json::Value::String(param.description.clone()),
+            );
+            if let Some(ref default) = param.default {
+                obj.insert(
+                    "default".to_string(),
+                    serde_json::Value::String(default.clone()),
+                );
+            }
+        }
+        properties.insert(param.name.clone(), param_schema);
+        if param.required {
+            required.push(serde_json::Value::String(param.name.clone()));
+        }
+    }
+
+    serde_json::json!({
+        "type": "object",
+        "description": format!("Input parameters for '{}'", cmd.name),
+        "properties": properties,
+        "required": required,
+        "additionalProperties": false
+    })
+}
+
+/// Generate the full JSON Schema document for the Lit ontology.
+///
+/// Produces a standard JSON Schema (draft 2020-12) with:
+/// - `$defs` containing a schema for every ontology type
+/// - `commands` containing input schemas for every command
+pub fn generate_schemas() -> serde_json::Value {
+    let ont = get_ontology();
+
+    // Build $defs from types
+    let mut defs = serde_json::Map::new();
+    for td in &ont.types {
+        defs.insert(td.id.clone(), type_def_to_schema(td));
+    }
+
+    // Build command schemas
+    let mut commands = serde_json::Map::new();
+    for cmd in &ont.commands {
+        commands.insert(
+            cmd.id.clone(),
+            serde_json::json!({
+                "description": cmd.description,
+                "category": cmd.category,
+                "input": command_input_schema(cmd),
+                "returns": cmd.returns,
+                "idempotent": cmd.idempotent,
+                "safe": cmd.safe,
+                "side_effects": cmd.side_effects,
+                "preconditions": cmd.preconditions,
+            }),
+        );
+    }
+
+    serde_json::json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "https://lit-vcs.dev/schema/v1",
+        "title": "Lit VCS Schema",
+        "description": "JSON Schema for the Lit version control system — types and command interfaces for agent discovery",
+        "version": ont.version,
+        "$defs": defs,
+        "commands": commands
+    })
+}
+
+/// Generate a JSON Schema for a single command by its ID.
+///
+/// Returns `None` if the command is not found.
+pub fn generate_command_schema(command_id: &str) -> Option<serde_json::Value> {
+    let ont = get_ontology();
+    ont.commands.iter().find(|c| c.id == command_id).map(|cmd| {
+        serde_json::json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "$id": format!("https://lit-vcs.dev/schema/v1/commands/{}", cmd.id),
+            "title": format!("lit {}", cmd.name),
+            "description": cmd.description,
+            "input": command_input_schema(cmd),
+            "returns": cmd.returns,
+            "idempotent": cmd.idempotent,
+            "safe": cmd.safe,
+        })
+    })
+}

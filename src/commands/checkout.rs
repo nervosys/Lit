@@ -4,7 +4,7 @@ use crate::storage::{Index, ObjectStore};
 use std::fs;
 use std::path::Path;
 
-pub fn execute(target: String, create_new: bool) -> Result<CheckoutResponse, String> {
+pub fn execute(target: String, create_new: bool) -> Result<CheckoutResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
 
     if create_new {
@@ -39,19 +39,19 @@ pub fn execute(target: String, create_new: bool) -> Result<CheckoutResponse, Str
     }
 }
 
-fn checkout_commit(repo_root: &Path, commit_hash: &ObjectHash) -> Result<(), String> {
+fn checkout_commit(repo_root: &Path, commit_hash: &ObjectHash) -> Result<(), crate::errors::LitError> {
     let store = ObjectStore::new(repo_root);
 
     // Read commit
     let commit = match store.read(commit_hash)? {
         Object::Commit(c) => c,
-        _ => return Err("Not a commit".to_string()),
+        _ => return Err("Not a commit".into()),
     };
 
     // Read tree
     let tree = match store.read(&commit.tree)? {
         Object::Tree(t) => t,
-        _ => return Err("Not a tree".to_string()),
+        _ => return Err("Not a tree".into()),
     };
 
     // Update working directory
@@ -78,7 +78,7 @@ fn checkout_tree(
     tree: &Tree,
     store: &ObjectStore,
     prefix: &str,
-) -> Result<(), String> {
+) -> Result<(), crate::errors::LitError> {
     for entry in &tree.entries {
         let path = if prefix.is_empty() {
             entry.name.clone()
@@ -93,7 +93,7 @@ fn checkout_tree(
                 // Write file
                 let blob = match store.read(&entry.hash)? {
                     Object::Blob(b) => b,
-                    _ => return Err("Expected blob".to_string()),
+                    _ => return Err("Expected blob".into()),
                 };
 
                 if let Some(parent) = full_path.parent() {
@@ -108,7 +108,7 @@ fn checkout_tree(
                 // Recursively checkout subtree
                 let subtree = match store.read(&entry.hash)? {
                     Object::Tree(t) => t,
-                    _ => return Err("Expected tree".to_string()),
+                    _ => return Err("Expected tree".into()),
                 };
 
                 checkout_tree(repo_root, &subtree, store, &path)?;

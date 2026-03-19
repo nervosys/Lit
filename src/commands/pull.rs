@@ -2,7 +2,7 @@ use crate::commands::{fetch, merge};
 use crate::core::find_repo_root;
 use crate::response::PullResponse;
 
-pub fn execute(remote: String, branch: String) -> Result<PullResponse, String> {
+pub fn execute(remote: String, branch: String) -> Result<PullResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
 
     // Step 1: Fetch
