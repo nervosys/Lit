@@ -188,7 +188,7 @@ lit mcp-serve --stdio    # For stdio-based MCP clients
 lit mcp-serve --port 8385  # For HTTP-based MCP clients
 ```
 
-Tools: `lit_status`, `lit_diff`, `lit_log`, `lit_commit`, `lit_add`, `lit_branch`, `lit_checkout`, `lit_merge`, `lit_search`, `lit_snapshot`, `lit_show`, `lit_verify`.
+Tools (30): `lit_status`, `lit_diff`, `lit_log`, `lit_show`, `lit_blame`, `lit_reflog`, `lit_add`, `lit_commit`, `lit_snapshot`, `lit_branch`, `lit_checkout`, `lit_merge`, `lit_resolve`, `lit_rebase`, `lit_cherry_pick`, `lit_revert`, `lit_reset`, `lit_stash`, `lit_tag`, `lit_push`, `lit_pull`, `lit_fetch`, `lit_clone`, `lit_search`, `lit_verify`, `lit_gc`, `lit_init`, `lit_config`, `lit_ontology`, `lit_schema`.
 
 Resources: `lit://status`, `lit://branches`, `lit://log`, `lit://ontology`, `lit://schema`.
 
