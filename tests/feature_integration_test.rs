@@ -28,7 +28,7 @@ fn create_test_repo() -> TempDir {
 
 #[cfg(test)]
 mod core_objects_tests {
-    
+
     use lit::core::{Blob, Commit, Object, ObjectHash, Tree};
 
     #[test]
@@ -501,7 +501,10 @@ mod schema_tests {
         );
         assert!(schema["input"]["properties"].is_object());
         let props = schema["input"]["properties"].as_object().unwrap();
-        assert!(props.contains_key("message"), "commit must have message param");
+        assert!(
+            props.contains_key("message"),
+            "commit must have message param"
+        );
     }
 
     #[test]

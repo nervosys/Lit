@@ -122,7 +122,12 @@ pub fn execute_http(port: u16) -> Result<McpServeResponse, crate::errors::LitErr
         }
 
         let mut body = String::new();
-        if request.as_reader().take(MAX_BODY_SIZE as u64).read_to_string(&mut body).is_err() {
+        if request
+            .as_reader()
+            .take(MAX_BODY_SIZE as u64)
+            .read_to_string(&mut body)
+            .is_err()
+        {
             continue;
         }
 
@@ -333,18 +338,54 @@ fn handle_mcp_method(req: &JsonRpcRequest) -> JsonRpcResponse {
 fn get_mcp_tools() -> Vec<McpTool> {
     // MCP tool name → ontology command ID
     let tool_commands: &[(&str, &str, &str)] = &[
-        ("lit_status", "status", "Show repository status: current branch, staged/modified/untracked files"),
-        ("lit_diff", "diff", "Show changes between working tree, index, and commits"),
+        (
+            "lit_status",
+            "status",
+            "Show repository status: current branch, staged/modified/untracked files",
+        ),
+        (
+            "lit_diff",
+            "diff",
+            "Show changes between working tree, index, and commits",
+        ),
         ("lit_log", "log", "Show commit history"),
-        ("lit_commit", "commit", "Record staged changes as a new commit"),
+        (
+            "lit_commit",
+            "commit",
+            "Record staged changes as a new commit",
+        ),
         ("lit_add", "add", "Stage files for the next commit"),
         ("lit_branch", "branch", "List, create, or delete branches"),
-        ("lit_checkout", "checkout", "Switch branches or restore working tree files"),
-        ("lit_merge", "merge", "Merge a branch into the current branch"),
-        ("lit_search", "search", "Search file contents, commit messages, or metadata"),
-        ("lit_snapshot", "snapshot", "Atomic add-all + commit in one step (preferred for agents)"),
-        ("lit_show", "show", "Show contents of a commit, tree, or blob object"),
-        ("lit_verify", "verify", "Run full repository integrity check"),
+        (
+            "lit_checkout",
+            "checkout",
+            "Switch branches or restore working tree files",
+        ),
+        (
+            "lit_merge",
+            "merge",
+            "Merge a branch into the current branch",
+        ),
+        (
+            "lit_search",
+            "search",
+            "Search file contents, commit messages, or metadata",
+        ),
+        (
+            "lit_snapshot",
+            "snapshot",
+            "Atomic add-all + commit in one step (preferred for agents)",
+        ),
+        (
+            "lit_show",
+            "show",
+            "Show contents of a commit, tree, or blob object",
+        ),
+        (
+            "lit_verify",
+            "verify",
+            "Run full repository integrity check",
+        ),
     ];
 
     let ont = ontology::get_ontology();
@@ -372,9 +413,15 @@ fn get_mcp_tools() -> Vec<McpTool> {
                             _ => serde_json::json!({ "type": "string" }),
                         };
                         if let Some(obj) = prop.as_object_mut() {
-                            obj.insert("description".to_string(), serde_json::Value::String(param.description.clone()));
+                            obj.insert(
+                                "description".to_string(),
+                                serde_json::Value::String(param.description.clone()),
+                            );
                             if let Some(ref default) = param.default {
-                                obj.insert("default".to_string(), serde_json::Value::String(default.clone()));
+                                obj.insert(
+                                    "default".to_string(),
+                                    serde_json::Value::String(default.clone()),
+                                );
                             }
                         }
                         properties.insert(param.name.clone(), prop);
@@ -388,11 +435,13 @@ fn get_mcp_tools() -> Vec<McpTool> {
                         "required": required
                     })
                 })
-                .unwrap_or_else(|| serde_json::json!({
-                    "type": "object",
-                    "properties": {},
-                    "required": []
-                }));
+                .unwrap_or_else(|| {
+                    serde_json::json!({
+                        "type": "object",
+                        "properties": {},
+                        "required": []
+                    })
+                });
 
             McpTool {
                 name: tool_name.to_string(),
@@ -403,7 +452,10 @@ fn get_mcp_tools() -> Vec<McpTool> {
         .collect()
 }
 
-fn call_tool(name: &str, args: &serde_json::Value) -> Result<serde_json::Value, crate::errors::LitError> {
+fn call_tool(
+    name: &str,
+    args: &serde_json::Value,
+) -> Result<serde_json::Value, crate::errors::LitError> {
     match name {
         "lit_status" => {
             let resp = commands::status::execute()?;
