@@ -16,21 +16,17 @@ fn init_test_repo() -> TempDir {
 fn test_config_show() {
     let temp = init_test_repo();
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::config::execute(Some(lit::ConfigCommands::Show));
     assert!(result.is_ok(), "Config show should succeed");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_config_show_no_command() {
     let temp = init_test_repo();
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // Calling with None should default to show
     let result = lit::commands::config::execute(None);
@@ -38,31 +34,25 @@ fn test_config_show_no_command() {
         result.is_ok(),
         "Config with no command should default to show"
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_config_get_airgap_enabled() {
     let temp = init_test_repo();
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::config::execute(Some(lit::ConfigCommands::Get {
         key: "airgap.enabled".to_string(),
     }));
     assert!(result.is_ok(), "Config get airgap.enabled should succeed");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_config_get_airgap_strict_mode() {
     let temp = init_test_repo();
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::config::execute(Some(lit::ConfigCommands::Get {
         key: "airgap.strict_mode".to_string(),
@@ -71,16 +61,13 @@ fn test_config_get_airgap_strict_mode() {
         result.is_ok(),
         "Config get airgap.strict_mode should succeed"
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_config_get_unknown_key() {
     let temp = init_test_repo();
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::config::execute(Some(lit::ConfigCommands::Get {
         key: "unknown.key".to_string(),
@@ -91,16 +78,13 @@ fn test_config_get_unknown_key() {
         error.contains("Unknown configuration key"),
         "Error should mention unknown key"
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_config_set_airgap_enabled_true() {
     let temp = init_test_repo();
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::config::execute(Some(lit::ConfigCommands::Set {
         key: "airgap.enabled".to_string(),
@@ -127,16 +111,13 @@ fn test_config_set_airgap_enabled_true() {
         value: "false".to_string(),
     }))
     .ok();
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_config_set_airgap_enabled_false() {
     let temp = init_test_repo();
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::config::execute(Some(lit::ConfigCommands::Set {
         key: "airgap.enabled".to_string(),
@@ -146,16 +127,13 @@ fn test_config_set_airgap_enabled_false() {
         result.is_ok(),
         "Config set airgap.enabled to false should succeed"
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_config_set_airgap_strict_mode() {
     let temp = init_test_repo();
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::config::execute(Some(lit::ConfigCommands::Set {
         key: "airgap.strict_mode".to_string(),
@@ -173,16 +151,13 @@ fn test_config_set_airgap_strict_mode() {
         value: "false".to_string(),
     }))
     .ok();
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_config_set_invalid_boolean() {
     let temp = init_test_repo();
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::config::execute(Some(lit::ConfigCommands::Set {
         key: "airgap.enabled".to_string(),
@@ -197,16 +172,13 @@ fn test_config_set_invalid_boolean() {
         error.contains("Invalid boolean"),
         "Error should mention invalid boolean"
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_config_set_unsupported_key() {
     let temp = init_test_repo();
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::config::execute(Some(lit::ConfigCommands::Set {
         key: "unsupported.key".to_string(),
@@ -221,6 +193,4 @@ fn test_config_set_unsupported_key() {
         error.contains("not supported"),
         "Error should mention not supported"
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }

@@ -28,8 +28,7 @@ fn test_snapshot_creates_commit() {
     create_file(temp.path(), "file1.txt", "hello world");
     create_file(temp.path(), "file2.txt", "goodbye world");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::snapshot::execute("Test snapshot".to_string(), None, None);
     assert!(
@@ -46,8 +45,6 @@ fn test_snapshot_creates_commit() {
         response.files_added >= 2,
         "Should have added at least 2 files"
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -56,8 +53,7 @@ fn test_snapshot_with_author() {
 
     create_file(temp.path(), "test.txt", "content");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::snapshot::execute(
         "Authored snapshot".to_string(),
@@ -68,8 +64,6 @@ fn test_snapshot_with_author() {
 
     let response = result.unwrap();
     assert_eq!(response.author, "Test Author");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -78,8 +72,7 @@ fn test_snapshot_with_metadata() {
 
     create_file(temp.path(), "test.txt", "content");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let metadata = serde_json::json!({
         "ticket": "PROJ-123",
@@ -89,21 +82,16 @@ fn test_snapshot_with_metadata() {
     let result =
         lit::commands::snapshot::execute("Metadata snapshot".to_string(), None, Some(metadata));
     assert!(result.is_ok(), "Snapshot with metadata should succeed");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_snapshot_empty_directory_fails() {
     let temp = init_test_repo();
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::snapshot::execute("Empty snapshot".to_string(), None, None);
     assert!(result.is_err(), "Snapshot on empty directory should fail");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -112,8 +100,7 @@ fn test_snapshot_creates_valid_commit_ref() {
 
     create_file(temp.path(), "test.txt", "content");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     lit::commands::snapshot::execute("Ref test snapshot".to_string(), None, None).unwrap();
 
@@ -125,6 +112,4 @@ fn test_snapshot_creates_valid_commit_ref() {
     );
     let hash = head_ref.unwrap().trim().to_string();
     assert!(!hash.is_empty(), "Branch ref should contain a hash");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }

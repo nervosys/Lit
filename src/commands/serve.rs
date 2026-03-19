@@ -1,6 +1,10 @@
 use crate::commands;
-use crate::core::find_repo_root;
+use crate::core::{find_repo_root, Object, ObjectHash};
 use crate::response::{CommandResponse, ServeResponse};
+use crate::storage::ObjectStore;
+use std::collections::HashSet;
+use std::io::{BufRead, Write};
+use std::net::TcpListener;
 use tiny_http::{Header, Method, Response, Server, StatusCode};
 
 /// Maximum request body size (1 MB)
@@ -8,7 +12,16 @@ const MAX_BODY_SIZE: usize = 1_048_576;
 
 pub fn execute(port: u16, token: Option<String>) -> Result<ServeResponse, String> {
     let repo_root = find_repo_root()?;
+    execute_at(port, token, repo_root)
+}
 
+/// Like `execute`, but takes an explicit repo root instead of searching
+/// from the current directory. Useful for tests that cannot rely on cwd.
+pub fn execute_at(
+    port: u16,
+    token: Option<String>,
+    repo_root: std::path::PathBuf,
+) -> Result<ServeResponse, String> {
     let bind_addr = format!("127.0.0.1:{}", port);
     let server = Server::http(&bind_addr)
         .map_err(|e| format!("Failed to start server on {}: {}", bind_addr, e))?;
@@ -23,13 +36,10 @@ pub fn execute(port: u16, token: Option<String>) -> Result<ServeResponse, String
     for mut request in server.incoming_requests() {
         // Authenticate if token is set
         if let Some(ref expected_token) = token {
-            let auth_header = request
-                .headers()
-                .iter()
-                .find(|h| {
-                    let name = h.field.as_str().to_string();
-                    name.eq_ignore_ascii_case("authorization")
-                });
+            let auth_header = request.headers().iter().find(|h| {
+                let name = h.field.as_str().to_string();
+                name.eq_ignore_ascii_case("authorization")
+            });
 
             let authorized = match auth_header {
                 Some(h) => {
@@ -59,7 +69,7 @@ pub fn execute(port: u16, token: Option<String>) -> Result<ServeResponse, String
 
         // Read body before routing so request is available for respond
         let body_str = read_body(&mut request).unwrap_or_default();
-        let result = route_request(method, &url, &body_str);
+        let result = route_request(method, &url, &body_str, &repo_root);
 
         match result {
             Ok((status, body)) => {
@@ -87,6 +97,168 @@ pub fn execute(port: u16, token: Option<String>) -> Result<ServeResponse, String
     })
 }
 
+/// Execute the server in stdio pipe mode.
+/// Reads newline-delimited JSON requests from stdin, routes them through
+/// `route_request`, and writes JSON responses to stdout. Used by SSH transport.
+pub fn execute_stdio() -> Result<ServeResponse, String> {
+    let repo_root = find_repo_root()?;
+    let stdin = std::io::stdin();
+    let stdout = std::io::stdout();
+    let reader = stdin.lock();
+    let mut writer = stdout.lock();
+
+    for line in reader.lines() {
+        let line = match line {
+            Ok(l) => l,
+            Err(_) => break, // EOF or pipe closed
+        };
+        let line = line.trim().to_string();
+        if line.is_empty() {
+            continue;
+        }
+
+        let req: serde_json::Value = match serde_json::from_str(&line) {
+            Ok(v) => v,
+            Err(e) => {
+                let resp =
+                    serde_json::json!({"status": 400, "body": format!("Invalid JSON: {}", e)});
+                let _ = writeln!(writer, "{}", resp);
+                let _ = writer.flush();
+                continue;
+            }
+        };
+
+        let method_str = req.get("method").and_then(|v| v.as_str()).unwrap_or("GET");
+        let path = req.get("path").and_then(|v| v.as_str()).unwrap_or("/");
+        let body = req.get("body").and_then(|v| v.as_str()).unwrap_or("");
+
+        let method = match method_str.to_uppercase().as_str() {
+            "GET" => Method::Get,
+            "POST" => Method::Post,
+            "PUT" => Method::Put,
+            "DELETE" => Method::Delete,
+            _ => Method::Get,
+        };
+
+        let (status, response_body) = match route_request(method, path, body, &repo_root) {
+            Ok((s, b)) => (s, b),
+            Err(e) => {
+                let err_body = serde_json::json!({
+                    "status": "error",
+                    "error": {"message": e}
+                })
+                .to_string();
+                (500, err_body)
+            }
+        };
+
+        let resp = serde_json::json!({"status": status, "body": response_body});
+        let _ = writeln!(writer, "{}", resp);
+        let _ = writer.flush();
+    }
+
+    Ok(ServeResponse {
+        message: "Stdio server stopped".to_string(),
+    })
+}
+
+/// Execute the server as a lit:// protocol TCP daemon.
+/// Accepts TCP connections and handles each with the same newline-delimited
+/// JSON protocol as stdio mode. Used by the `lit://` native transport.
+pub fn execute_daemon(port: u16) -> Result<ServeResponse, String> {
+    let repo_root = find_repo_root()?;
+    let bind_addr = format!("0.0.0.0:{}", port);
+    let listener = TcpListener::bind(&bind_addr)
+        .map_err(|e| format!("Failed to bind lit:// daemon on {}: {}", bind_addr, e))?;
+
+    eprintln!("Lit daemon listening on lit://0.0.0.0:{}", port);
+    eprintln!("Repository: {}", repo_root.display());
+    eprintln!("Press Ctrl+C to stop");
+
+    for stream in listener.incoming() {
+        let stream = match stream {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("Accept error: {}", e);
+                continue;
+            }
+        };
+
+        let repo = repo_root.clone();
+        std::thread::spawn(move || {
+            handle_daemon_connection(stream, &repo);
+        });
+    }
+
+    Ok(ServeResponse {
+        message: "Daemon stopped".to_string(),
+    })
+}
+
+/// Handle a single lit:// daemon TCP connection
+fn handle_daemon_connection(stream: std::net::TcpStream, repo_root: &std::path::Path) {
+    let reader_stream = match stream.try_clone() {
+        Ok(s) => s,
+        Err(_) => return,
+    };
+    let reader = std::io::BufReader::new(reader_stream);
+    let mut writer = std::io::BufWriter::new(stream);
+
+    for line in reader.lines() {
+        let line = match line {
+            Ok(l) => l,
+            Err(_) => break,
+        };
+        let line = line.trim().to_string();
+        if line.is_empty() {
+            continue;
+        }
+
+        let req: serde_json::Value = match serde_json::from_str(&line) {
+            Ok(v) => v,
+            Err(e) => {
+                let resp =
+                    serde_json::json!({"status": 400, "body": format!("Invalid JSON: {}", e)});
+                let _ = writeln!(writer, "{}", resp);
+                let _ = writer.flush();
+                continue;
+            }
+        };
+
+        let method_str = req.get("method").and_then(|v| v.as_str()).unwrap_or("GET");
+        let path = req.get("path").and_then(|v| v.as_str()).unwrap_or("/");
+        let body = req.get("body").and_then(|v| v.as_str()).unwrap_or("");
+
+        let method = match method_str.to_uppercase().as_str() {
+            "GET" => Method::Get,
+            "POST" => Method::Post,
+            "PUT" => Method::Put,
+            "DELETE" => Method::Delete,
+            _ => Method::Get,
+        };
+
+        let (status, response_body) = match route_request(method, path, body, repo_root) {
+            Ok((s, b)) => (s, b),
+            Err(e) => {
+                let err_body = serde_json::json!({
+                    "status": "error",
+                    "error": {"message": e}
+                })
+                .to_string();
+                (500, err_body)
+            }
+        };
+
+        let resp = serde_json::json!({"status": status, "body": response_body});
+        if writeln!(writer, "{}", resp).is_err() {
+            break;
+        }
+        if writer.flush().is_err() {
+            break;
+        }
+    }
+}
+
 fn json_content_type() -> Header {
     Header::from_bytes("Content-Type", "application/json").unwrap()
 }
@@ -108,6 +280,7 @@ fn route_request(
     method: Method,
     url: &str,
     body: &str,
+    repo_root: &std::path::Path,
 ) -> Result<(u16, String), String> {
     let path = url.split('?').next().unwrap_or(url);
 
@@ -319,6 +492,149 @@ fn route_request(
             Ok((200, resp.to_json_output()))
         }
 
+        // ── Transport API endpoints ──
+        // List refs (branches + tags)
+        (Method::Get, "/api/v1/transport/refs") => {
+            let kind = parse_query_param(url, "kind").unwrap_or_else(|| "all".to_string());
+            let mut refs = Vec::new();
+            if kind == "all" || kind == "heads" {
+                if let Ok(head_refs) = crate::core::refs::list_refs(repo_root, "heads") {
+                    for r in head_refs {
+                        refs.push(serde_json::json!({"kind": "heads", "name": r.name, "hash": r.hash}));
+                    }
+                }
+            }
+            if kind == "all" || kind == "tags" {
+                if let Ok(tag_refs) = crate::core::refs::list_refs(repo_root, "tags") {
+                    for r in tag_refs {
+                        refs.push(serde_json::json!({"kind": "tags", "name": r.name, "hash": r.hash}));
+                    }
+                }
+            }
+            Ok((200, serde_json::json!({"refs": refs}).to_string()))
+        }
+
+        // Read HEAD
+        (Method::Get, "/api/v1/transport/head") => {
+            let head = std::fs::read_to_string(repo_root.join(".lit").join("HEAD"))
+                .map_err(|e| format!("Failed to read HEAD: {}", e))?;
+            Ok((200, serde_json::json!({"head": head.trim()}).to_string()))
+        }
+
+        // Read a specific ref
+        (Method::Get, p) if p.starts_with("/api/v1/transport/refs/heads/") => {
+            let branch = &p["/api/v1/transport/refs/heads/".len()..];
+            let hash = crate::core::refs::read_ref(repo_root, &format!("heads/{}", branch))?;
+            Ok((200, serde_json::json!({"branch": branch, "hash": hash}).to_string()))
+        }
+
+        // Check if object exists
+        (Method::Get, p) if p.starts_with("/api/v1/transport/objects/") && p.ends_with("/exists") => {
+            let hash_str = &p["/api/v1/transport/objects/".len()..p.len() - "/exists".len()];
+            let store = ObjectStore::new(repo_root);
+            let exists = store.exists(&ObjectHash::from_hex(hash_str.to_string()));
+            Ok((200, serde_json::json!({"hash": hash_str, "exists": exists}).to_string()))
+        }
+
+        // Download a single object (serialized bytes, base64 encoded)
+        (Method::Get, p) if p.starts_with("/api/v1/transport/objects/") => {
+            let hash_str = &p["/api/v1/transport/objects/".len()..];
+            let store = ObjectStore::new(repo_root);
+            let hash = ObjectHash::from_hex(hash_str.to_string());
+            let obj = store.read(&hash)?;
+            let data = obj.to_bytes();
+            use std::io::Write as _;
+            let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::fast());
+            encoder.write_all(&data).map_err(|e| format!("Compress error: {}", e))?;
+            let compressed = encoder.finish().map_err(|e| format!("Compress error: {}", e))?;
+            let b64 = base64_encode(&compressed);
+            Ok((200, serde_json::json!({"hash": hash_str, "data": b64}).to_string()))
+        }
+
+        // Batch upload objects
+        (Method::Post, "/api/v1/transport/objects") => {
+            let store = ObjectStore::new(repo_root);
+            let payload: serde_json::Value = serde_json::from_str(body)
+                .map_err(|e| format!("Invalid JSON: {}", e))?;
+            let objects = payload.get("objects")
+                .and_then(|v| v.as_array())
+                .ok_or("Missing 'objects' array")?;
+            let mut written = 0;
+            for entry in objects {
+                let b64_data = entry.get("data")
+                    .and_then(|v| v.as_str())
+                    .ok_or("Missing 'data' field in object entry")?;
+                let compressed = base64_decode(b64_data)?;
+                use std::io::Read as _;
+                let mut decoder = flate2::read::ZlibDecoder::new(&compressed[..]);
+                let mut raw = Vec::new();
+                decoder.read_to_end(&mut raw)
+                    .map_err(|e| format!("Decompress error: {}", e))?;
+                let obj = Object::from_bytes(&raw)?;
+                store.write(&obj)?;
+                written += 1;
+            }
+            Ok((200, serde_json::json!({"written": written}).to_string()))
+        }
+
+        // Update a branch ref
+        (Method::Put, p) if p.starts_with("/api/v1/transport/refs/heads/") => {
+            let branch = &p["/api/v1/transport/refs/heads/".len()..];
+            let payload: serde_json::Value = serde_json::from_str(body)
+                .map_err(|e| format!("Invalid JSON: {}", e))?;
+            let hash = payload.get("hash")
+                .and_then(|v| v.as_str())
+                .ok_or("Missing 'hash' field")?;
+            let force = payload.get("force")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+
+            // Fast-forward check unless force
+            if !force {
+                if let Ok(current) = crate::core::refs::read_ref(repo_root, &format!("heads/{}", branch)) {
+                    let store = ObjectStore::new(repo_root);
+                    let old_hash = ObjectHash::from_hex(current);
+                    let new_hash = ObjectHash::from_hex(hash.to_string());
+                    let is_ff = crate::core::merge::is_ancestor(&store, &old_hash, &new_hash)?;
+                    if !is_ff {
+                        return Ok((409, serde_json::json!({
+                            "status": "error",
+                            "error": {"message": "Non-fast-forward update rejected. Use force=true."}
+                        }).to_string()));
+                    }
+                }
+            }
+
+            crate::core::refs::write_ref(repo_root, &format!("heads/{}", branch), hash)?;
+            Ok((200, serde_json::json!({"branch": branch, "hash": hash, "updated": true}).to_string()))
+        }
+
+        // Server-side graph walk (negotiate)
+        (Method::Post, "/api/v1/transport/negotiate") => {
+            let store = ObjectStore::new(repo_root);
+            let payload: serde_json::Value = serde_json::from_str(body)
+                .map_err(|e| format!("Invalid JSON: {}", e))?;
+            let wants: Vec<String> = payload.get("wants")
+                .and_then(|v| serde_json::from_value(v.clone()).ok())
+                .unwrap_or_default();
+            let haves: Vec<String> = payload.get("haves")
+                .and_then(|v| serde_json::from_value(v.clone()).ok())
+                .unwrap_or_default();
+            let known: HashSet<String> = haves.into_iter().collect();
+            let mut all_needed = Vec::new();
+            for want in &wants {
+                let hash = ObjectHash::from_hex(want.clone());
+                let needed = crate::network::transport::walk_commit_graph(&store, &hash, &known)?;
+                for h in needed {
+                    let s = h.as_str().to_string();
+                    if !all_needed.contains(&s) {
+                        all_needed.push(s);
+                    }
+                }
+            }
+            Ok((200, serde_json::json!({"needed": all_needed}).to_string()))
+        }
+
         _ => Ok((
             404,
             r#"{"status":"error","error":{"message":"Not found. GET /api/v1 for available endpoints."}}"#
@@ -333,7 +649,9 @@ fn url_decode(s: &str) -> String {
     let mut i = 0;
     while i < bytes.len() {
         if bytes[i] == b'%' && i + 2 < bytes.len() {
-            if let Ok(byte) = u8::from_str_radix(std::str::from_utf8(&bytes[i + 1..i + 3]).unwrap_or(""), 16) {
+            if let Ok(byte) =
+                u8::from_str_radix(std::str::from_utf8(&bytes[i + 1..i + 3]).unwrap_or(""), 16)
+            {
                 result.push(byte);
                 i += 3;
                 continue;
@@ -360,4 +678,64 @@ fn parse_query_param(url: &str, key: &str) -> Option<String> {
         }
     }
     None
+}
+
+/// Base64 encode bytes (standard alphabet, no padding)
+fn base64_encode(data: &[u8]) -> String {
+    const CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
+    for chunk in data.chunks(3) {
+        let b0 = chunk[0] as u32;
+        let b1 = if chunk.len() > 1 { chunk[1] as u32 } else { 0 };
+        let b2 = if chunk.len() > 2 { chunk[2] as u32 } else { 0 };
+        let triple = (b0 << 16) | (b1 << 8) | b2;
+        out.push(CHARS[((triple >> 18) & 0x3F) as usize] as char);
+        out.push(CHARS[((triple >> 12) & 0x3F) as usize] as char);
+        if chunk.len() > 1 {
+            out.push(CHARS[((triple >> 6) & 0x3F) as usize] as char);
+        } else {
+            out.push('=');
+        }
+        if chunk.len() > 2 {
+            out.push(CHARS[(triple & 0x3F) as usize] as char);
+        } else {
+            out.push('=');
+        }
+    }
+    out
+}
+
+/// Base64 decode string to bytes
+fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
+    fn val(c: u8) -> Result<u32, String> {
+        match c {
+            b'A'..=b'Z' => Ok((c - b'A') as u32),
+            b'a'..=b'z' => Ok((c - b'a' + 26) as u32),
+            b'0'..=b'9' => Ok((c - b'0' + 52) as u32),
+            b'+' => Ok(62),
+            b'/' => Ok(63),
+            b'=' => Ok(0),
+            _ => Err(format!("Invalid base64 character: {}", c as char)),
+        }
+    }
+    let bytes: Vec<u8> = input.bytes().filter(|b| !b.is_ascii_whitespace()).collect();
+    let mut out = Vec::with_capacity(bytes.len() * 3 / 4);
+    for chunk in bytes.chunks(4) {
+        if chunk.len() < 4 {
+            return Err("Invalid base64 length".to_string());
+        }
+        let a = val(chunk[0])?;
+        let b = val(chunk[1])?;
+        let c = val(chunk[2])?;
+        let d = val(chunk[3])?;
+        let triple = (a << 18) | (b << 12) | (c << 6) | d;
+        out.push(((triple >> 16) & 0xFF) as u8);
+        if chunk[2] != b'=' {
+            out.push(((triple >> 8) & 0xFF) as u8);
+        }
+        if chunk[3] != b'=' {
+            out.push((triple & 0xFF) as u8);
+        }
+    }
+    Ok(out)
 }

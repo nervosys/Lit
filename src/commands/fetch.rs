@@ -1,6 +1,5 @@
 use crate::core::find_repo_root;
-use crate::core::ObjectHash;
-use crate::network::transport;
+use crate::network::transport::RemoteRepo;
 use crate::network::AirgapValidator;
 use crate::response::FetchResponse;
 use crate::storage::ObjectStore;
@@ -12,18 +11,15 @@ pub fn execute(remote: String, branch: Option<String>) -> Result<FetchResponse, 
     let validator = AirgapValidator::new()?;
     validator.validate_transport(&remote_url)?;
 
-    let remote_path = transport::resolve_url(&remote_url)?;
-
+    let remote_repo = RemoteRepo::open(&remote_url)?;
     let local_store = ObjectStore::new(&repo_root);
-    let remote_store = ObjectStore::new(&remote_path);
 
     // Determine which branches to fetch
-    let remote_branches = transport::list_remote_branches(&remote_path)?;
     let branches_to_fetch: Vec<(String, String)> = if let Some(ref b) = branch {
-        let hash = transport::read_remote_ref(&remote_path, b)?;
+        let hash = remote_repo.read_branch_ref(b)?;
         vec![(b.clone(), hash)]
     } else {
-        remote_branches
+        remote_repo.list_branches()?
     };
 
     if branches_to_fetch.is_empty() {
@@ -35,26 +31,20 @@ pub fn execute(remote: String, branch: Option<String>) -> Result<FetchResponse, 
         });
     }
 
-    // Collect known objects locally for negotiation
-    let known = transport::collect_known_hashes(&repo_root);
+    // Negotiate and download objects
+    let wants: Vec<String> = branches_to_fetch.iter().map(|(_, h)| h.clone()).collect();
+    let needed = remote_repo.negotiate_download(&local_store, &wants)?;
+    let total_transferred = remote_repo.download_objects(&local_store, &needed)?;
 
-    // Walk each branch's commit graph and transfer objects
-    let mut total_transferred = 0;
+    // Update remote-tracking refs
     let mut updated_branches = Vec::new();
-
     for (branch_name, hash) in &branches_to_fetch {
-        let commit_hash = ObjectHash::from_hex(hash.clone());
-
-        // Walk the remote's commit graph to find all needed objects
-        let needed = transport::walk_commit_graph(&remote_store, &commit_hash, &known)?;
-
-        // Transfer objects
-        let transferred = transport::transfer_objects(&remote_store, &local_store, &needed)?;
-        total_transferred += transferred;
-
-        // Update remote-tracking ref
-        transport::update_remote_tracking_ref(&repo_root, &remote, branch_name, hash)?;
-
+        crate::network::transport::update_remote_tracking_ref(
+            &repo_root,
+            &remote,
+            branch_name,
+            hash,
+        )?;
         updated_branches.push(format!(
             "{} -> {}/{}",
             &hash[..16.min(hash.len())],

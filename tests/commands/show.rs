@@ -27,8 +27,7 @@ fn create_commit(
 ) -> String {
     create_file(repo_path, filename, content);
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(repo_path).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(repo_path);
 
     lit::commands::add::execute(vec![filename.to_string()]).unwrap();
     lit::commands::commit::execute(message.to_string(), None).unwrap();
@@ -38,9 +37,6 @@ fn create_commit(
         .unwrap()
         .trim()
         .to_string();
-
-    std::env::set_current_dir(original_dir).unwrap();
-
     commit_hash
 }
 
@@ -50,13 +46,10 @@ fn test_show_commit_by_hash() {
 
     let commit_hash = create_commit(temp.path(), "test.txt", "content", "Test commit");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::show::execute(commit_hash);
     assert!(result.is_ok(), "Show commit by hash should succeed");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -65,13 +58,10 @@ fn test_show_commit_by_branch_name() {
 
     create_commit(temp.path(), "test.txt", "content", "Test commit");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::show::execute("main".to_string());
     assert!(result.is_ok(), "Show commit by branch name should succeed");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -81,13 +71,10 @@ fn test_show_displays_commit_message() {
     let message = "This is a test commit message";
     let commit_hash = create_commit(temp.path(), "test.txt", "content", message);
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::show::execute(commit_hash);
     assert!(result.is_ok(), "Show should display commit message");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -96,13 +83,10 @@ fn test_show_displays_author() {
 
     let commit_hash = create_commit(temp.path(), "test.txt", "content", "Test commit");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::show::execute(commit_hash);
     assert!(result.is_ok(), "Show should display author information");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -112,8 +96,7 @@ fn test_show_blob_object() {
     let content = "Hello, World!";
     create_file(temp.path(), "test.txt", content);
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     lit::commands::add::execute(vec!["test.txt".to_string()]).unwrap();
 
@@ -123,8 +106,6 @@ fn test_show_blob_object() {
 
     let result = lit::commands::show::execute(blob_hash);
     assert!(result.is_ok(), "Show blob object should succeed");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -134,13 +115,10 @@ fn test_show_with_multiline_message() {
     let message = "First line\nSecond line\nThird line";
     let commit_hash = create_commit(temp.path(), "test.txt", "content", message);
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::show::execute(commit_hash);
     assert!(result.is_ok(), "Show with multiline message should succeed");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -149,14 +127,11 @@ fn test_show_invalid_object_fails() {
 
     create_commit(temp.path(), "test.txt", "content", "Test commit");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let fake_hash = "0".repeat(64);
     let result = lit::commands::show::execute(fake_hash);
     assert!(result.is_err(), "Show with invalid object should fail");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -165,12 +140,9 @@ fn test_show_short_hash() {
 
     let commit_hash = create_commit(temp.path(), "test.txt", "content", "Test commit");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // Try with full hash (should work)
     let result = lit::commands::show::execute(commit_hash);
     assert!(result.is_ok(), "Show with full hash should succeed");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }

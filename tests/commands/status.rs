@@ -22,13 +22,10 @@ fn create_file(dir: &std::path::Path, name: &str, content: &str) {
 fn create_commit(repo_path: &std::path::Path, filename: &str, content: &str, message: &str) {
     create_file(repo_path, filename, content);
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(repo_path).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(repo_path);
 
     lit::commands::add::execute(vec![filename.to_string()]).unwrap();
     lit::commands::commit::execute(message.to_string(), None).unwrap();
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -37,13 +34,10 @@ fn test_status_clean_working_tree() {
 
     create_commit(temp.path(), "test.txt", "content", "Initial commit");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::status::execute();
     assert!(result.is_ok(), "Status should succeed");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -53,13 +47,10 @@ fn test_status_with_untracked_files() {
     // Create a file without adding it
     create_file(temp.path(), "untracked.txt", "untracked content");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::status::execute();
     assert!(result.is_ok(), "Status with untracked files should succeed");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -68,16 +59,13 @@ fn test_status_with_staged_files() {
 
     create_file(temp.path(), "staged.txt", "staged content");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // Add file to staging
     lit::commands::add::execute(vec!["staged.txt".to_string()]).unwrap();
 
     let result = lit::commands::status::execute();
     assert!(result.is_ok(), "Status with staged files should succeed");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -94,13 +82,10 @@ fn test_status_with_modified_files() {
     // Modify the file
     create_file(temp.path(), "file.txt", "modified content");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::status::execute();
     assert!(result.is_ok(), "Status with modified files should succeed");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -109,27 +94,21 @@ fn test_status_shows_current_branch() {
 
     create_commit(temp.path(), "test.txt", "content", "Initial commit");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // Status should show we're on main branch
     let result = lit::commands::status::execute();
     assert!(result.is_ok(), "Status should succeed");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_status_empty_repository() {
     let temp = init_test_repo();
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::status::execute();
     assert!(result.is_ok(), "Status on empty repository should succeed");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -140,16 +119,13 @@ fn test_status_with_multiple_untracked() {
     create_file(temp.path(), "file2.txt", "content2");
     create_file(temp.path(), "file3.txt", "content3");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::status::execute();
     assert!(
         result.is_ok(),
         "Status with multiple untracked files should succeed"
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -159,13 +135,10 @@ fn test_status_with_subdirectory() {
     fs::create_dir(temp.path().join("subdir")).unwrap();
     create_file(&temp.path().join("subdir"), "nested.txt", "nested content");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::status::execute();
     assert!(result.is_ok(), "Status with subdirectory should succeed");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -179,11 +152,8 @@ fn test_status_ignores_lit_directory() {
         "internal content",
     );
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::status::execute();
     assert!(result.is_ok(), "Status should ignore .lit directory");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }

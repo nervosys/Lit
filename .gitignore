@@ -7,6 +7,10 @@
 # Test artifacts
 test_output*.txt
 test_full_output.txt
+full_test_output.txt
+test_results*.txt
+lit_test_result.txt
+clippy_output.txt
 *.log
 
 # Dev scripts

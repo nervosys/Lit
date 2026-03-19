@@ -22,13 +22,10 @@ fn create_file(dir: &std::path::Path, name: &str, content: &str) {
 fn create_commit(repo_path: &std::path::Path, filename: &str, content: &str, message: &str) {
     create_file(repo_path, filename, content);
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(repo_path).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(repo_path);
 
     lit::commands::add::execute(vec![filename.to_string()]).unwrap();
     lit::commands::commit::execute(message.to_string(), None).unwrap();
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -37,8 +34,7 @@ fn test_merge_fast_forward() {
 
     create_commit(temp.path(), "test.txt", "content", "Initial commit");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // Create a branch and add a commit on it
     lit::commands::branch::execute(Some("feature".to_string()), false, false).unwrap();
@@ -53,8 +49,6 @@ fn test_merge_fast_forward() {
     assert!(resp.merged, "Merge should be marked as merged");
     assert!(resp.fast_forward, "Should be a fast-forward merge");
     assert!(!resp.has_conflicts, "Should have no conflicts");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -63,16 +57,13 @@ fn test_merge_already_up_to_date() {
 
     create_commit(temp.path(), "test.txt", "content", "Initial commit");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // Merge current branch into itself
     let result = lit::commands::merge::execute("main".to_string(), None);
     assert!(result.is_ok(), "Self-merge should succeed: {:?}", result.err());
     let resp = result.unwrap();
     assert!(resp.message.contains("up to date"));
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -81,11 +72,8 @@ fn test_merge_with_nonexistent_branch() {
 
     create_commit(temp.path(), "test.txt", "content", "Initial commit");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::merge::execute("nonexistent".to_string(), None);
     assert!(result.is_err(), "Merge with nonexistent branch should fail");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }

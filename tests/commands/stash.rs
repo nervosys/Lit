@@ -22,13 +22,10 @@ fn create_file(dir: &std::path::Path, name: &str, content: &str) {
 fn create_commit(repo_path: &std::path::Path, filename: &str, content: &str, message: &str) {
     create_file(repo_path, filename, content);
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(repo_path).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(repo_path);
 
     lit::commands::add::execute(vec![filename.to_string()]).unwrap();
     lit::commands::commit::execute(message.to_string(), None).unwrap();
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -40,8 +37,7 @@ fn test_stash_push() {
     // Create a modification to stash
     create_file(temp.path(), "test.txt", "modified content");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::stash::execute(Some(lit::StashCommands::Push {
         message: Some("WIP: test stash".to_string()),
@@ -51,8 +47,6 @@ fn test_stash_push() {
         "Stash push should succeed: {:?}",
         result.err()
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -62,14 +56,11 @@ fn test_stash_push_default() {
     create_commit(temp.path(), "test.txt", "initial", "Initial commit");
     create_file(temp.path(), "test.txt", "modified");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // None command defaults to push
     let result = lit::commands::stash::execute(None);
     assert!(result.is_ok(), "Stash with no subcommand should push");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -78,13 +69,10 @@ fn test_stash_list_empty() {
 
     create_commit(temp.path(), "test.txt", "initial", "Initial commit");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::stash::execute(Some(lit::StashCommands::List));
     assert!(result.is_ok(), "Stash list should succeed on empty stash");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -94,8 +82,7 @@ fn test_stash_push_and_list() {
     create_commit(temp.path(), "test.txt", "initial", "Initial commit");
     create_file(temp.path(), "test.txt", "modified");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // Push a stash
     lit::commands::stash::execute(Some(lit::StashCommands::Push {
@@ -106,8 +93,6 @@ fn test_stash_push_and_list() {
     // List should show the entry
     let result = lit::commands::stash::execute(Some(lit::StashCommands::List));
     assert!(result.is_ok(), "Stash list should succeed");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -117,8 +102,7 @@ fn test_stash_push_and_pop() {
     create_commit(temp.path(), "test.txt", "initial", "Initial commit");
     create_file(temp.path(), "test.txt", "modified for pop");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // Push
     lit::commands::stash::execute(Some(lit::StashCommands::Push {
@@ -133,8 +117,6 @@ fn test_stash_push_and_pop() {
         "Stash pop should succeed: {:?}",
         result.err()
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -143,13 +125,10 @@ fn test_stash_pop_empty_fails() {
 
     create_commit(temp.path(), "test.txt", "initial", "Initial commit");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::stash::execute(Some(lit::StashCommands::Pop));
     assert!(result.is_err(), "Pop on empty stash should fail");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -159,8 +138,7 @@ fn test_stash_drop() {
     create_commit(temp.path(), "test.txt", "initial", "Initial commit");
     create_file(temp.path(), "test.txt", "modified for drop");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // Push
     lit::commands::stash::execute(Some(lit::StashCommands::Push {
@@ -175,6 +153,4 @@ fn test_stash_drop() {
         "Stash drop should succeed: {:?}",
         result.err()
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }

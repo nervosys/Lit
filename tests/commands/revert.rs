@@ -26,8 +26,7 @@ fn add_and_commit(temp: &TempDir, filename: &str, content: &str, msg: &str) -> S
 #[test]
 fn test_revert_commit() {
     let temp = init_test_repo();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     add_and_commit(&temp, "base.txt", "base content", "initial");
     let target_hash = add_and_commit(&temp, "added.txt", "added content", "add file");
@@ -36,20 +35,15 @@ fn test_revert_commit() {
 
     let result = lit::commands::revert::execute(target_hash);
     assert!(result.is_ok(), "Revert should succeed: {:?}", result.err());
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_revert_invalid_target() {
     let temp = init_test_repo();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     add_and_commit(&temp, "f.txt", "x", "first");
 
     let result = lit::commands::revert::execute("nonexistent".to_string());
     assert!(result.is_err(), "Revert of invalid target should fail");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }

@@ -8,6 +8,7 @@ static AIRGAP_MODE_ENABLED: AtomicBool = AtomicBool::new(false);
 
 /// Airgap configuration for isolated network environments
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct AirgapConfig {
     /// Enable airgap mode (blocks all network protocols)
     pub enabled: bool,

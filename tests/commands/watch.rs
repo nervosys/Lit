@@ -18,8 +18,7 @@ fn init_test_repo() -> TempDir {
 #[test]
 fn test_watch_starts_polling() {
     let temp = init_test_repo();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // Create a file so the watcher has something to scan
     fs::write(temp.path().join("watched.txt"), "content").unwrap();
@@ -31,6 +30,4 @@ fn test_watch_starts_polling() {
     std::thread::sleep(std::time::Duration::from_millis(300));
 
     assert!(!handle.is_finished(), "Watch should still be running (infinite loop)");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }

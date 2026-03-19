@@ -17,13 +17,12 @@ fn init_test_repo() -> TempDir {
 #[test]
 fn test_serve_starts_on_available_port() {
     let temp = init_test_repo();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
 
     // Use a high port to avoid conflicts; the server blocks, so spawn in a thread
     // and give it a moment to bind, then drop.
-    let handle = std::thread::spawn(|| {
-        lit::commands::serve::execute(18384, Some("test-token".to_string()))
+    let repo = temp.path().to_path_buf();
+    let handle = std::thread::spawn(move || {
+        lit::commands::serve::execute_at(18384, Some("test-token".to_string()), repo)
     });
 
     // Give the server a moment to start
@@ -32,7 +31,5 @@ fn test_serve_starts_on_available_port() {
     // The server is blocking, so we can't wait for it. Just verify the thread is
     // running (it didn't immediately error out).
     assert!(!handle.is_finished(), "Server should still be running");
-
-    std::env::set_current_dir(original_dir).unwrap();
     // Thread is left running; it will be cleaned up when the test process exits.
 }

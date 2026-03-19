@@ -19,8 +19,7 @@ fn create_file(dir: &std::path::Path, name: &str, content: &str) {
 #[test]
 fn test_reflog_after_commits() {
     let temp = init_test_repo();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     create_file(temp.path(), "a.txt", "aaa");
     lit::commands::add::execute(vec!["a.txt".to_string()]).unwrap();
@@ -32,15 +31,12 @@ fn test_reflog_after_commits() {
 
     let result = lit::commands::reflog::execute(None, 10);
     assert!(result.is_ok(), "Reflog should succeed: {:?}", result.err());
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_reflog_with_count_limit() {
     let temp = init_test_repo();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     for i in 0..5 {
         create_file(
@@ -56,15 +52,12 @@ fn test_reflog_with_count_limit() {
     assert!(result.is_ok(), "Reflog with count should succeed");
     let resp = result.unwrap();
     assert!(resp.entries.len() <= 2, "Should limit to 2 entries");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_reflog_specific_ref() {
     let temp = init_test_repo();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     create_file(temp.path(), "a.txt", "aaa");
     lit::commands::add::execute(vec!["a.txt".to_string()]).unwrap();
@@ -72,31 +65,25 @@ fn test_reflog_specific_ref() {
 
     let result = lit::commands::reflog::execute(Some("main".to_string()), 10);
     assert!(result.is_ok(), "Reflog for 'main' should succeed");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 
 #[test]
 fn test_reflog_empty_repo() {
     let temp = init_test_repo();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // No commits — reflog should succeed with empty entries
     let result = lit::commands::reflog::execute(None, 10);
     assert!(result.is_ok(), "Reflog on empty repo should succeed: {:?}", result.err());
     let resp = result.unwrap();
     assert!(resp.entries.is_empty(), "Empty repo should have no reflog entries");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_reflog_nonexistent_ref() {
     let temp = init_test_repo();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     create_file(temp.path(), "a.txt", "content");
     lit::commands::add::execute(vec!["a.txt".to_string()]).unwrap();
@@ -107,15 +94,12 @@ fn test_reflog_nonexistent_ref() {
     assert!(result.is_ok(), "Reflog for nonexistent ref should succeed");
     let resp = result.unwrap();
     assert!(resp.entries.is_empty(), "Nonexistent ref should have empty reflog");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_reflog_entry_ordering() {
     let temp = init_test_repo();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // Directly write reflog entries to test ordering
     let hash_a = "a".repeat(192);
@@ -136,6 +120,4 @@ fn test_reflog_entry_ordering() {
         result.entries[1].message.contains("first"),
         "Second entry should be 'first commit' but got: {}", result.entries[1].message
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }

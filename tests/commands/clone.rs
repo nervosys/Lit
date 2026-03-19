@@ -13,8 +13,7 @@ fn setup_test_env() -> TempDir {
 fn test_clone_nonexistent_repo() {
     let temp = setup_test_env();
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result =
         lit::commands::clone::execute("file:///nonexistent/path/to/repo".to_string(), None);
@@ -27,60 +26,48 @@ fn test_clone_nonexistent_repo() {
         "Error should mention path resolution: {}",
         error
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_clone_with_file_url() {
     let temp = setup_test_env();
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::clone::execute("file:///path/to/repo".to_string(), None);
     // Should validate transport but fail on implementation
     assert!(result.is_err(), "Clone should return error");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_clone_with_network_share() {
     let temp = setup_test_env();
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::clone::execute("//server/share/repo".to_string(), None);
     // Should validate transport but fail on implementation
     assert!(result.is_err(), "Clone should return error");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_clone_with_directory() {
     let temp = setup_test_env();
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::clone::execute(
         "file:///path/to/repo".to_string(),
         Some("target-dir".to_string()),
     );
     assert!(result.is_err(), "Clone with directory should return error");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_clone_validates_airgap_transport() {
     let temp = setup_test_env();
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // Clone should validate transport before failing on implementation
     let result = lit::commands::clone::execute("file:///path/to/repo".to_string(), None);
@@ -90,6 +77,4 @@ fn test_clone_validates_airgap_transport() {
         result.is_err(),
         "Clone should return error (not implemented)"
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }

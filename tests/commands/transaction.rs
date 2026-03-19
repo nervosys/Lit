@@ -22,13 +22,10 @@ fn create_file(dir: &std::path::Path, name: &str, content: &str) {
 fn create_commit(repo_path: &std::path::Path, filename: &str, content: &str, message: &str) {
     create_file(repo_path, filename, content);
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(repo_path).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(repo_path);
 
     lit::commands::add::execute(vec![filename.to_string()]).unwrap();
     lit::commands::commit::execute(message.to_string(), None).unwrap();
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 // Helper to clean up any stale transaction state
@@ -45,8 +42,7 @@ fn test_transaction_begin() {
 
     create_commit(temp.path(), "test.txt", "hello", "Initial commit");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::transaction::execute_begin();
     assert!(result.is_ok(), "Transaction begin should succeed");
@@ -62,7 +58,6 @@ fn test_transaction_begin() {
     );
 
     cleanup_transaction(temp.path());
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -71,8 +66,7 @@ fn test_transaction_begin_commit_lifecycle() {
 
     create_commit(temp.path(), "test.txt", "hello", "Initial commit");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // Begin
     let begin_result = lit::commands::transaction::execute_begin();
@@ -90,8 +84,6 @@ fn test_transaction_begin_commit_lifecycle() {
         !temp.path().join(".lit/transaction.lock").exists(),
         "Transaction lock should be removed after commit"
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -100,8 +92,7 @@ fn test_transaction_begin_rollback_lifecycle() {
 
     create_commit(temp.path(), "test.txt", "hello", "Initial commit");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // Begin
     let begin_result = lit::commands::transaction::execute_begin();
@@ -122,8 +113,6 @@ fn test_transaction_begin_rollback_lifecycle() {
         !temp.path().join(".lit/transaction.lock").exists(),
         "Transaction lock should be removed after rollback"
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -132,8 +121,7 @@ fn test_transaction_double_begin_fails() {
 
     create_commit(temp.path(), "test.txt", "hello", "Initial commit");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // First begin succeeds
     let result1 = lit::commands::transaction::execute_begin();
@@ -147,7 +135,6 @@ fn test_transaction_double_begin_fails() {
     );
 
     cleanup_transaction(temp.path());
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -156,14 +143,11 @@ fn test_transaction_commit_without_begin_fails() {
 
     create_commit(temp.path(), "test.txt", "hello", "Initial commit");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // Commit without begin should fail
     let result = lit::commands::transaction::execute_commit_tx();
     assert!(result.is_err(), "Commit without begin should fail");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -172,12 +156,9 @@ fn test_transaction_rollback_without_begin_fails() {
 
     create_commit(temp.path(), "test.txt", "hello", "Initial commit");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // Rollback without begin should fail
     let result = lit::commands::transaction::execute_rollback();
     assert!(result.is_err(), "Rollback without begin should fail");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }

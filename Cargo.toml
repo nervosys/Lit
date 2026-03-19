@@ -7,7 +7,13 @@ description = "Lit - The agentic-first distributed version control system. A com
 license = "MIT"
 repository = "https://github.com/nervosys/lit"
 homepage = "https://github.com/nervosys/lit"
-keywords = ["vcs", "git", "quantum-resistant", "post-quantum", "version-control"]
+keywords = [
+    "vcs",
+    "git",
+    "quantum-resistant",
+    "post-quantum",
+    "version-control",
+]
 categories = ["command-line-utilities", "development-tools"]
 
 [dependencies]
@@ -41,6 +47,10 @@ pqcrypto-dilithium = "0.5" # ML-DSA (Dilithium) - NIST post-quantum signatures
 pqcrypto-traits = "0.3"
 # Phase 3: API Server
 tiny_http = "0.12" # Lightweight sync HTTP server
+# HTTPS transport client
+ureq = { version = "2.12", features = [
+    "json",
+] } # Blocking HTTP client for transport layer
 # FIPS 140-2 compliance
 zeroize = { version = "1.8", features = ["derive"] } # Secure memory clearing
 subtle = "2.6"                                       # Constant-time comparisons for cryptographic operations

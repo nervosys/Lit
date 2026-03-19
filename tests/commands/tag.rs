@@ -27,8 +27,7 @@ fn create_commit(
 ) -> String {
     create_file(repo_path, filename, content);
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(repo_path).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(repo_path);
 
     lit::commands::add::execute(vec![filename.to_string()]).unwrap();
     lit::commands::commit::execute(message.to_string(), None).unwrap();
@@ -37,9 +36,6 @@ fn create_commit(
         .unwrap()
         .trim()
         .to_string();
-
-    std::env::set_current_dir(original_dir).unwrap();
-
     commit_hash
 }
 
@@ -49,8 +45,7 @@ fn test_tag_create_lightweight() {
 
     create_commit(temp.path(), "test.txt", "hello", "Initial commit");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::tag::execute(
         Some("v1.0".to_string()),
@@ -67,8 +62,6 @@ fn test_tag_create_lightweight() {
     // Verify tag ref exists
     let tag_ref = fs::read_to_string(temp.path().join(".lit/refs/tags/v1.0"));
     assert!(tag_ref.is_ok(), "Tag ref file should exist");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -77,8 +70,7 @@ fn test_tag_create_annotated() {
 
     create_commit(temp.path(), "test.txt", "hello", "Initial commit");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::tag::execute(
         Some("v2.0".to_string()),
@@ -91,8 +83,6 @@ fn test_tag_create_annotated() {
         None,                             // commit
     );
     assert!(result.is_ok(), "Creating annotated tag should succeed");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -101,13 +91,10 @@ fn test_tag_list_empty() {
 
     create_commit(temp.path(), "test.txt", "hello", "Initial commit");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::tag::execute(None, None, false, false, false, false, true, None);
     assert!(result.is_ok(), "Listing tags should succeed");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -116,8 +103,7 @@ fn test_tag_list_after_create() {
 
     create_commit(temp.path(), "test.txt", "hello", "Initial commit");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // Create two tags
     lit::commands::tag::execute(
@@ -146,8 +132,6 @@ fn test_tag_list_after_create() {
     // List tags
     let result = lit::commands::tag::execute(None, None, false, false, false, false, true, None);
     assert!(result.is_ok(), "Listing tags should succeed");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -156,8 +140,7 @@ fn test_tag_delete() {
 
     create_commit(temp.path(), "test.txt", "hello", "Initial commit");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // Create then delete
     lit::commands::tag::execute(
@@ -189,8 +172,6 @@ fn test_tag_delete() {
         !temp.path().join(".lit/refs/tags/v1.0").exists(),
         "Tag ref should be deleted"
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -199,8 +180,7 @@ fn test_tag_duplicate_name_fails() {
 
     create_commit(temp.path(), "test.txt", "hello", "Initial commit");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // Create tag
     lit::commands::tag::execute(
@@ -227,8 +207,6 @@ fn test_tag_duplicate_name_fails() {
         None,
     );
     assert!(result.is_err(), "Duplicate tag should fail");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -237,8 +215,7 @@ fn test_tag_signed_creates_pq_signature() {
 
     create_commit(temp.path(), "test.txt", "hello", "Initial commit");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::tag::execute(
         Some("v3.0-signed".to_string()),
@@ -251,6 +228,4 @@ fn test_tag_signed_creates_pq_signature() {
         None,  // commit
     );
     assert!(result.is_ok(), "Creating signed tag should succeed");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }

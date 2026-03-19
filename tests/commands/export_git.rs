@@ -8,8 +8,7 @@ fn test_export_git_creates_git_structure() {
     let repo_path = temp.path().to_str().unwrap().to_string();
 
     lit::commands::init::execute(false, Some(repo_path.clone())).unwrap();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // Create a file and commit
     fs::write(temp.path().join("test.txt"), "hello world\n").unwrap();
@@ -20,14 +19,18 @@ fn test_export_git_creates_git_structure() {
     let git_dest = temp.path().join("exported.git");
     let result = lit::commands::export_git::execute(git_dest.to_str().unwrap().to_string());
 
-    std::env::set_current_dir(&original_dir).unwrap();
-
     assert!(result.is_ok(), "Export should succeed: {:?}", result);
     let response = result.unwrap();
 
     assert!(git_dest.join("HEAD").exists(), "HEAD should exist");
-    assert!(git_dest.join("objects").exists(), "objects dir should exist");
-    assert!(response.objects_exported > 0, "Should export at least one object");
+    assert!(
+        git_dest.join("objects").exists(),
+        "objects dir should exist"
+    );
+    assert!(
+        response.objects_exported > 0,
+        "Should export at least one object"
+    );
 }
 
 #[test]
@@ -36,8 +39,7 @@ fn test_export_git_roundtrip_preserves_content() {
     let repo_path = temp.path().to_str().unwrap().to_string();
 
     lit::commands::init::execute(false, Some(repo_path.clone())).unwrap();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     fs::write(temp.path().join("hello.txt"), "hello world\n").unwrap();
     lit::commands::add::execute(vec!["hello.txt".to_string()]).unwrap();
@@ -45,8 +47,6 @@ fn test_export_git_roundtrip_preserves_content() {
 
     let git_dest = temp.path().join("out.git");
     let result = lit::commands::export_git::execute(git_dest.to_str().unwrap().to_string());
-
-    std::env::set_current_dir(&original_dir).unwrap();
 
     assert!(result.is_ok(), "Export should succeed: {:?}", result);
     let response = result.unwrap();

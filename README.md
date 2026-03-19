@@ -16,7 +16,7 @@ Git was designed in 2005 for human developers using terminals. Every interface â
 | **Default output**      | Freeform text              | Structured JSON                         |
 | **Error handling**      | Freeform strings           | Typed error codes + remediation         |
 | **Batch operations**    | Shell scripting            | Native JSONL batch mode                 |
-| **API access**          | Third-party wrappers       | Built-in HTTP + MCP server         |
+| **API access**          | Third-party wrappers       | Built-in HTTP + MCP server              |
 | **Merge conflicts**     | `<<<<<<<` markers          | Structured conflict objects             |
 | **Agent metadata**      | Commit message conventions | First-class metadata field              |
 | **Cryptography**        | SHA-1 / SHA-256            | SHA3-512 + BLAKE3 (quantum-resistant)   |
@@ -218,14 +218,14 @@ See [AIRGAP.md](AIRGAP.md) for complete documentation.
 
 ## Testing
 
-387 tests across unit, integration, and performance suites:
+428 tests across unit, integration, and performance suites:
 
 ```powershell
-cargo test --lib -- --test-threads=1                   # 63 unit tests
-cargo test --test command_tests -- --test-threads=1    # 198 command tests
+cargo test --lib -- --test-threads=1                   # 61 unit tests
+cargo test --test command_tests -- --test-threads=1    # 239 command tests
 cargo test --test feature_integration_test              # 30 integration tests
 cargo test --test performance_benchmarks --release      # 9 benchmarks
-cargo test --test adversarial_test -- --test-threads=1  # 6 security tests
+cargo test --test adversarial_test -- --test-threads=1  # 5 security tests
 cargo test --test concurrency_test -- --test-threads=1  # 9 concurrency tests
 cargo test --test network_integration_test -- --test-threads=1 # 14 network tests
 ```

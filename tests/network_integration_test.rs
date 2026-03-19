@@ -5,6 +5,48 @@
 use std::fs;
 use tempfile::TempDir;
 
+mod cwd_guard {
+    use std::cell::Cell;
+    use std::path::Path;
+    use std::sync::{Mutex, MutexGuard};
+
+    static CWD_MUTEX: Mutex<()> = Mutex::new(());
+    thread_local! { static CWD_LOCKED: Cell<bool> = const { Cell::new(false) }; }
+
+    pub struct CwdGuard {
+        original: std::path::PathBuf,
+        _lock: Option<MutexGuard<'static, ()>>,
+    }
+    impl CwdGuard {
+        pub fn new(path: &Path) -> Self {
+            let already_held = CWD_LOCKED.with(|c| c.get());
+            if already_held {
+                std::env::set_current_dir(path).unwrap();
+                return CwdGuard {
+                    original: std::path::PathBuf::new(),
+                    _lock: None,
+                };
+            }
+            let lock = CWD_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+            CWD_LOCKED.with(|c| c.set(true));
+            let original = std::env::current_dir().unwrap();
+            std::env::set_current_dir(path).unwrap();
+            CwdGuard {
+                original,
+                _lock: Some(lock),
+            }
+        }
+    }
+    impl Drop for CwdGuard {
+        fn drop(&mut self) {
+            if self._lock.is_some() {
+                let _ = std::env::set_current_dir(&self.original);
+                CWD_LOCKED.with(|c| c.set(false));
+            }
+        }
+    }
+}
+
 /// Helper: create a minimal .lit repo skeleton.
 fn init_repo(dir: &std::path::Path) {
     fs::create_dir_all(dir.join(".lit/objects")).unwrap();
@@ -39,8 +81,7 @@ fn test_push_requires_remote_configured() {
     let tmp = TempDir::new().unwrap();
     init_repo(tmp.path());
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(tmp.path()).unwrap();
+    let _cwd = cwd_guard::CwdGuard::new(tmp.path());
 
     let result = lit::commands::push::execute("origin".to_string(), "main".to_string(), false);
 
@@ -52,8 +93,6 @@ fn test_push_requires_remote_configured() {
         "Error should mention missing remote config, got: {}",
         err
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -61,8 +100,7 @@ fn test_pull_requires_remote_configured() {
     let tmp = TempDir::new().unwrap();
     init_repo(tmp.path());
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(tmp.path()).unwrap();
+    let _cwd = cwd_guard::CwdGuard::new(tmp.path());
 
     let result = lit::commands::pull::execute("origin".to_string(), "main".to_string());
 
@@ -73,8 +111,6 @@ fn test_pull_requires_remote_configured() {
         "Error should mention missing remote config, got: {}",
         err
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -82,8 +118,7 @@ fn test_push_with_file_remote() {
     let tmp = TempDir::new().unwrap();
     init_repo(tmp.path());
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(tmp.path()).unwrap();
+    let _cwd = cwd_guard::CwdGuard::new(tmp.path());
 
     // Add a file:// remote (not a valid lit repo)
     let remote_dir = TempDir::new().unwrap();
@@ -109,8 +144,6 @@ fn test_push_with_file_remote() {
         "Should fail with path resolution error. Got: {}",
         err
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -118,8 +151,7 @@ fn test_pull_with_file_remote() {
     let tmp = TempDir::new().unwrap();
     init_repo(tmp.path());
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(tmp.path()).unwrap();
+    let _cwd = cwd_guard::CwdGuard::new(tmp.path());
 
     let remote_dir = TempDir::new().unwrap();
     let remote_url = format!(
@@ -143,8 +175,6 @@ fn test_pull_with_file_remote() {
         "Should fail with path resolution error. Got: {}",
         err
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 // ---------------------------------------------------------------------------
@@ -156,7 +186,9 @@ fn test_push_with_network_share_remote() {
     let tmp = TempDir::new().unwrap();
     init_repo(tmp.path());
 
-    // Ensure airgap global flag is off
+    let _cwd = cwd_guard::CwdGuard::new(tmp.path());
+
+    // Ensure airgap global flag is off (after CwdGuard to avoid racing other airgap tests)
     lit::network::AirgapConfig::disable_airgap_mode();
 
     // Save current airgap config and write a clean one
@@ -169,9 +201,6 @@ fn test_push_with_network_share_remote() {
     };
     fs::create_dir_all(airgap_path.parent().unwrap()).unwrap();
     fs::write(&airgap_path, "enabled = false\nstrict_mode = false\n").unwrap();
-
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(tmp.path()).unwrap();
 
     // Add a UNC path remote
     lit::commands::remote::execute(Some(lit::RemoteCommands::Add {
@@ -193,8 +222,6 @@ fn test_push_with_network_share_remote() {
         err
     );
 
-    std::env::set_current_dir(original_dir).unwrap();
-
     // Restore original airgap config
     match backup {
         Some(content) => fs::write(&airgap_path, content).unwrap(),
@@ -213,8 +240,7 @@ fn test_airgap_blocks_http_remote_on_push() {
     let tmp = TempDir::new().unwrap();
     init_repo(tmp.path());
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(tmp.path()).unwrap();
+    let _cwd = cwd_guard::CwdGuard::new(tmp.path());
 
     // Write a remote config manually with an http URL
     let remotes_json = r#"{"remotes":{"bad":{"url":"http://evil.com/repo"}}}"#;
@@ -238,7 +264,6 @@ fn test_airgap_blocks_http_remote_on_push() {
 
     // Clean up global state
     lit::network::AirgapConfig::disable_airgap_mode();
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -246,8 +271,7 @@ fn test_airgap_blocks_http_remote_on_pull() {
     let tmp = TempDir::new().unwrap();
     init_repo(tmp.path());
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(tmp.path()).unwrap();
+    let _cwd = cwd_guard::CwdGuard::new(tmp.path());
 
     let remotes_json = r#"{"remotes":{"bad":{"url":"https://evil.com/repo"}}}"#;
     fs::write(tmp.path().join(".lit/remotes"), remotes_json).unwrap();
@@ -268,7 +292,6 @@ fn test_airgap_blocks_http_remote_on_pull() {
     );
 
     lit::network::AirgapConfig::disable_airgap_mode();
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -276,8 +299,7 @@ fn test_airgap_allows_file_remote_on_push() {
     let tmp = TempDir::new().unwrap();
     init_repo(tmp.path());
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(tmp.path()).unwrap();
+    let _cwd = cwd_guard::CwdGuard::new(tmp.path());
 
     let remote_dir = TempDir::new().unwrap();
     let remote_url = format!(
@@ -303,7 +325,6 @@ fn test_airgap_allows_file_remote_on_push() {
     );
 
     lit::network::AirgapConfig::disable_airgap_mode();
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 // ---------------------------------------------------------------------------
@@ -315,8 +336,7 @@ fn test_remote_config_roundtrip() {
     let tmp = TempDir::new().unwrap();
     init_repo(tmp.path());
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(tmp.path()).unwrap();
+    let _cwd = cwd_guard::CwdGuard::new(tmp.path());
 
     // Add several remotes
     for i in 0..5 {
@@ -344,8 +364,6 @@ fn test_remote_config_roundtrip() {
     let remotes = parsed["remotes"].as_object().unwrap();
     assert_eq!(remotes.len(), 4);
     assert!(!remotes.contains_key("remote-2"));
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -353,8 +371,7 @@ fn test_remote_add_duplicate_fails() {
     let tmp = TempDir::new().unwrap();
     init_repo(tmp.path());
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(tmp.path()).unwrap();
+    let _cwd = cwd_guard::CwdGuard::new(tmp.path());
 
     lit::commands::remote::execute(Some(lit::RemoteCommands::Add {
         name: "origin".to_string(),
@@ -373,8 +390,6 @@ fn test_remote_add_duplicate_fails() {
         "Should reject duplicate remote name, got: {}",
         err
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 // ---------------------------------------------------------------------------

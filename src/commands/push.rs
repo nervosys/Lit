@@ -1,6 +1,6 @@
 use crate::core::find_repo_root;
 use crate::core::ObjectHash;
-use crate::network::transport;
+use crate::network::transport::RemoteRepo;
 use crate::network::AirgapValidator;
 use crate::response::PushResponse;
 use crate::storage::ObjectStore;
@@ -13,17 +13,16 @@ pub fn execute(remote: String, branch: String, force: bool) -> Result<PushRespon
     let validator = AirgapValidator::new()?;
     validator.validate_transport(&remote_url)?;
 
-    let remote_path = transport::resolve_url(&remote_url)?;
+    let remote_repo = RemoteRepo::open(&remote_url)?;
 
     // Get local branch tip
     let local_hash = crate::core::refs::read_ref(&repo_root, &format!("heads/{}", branch))
         .map_err(|_| format!("Branch '{}' not found locally", branch))?;
 
     let local_store = ObjectStore::new(&repo_root);
-    let remote_store = ObjectStore::new(&remote_path);
 
     // Check if branch exists on remote
-    let remote_has_branch = transport::read_remote_ref(&remote_path, &branch).ok();
+    let remote_has_branch = remote_repo.read_branch_ref(&branch).ok();
 
     // Fast-forward check
     if let Some(ref remote_hash) = remote_has_branch {
@@ -40,7 +39,7 @@ pub fn execute(remote: String, branch: String, force: bool) -> Result<PushRespon
         if !force {
             let remote_obj = ObjectHash::from_hex(remote_hash.clone());
             let local_obj = ObjectHash::from_hex(local_hash.clone());
-            let is_ff = transport::is_fast_forward_push(&local_store, &local_obj, &remote_obj)?;
+            let is_ff = remote_repo.check_fast_forward(&local_store, &local_obj, &remote_obj)?;
             if !is_ff {
                 return Err(
                     "Push rejected: non-fast-forward update. Use --force to override.".to_string(),
@@ -50,7 +49,7 @@ pub fn execute(remote: String, branch: String, force: bool) -> Result<PushRespon
     }
 
     // Walk local commit graph to find objects to transfer
-    let known_remote: HashSet<String> = if let Some(ref rh) = remote_has_branch {
+    let remote_known: HashSet<String> = if let Some(ref rh) = remote_has_branch {
         let mut set = HashSet::new();
         set.insert(rh.clone());
         set
@@ -58,17 +57,25 @@ pub fn execute(remote: String, branch: String, force: bool) -> Result<PushRespon
         HashSet::new()
     };
 
-    let commit_hash = ObjectHash::from_hex(local_hash.clone());
-    let needed = transport::walk_commit_graph(&local_store, &commit_hash, &known_remote)?;
+    let needed = remote_repo.negotiate_upload(
+        &local_store,
+        std::slice::from_ref(&local_hash),
+        &remote_known,
+    )?;
 
     // Transfer objects from local to remote
-    let transferred = transport::transfer_objects(&local_store, &remote_store, &needed)?;
+    let transferred = remote_repo.upload_objects(&local_store, &needed)?;
 
     // Update remote's branch ref
-    transport::update_remote_branch_ref(&remote_path, &branch, &local_hash)?;
+    remote_repo.update_branch_ref(&branch, &local_hash, force)?;
 
     // Update local remote-tracking ref
-    transport::update_remote_tracking_ref(&repo_root, &remote, &branch, &local_hash)?;
+    crate::network::transport::update_remote_tracking_ref(
+        &repo_root,
+        &remote,
+        &branch,
+        &local_hash,
+    )?;
 
     let range = if let Some(old) = remote_has_branch {
         format!(

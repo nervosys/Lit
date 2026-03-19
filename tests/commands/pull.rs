@@ -20,16 +20,16 @@ fn create_file(dir: &std::path::Path, name: &str, content: &str) {
 fn test_pull_from_local_remote() {
     // Create and populate "remote" repo
     let remote = init_test_repo();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(remote.path()).unwrap();
-    create_file(remote.path(), "shared.txt", "shared content");
-    lit::commands::add::execute(vec!["shared.txt".to_string()]).unwrap();
-    lit::commands::commit::execute("remote commit".to_string(), None).unwrap();
-    std::env::set_current_dir(&original_dir).unwrap();
+    {
+        let _cwd = super::test_helpers::CwdGuard::new(remote.path());
+        create_file(remote.path(), "shared.txt", "shared content");
+        lit::commands::add::execute(vec!["shared.txt".to_string()]).unwrap();
+        lit::commands::commit::execute("remote commit".to_string(), None).unwrap();
+    }
 
     // Create local repo with its own commit, then add remote
     let local = init_test_repo();
-    std::env::set_current_dir(local.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(local.path());
     create_file(local.path(), "local.txt", "local only");
     lit::commands::add::execute(vec!["local.txt".to_string()]).unwrap();
     lit::commands::commit::execute("local commit".to_string(), None).unwrap();
@@ -41,26 +41,19 @@ fn test_pull_from_local_remote() {
     }))
     .unwrap();
 
-    let result =
-        lit::commands::pull::execute("origin".to_string(), "main".to_string());
+    let result = lit::commands::pull::execute("origin".to_string(), "main".to_string());
     assert!(result.is_ok(), "Pull should succeed: {:?}", result.err());
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_pull_nonexistent_remote() {
     let local = init_test_repo();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(local.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(local.path());
 
     create_file(local.path(), "x.txt", "x");
     lit::commands::add::execute(vec!["x.txt".to_string()]).unwrap();
     lit::commands::commit::execute("c".to_string(), None).unwrap();
 
-    let result =
-        lit::commands::pull::execute("nonexistent".to_string(), "main".to_string());
+    let result = lit::commands::pull::execute("nonexistent".to_string(), "main".to_string());
     assert!(result.is_err(), "Pull from nonexistent remote should fail");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }

@@ -88,9 +88,9 @@ Performance: pack files, parallel I/O, LFS support, binary index format.
 - [x] `lit fetch <remote>` — download objects and refs without merging
 - [x] Remote-tracking branches (`refs/remotes/<name>/<branch>`)
 - [x] Have/want negotiation for minimal transfer
-- [x] HTTPS transport stub (module ready, implementation pending)
-- [x] SSH transport stub (module ready, implementation pending)
-- [x] `lit://` native encrypted transport stub (module ready, implementation pending)
+- [x] HTTPS transport — full client/server implementation via `lit serve` + `ureq`
+- [x] SSH transport (pipe-based via `lit serve --stdio` + system `ssh` command)
+- [x] `lit://` native TCP transport (daemon mode via `lit serve --daemon`, client via `LitConnection`)
 
 ### 1.4 Tags (P1)
 - [x] Lightweight tags (`lit tag <name>`)

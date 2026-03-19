@@ -323,20 +323,20 @@ pub fn get_current_branch_encrypted(
 mod tests {
     use super::*;
     use crate::crypto::encryption::EncryptionConfig;
-    use std::env;
+    use tempfile::TempDir;
 
     #[test]
     fn test_encrypted_ref_write_read() {
-        // Clean up any existing key file from previous tests
-        let key_path = shellexpand::tilde("~/.lit/encryption.key");
-        fs::remove_file(key_path.as_ref()).ok();
-
-        let temp_dir = env::temp_dir().join("lit-test-encrypted-refs");
-        fs::create_dir_all(&temp_dir).unwrap();
+        let temp = TempDir::new().unwrap();
+        let temp_dir = temp.path().to_path_buf();
         fs::create_dir_all(get_lit_dir(&temp_dir).join("refs/heads")).unwrap();
 
         let mut config = EncryptionConfig::default();
         config.enabled = true;
+        config.key_file = temp_dir
+            .join("encryption.key")
+            .to_string_lossy()
+            .to_string();
 
         let mut enc_manager = EncryptionManager::new(config);
         enc_manager.initialize("test-passphrase-refs").unwrap();
@@ -352,23 +352,20 @@ mod tests {
         let read_hash = read_ref_encrypted(&temp_dir, ref_name, &encryption).unwrap();
 
         assert_eq!(read_hash, test_hash);
-
-        // Cleanup
-        fs::remove_dir_all(&temp_dir).ok();
     }
 
     #[test]
     fn test_encrypted_head_operations() {
-        // Clean up any existing key file from previous tests
-        let key_path = shellexpand::tilde("~/.lit/encryption.key");
-        fs::remove_file(key_path.as_ref()).ok();
-
-        let temp_dir = env::temp_dir().join("lit-test-encrypted-head");
-        fs::create_dir_all(&temp_dir).unwrap();
+        let temp = TempDir::new().unwrap();
+        let temp_dir = temp.path().to_path_buf();
         fs::create_dir_all(get_lit_dir(&temp_dir).join("refs/heads")).unwrap();
 
         let mut config = EncryptionConfig::default();
         config.enabled = true;
+        config.key_file = temp_dir
+            .join("encryption.key")
+            .to_string_lossy()
+            .to_string();
 
         let mut enc_manager = EncryptionManager::new(config);
         enc_manager.initialize("test-passphrase-head").unwrap();
@@ -390,23 +387,20 @@ mod tests {
         // Read HEAD (should resolve to commit)
         let head_commit = read_head_encrypted(&temp_dir, &encryption).unwrap();
         assert_eq!(head_commit, commit_hash);
-
-        // Cleanup
-        fs::remove_dir_all(&temp_dir).ok();
     }
 
     #[test]
     fn test_encrypted_detached_head() {
-        // Clean up any existing key file from previous tests
-        let key_path = shellexpand::tilde("~/.lit/encryption.key");
-        fs::remove_file(key_path.as_ref()).ok();
-
-        let temp_dir = env::temp_dir().join("lit-test-encrypted-detached");
-        fs::create_dir_all(&temp_dir).unwrap();
+        let temp = TempDir::new().unwrap();
+        let temp_dir = temp.path().to_path_buf();
         fs::create_dir_all(get_lit_dir(&temp_dir)).unwrap();
 
         let mut config = EncryptionConfig::default();
         config.enabled = true;
+        config.key_file = temp_dir
+            .join("encryption.key")
+            .to_string_lossy()
+            .to_string();
 
         let mut enc_manager = EncryptionManager::new(config);
         enc_manager.initialize("test-passphrase-detached").unwrap();
@@ -423,23 +417,20 @@ mod tests {
 
         // Getting branch should fail (detached)
         assert!(get_current_branch_encrypted(&temp_dir, &encryption).is_err());
-
-        // Cleanup
-        fs::remove_dir_all(&temp_dir).ok();
     }
 
     #[test]
     fn test_encrypted_ref_tamper_detection() {
-        // Clean up any existing key file from previous tests
-        let key_path = shellexpand::tilde("~/.lit/encryption.key");
-        fs::remove_file(key_path.as_ref()).ok();
-
-        let temp_dir = env::temp_dir().join("lit-test-encrypted-tamper");
-        fs::create_dir_all(&temp_dir).unwrap();
+        let temp = TempDir::new().unwrap();
+        let temp_dir = temp.path().to_path_buf();
         fs::create_dir_all(get_lit_dir(&temp_dir).join("refs/heads")).unwrap();
 
         let mut config = EncryptionConfig::default();
         config.enabled = true;
+        config.key_file = temp_dir
+            .join("encryption.key")
+            .to_string_lossy()
+            .to_string();
 
         let mut enc_manager = EncryptionManager::new(config);
         enc_manager.initialize("test-passphrase-tamper").unwrap();
@@ -460,8 +451,5 @@ mod tests {
 
         // Reading should fail due to authentication tag mismatch
         assert!(read_ref_encrypted(&temp_dir, ref_name, &encryption).is_err());
-
-        // Cleanup
-        fs::remove_dir_all(&temp_dir).ok();
     }
 }

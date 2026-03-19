@@ -20,11 +20,10 @@ fn create_file(dir: &std::path::Path, name: &str, content: &str) {
 fn test_push_to_local_remote() {
     // Create "remote" repo (bare-like, needs at least init)
     let remote = init_test_repo();
-    let original_dir = std::env::current_dir().unwrap();
 
     // Create local repo with a commit
     let local = init_test_repo();
-    std::env::set_current_dir(local.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(local.path());
     create_file(local.path(), "file.txt", "push content");
     lit::commands::add::execute(vec!["file.txt".to_string()]).unwrap();
     lit::commands::commit::execute("local commit".to_string(), None).unwrap();
@@ -37,28 +36,21 @@ fn test_push_to_local_remote() {
     }))
     .unwrap();
 
-    let result =
-        lit::commands::push::execute("origin".to_string(), "main".to_string(), false);
+    let result = lit::commands::push::execute("origin".to_string(), "main".to_string(), false);
     assert!(result.is_ok(), "Push should succeed: {:?}", result.err());
     let resp = result.unwrap();
     assert!(resp.objects_transferred > 0, "Should transfer objects");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_push_nonexistent_remote() {
     let local = init_test_repo();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(local.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(local.path());
 
     create_file(local.path(), "x.txt", "data");
     lit::commands::add::execute(vec!["x.txt".to_string()]).unwrap();
     lit::commands::commit::execute("c1".to_string(), None).unwrap();
 
-    let result =
-        lit::commands::push::execute("nonexistent".to_string(), "main".to_string(), false);
+    let result = lit::commands::push::execute("nonexistent".to_string(), "main".to_string(), false);
     assert!(result.is_err(), "Push to nonexistent remote should fail");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }

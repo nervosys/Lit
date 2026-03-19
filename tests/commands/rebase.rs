@@ -26,8 +26,7 @@ fn add_and_commit(temp: &TempDir, filename: &str, content: &str, msg: &str) -> S
 #[test]
 fn test_rebase_non_interactive() {
     let temp = init_test_repo();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // Create base commit, then branch
     let _base_hash = add_and_commit(&temp, "base.txt", "base", "base commit");
@@ -49,15 +48,12 @@ fn test_rebase_non_interactive() {
         false, // not continue
     );
     assert!(result.is_ok(), "Rebase should succeed: {:?}", result.err());
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_rebase_abort_no_session() {
     let temp = init_test_repo();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     add_and_commit(&temp, "f.txt", "x", "first");
 
@@ -69,15 +65,12 @@ fn test_rebase_abort_no_session() {
         false,
     );
     assert!(result.is_err(), "Abort without active rebase should fail");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_rebase_continue_no_session() {
     let temp = init_test_repo();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     add_and_commit(&temp, "f.txt", "x", "first");
 
@@ -89,6 +82,4 @@ fn test_rebase_continue_no_session() {
         true, // continue
     );
     assert!(result.is_err(), "Continue without active rebase should fail");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }

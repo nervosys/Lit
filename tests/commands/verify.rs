@@ -19,8 +19,7 @@ fn create_file(dir: &std::path::Path, name: &str, content: &str) {
 #[test]
 fn test_verify_empty_repo() {
     let temp = init_test_repo();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::verify::execute();
     assert!(
@@ -30,15 +29,12 @@ fn test_verify_empty_repo() {
     );
     let resp = result.unwrap();
     assert!(resp.valid, "Empty repo should be valid");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_verify_repo_with_commits() {
     let temp = init_test_repo();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     create_file(temp.path(), "a.txt", "hello");
     lit::commands::add::execute(vec!["a.txt".to_string()]).unwrap();
@@ -53,15 +49,12 @@ fn test_verify_repo_with_commits() {
     let resp = result.unwrap();
     assert!(resp.valid, "Repo with valid commits should be valid");
     assert!(!resp.checks.is_empty(), "Should have verification checks");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_verify_repo_with_branches() {
     let temp = init_test_repo();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     create_file(temp.path(), "f.txt", "content");
     lit::commands::add::execute(vec!["f.txt".to_string()]).unwrap();
@@ -73,16 +66,13 @@ fn test_verify_repo_with_branches() {
     assert!(result.is_ok(), "Verify with branches should succeed");
     let resp = result.unwrap();
     assert!(resp.valid, "Repo with branches should be valid");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 
 #[test]
 fn test_verify_corrupt_object() {
     let temp = init_test_repo();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     create_file(temp.path(), "a.txt", "test data for corruption");
     lit::commands::add::execute(vec!["a.txt".to_string()]).unwrap();
@@ -113,15 +103,12 @@ fn test_verify_corrupt_object() {
         resp.checks.iter().any(|c| c.status == "error"),
         "Should have error check results"
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_verify_dangling_ref() {
     let temp = init_test_repo();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     create_file(temp.path(), "a.txt", "content");
     lit::commands::add::execute(vec!["a.txt".to_string()]).unwrap();
@@ -142,15 +129,12 @@ fn test_verify_dangling_ref() {
             && c.details.as_ref().map_or(false, |d| d.contains("Dangling"))),
         "Should report dangling ref for dangling-branch"
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_verify_checks_present() {
     let temp = init_test_repo();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     create_file(temp.path(), "a.txt", "content");
     lit::commands::add::execute(vec!["a.txt".to_string()]).unwrap();
@@ -173,6 +157,4 @@ fn test_verify_checks_present() {
         check_names.iter().any(|n| n.contains("dag")),
         "Should have DAG check: {:?}", check_names
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }

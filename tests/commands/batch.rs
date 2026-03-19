@@ -26,13 +26,10 @@ fn create_file(dir: &std::path::Path, name: &str, content: &str) {
 fn create_commit(repo_path: &std::path::Path, filename: &str, content: &str, message: &str) {
     create_file(repo_path, filename, content);
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(repo_path).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(repo_path);
 
     lit::commands::add::execute(vec![filename.to_string()]).unwrap();
     lit::commands::commit::execute(message.to_string(), None).unwrap();
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 fn lit_binary() -> std::path::PathBuf {

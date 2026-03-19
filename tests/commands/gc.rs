@@ -8,16 +8,20 @@ fn test_gc_empty_repo() {
     let repo_path = temp.path().to_str().unwrap().to_string();
 
     lit::commands::init::execute(false, Some(repo_path.clone())).unwrap();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::gc::execute();
 
-    std::env::set_current_dir(&original_dir).unwrap();
-
-    assert!(result.is_ok(), "GC should succeed on empty repo: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "GC should succeed on empty repo: {:?}",
+        result
+    );
     let response = result.unwrap();
-    assert_eq!(response.objects_packed, 0, "Empty repo should have 0 objects");
+    assert_eq!(
+        response.objects_packed, 0,
+        "Empty repo should have 0 objects"
+    );
 }
 
 #[test]
@@ -26,8 +30,7 @@ fn test_gc_packs_loose_objects() {
     let repo_path = temp.path().to_str().unwrap().to_string();
 
     lit::commands::init::execute(false, Some(repo_path.clone())).unwrap();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // Create several files
     let mut file_names = Vec::new();
@@ -40,14 +43,22 @@ fn test_gc_packs_loose_objects() {
     assert!(add_result.is_ok(), "Add should succeed: {:?}", add_result);
 
     let commit_result = lit::commands::commit::execute("add files".to_string(), None);
-    assert!(commit_result.is_ok(), "Commit should succeed: {:?}", commit_result);
+    assert!(
+        commit_result.is_ok(),
+        "Commit should succeed: {:?}",
+        commit_result
+    );
 
     let result = lit::commands::gc::execute();
 
-    std::env::set_current_dir(&original_dir).unwrap();
-
     assert!(result.is_ok(), "GC should succeed: {:?}", result);
     let response = result.unwrap();
-    assert!(response.objects_packed > 0, "Should pack at least some objects");
-    assert!(response.packs_created > 0, "Should create at least one pack");
+    assert!(
+        response.objects_packed > 0,
+        "Should pack at least some objects"
+    );
+    assert!(
+        response.packs_created > 0,
+        "Should create at least one pack"
+    );
 }

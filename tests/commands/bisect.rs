@@ -26,8 +26,7 @@ fn add_and_commit(temp: &TempDir, filename: &str, content: &str, msg: &str) -> S
 #[test]
 fn test_bisect_start() {
     let temp = init_test_repo();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::bisect::execute(Some(lit::BisectCommands::Start));
     assert!(
@@ -37,27 +36,21 @@ fn test_bisect_start() {
     );
 
     assert!(temp.path().join(".lit").join("bisect.json").exists());
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_bisect_status_no_session() {
     let temp = init_test_repo();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::bisect::execute(None);
     assert!(result.is_err(), "Status without active bisect should error");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_bisect_reset() {
     let temp = init_test_repo();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     lit::commands::bisect::execute(Some(lit::BisectCommands::Start)).unwrap();
     assert!(temp.path().join(".lit").join("bisect.json").exists());
@@ -65,15 +58,12 @@ fn test_bisect_reset() {
     let result = lit::commands::bisect::execute(Some(lit::BisectCommands::Reset));
     assert!(result.is_ok(), "Reset should succeed");
     assert!(!temp.path().join(".lit").join("bisect.json").exists());
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_bisect_good_bad_marks() {
     let temp = init_test_repo();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let hash1 = add_and_commit(&temp, "f1.txt", "v1", "commit 1");
     let _hash2 = add_and_commit(&temp, "f1.txt", "v2", "commit 2");
@@ -90,6 +80,4 @@ fn test_bisect_good_bad_marks() {
         commit: hash3.clone(),
     }));
     assert!(result.is_ok(), "Mark bad should succeed");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }

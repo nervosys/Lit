@@ -111,8 +111,7 @@ fn test_init_in_current_directory() {
     let temp = TempDir::new().unwrap();
 
     // Change to temp directory
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // Init without path (uses current directory)
     let result = lit::commands::init::execute(false, None);
@@ -124,7 +123,6 @@ fn test_init_in_current_directory() {
     );
 
     // Restore original directory
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]

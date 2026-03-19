@@ -8,13 +8,9 @@ fn test_lfs_track_creates_litattributes() {
     let repo_path = temp.path().to_str().unwrap().to_string();
 
     lit::commands::init::execute(false, Some(repo_path.clone())).unwrap();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
-    let result =
-        lit::commands::lfs::execute_track(vec!["*.bin".to_string(), "*.dat".to_string()]);
-
-    std::env::set_current_dir(&original_dir).unwrap();
+    let result = lit::commands::lfs::execute_track(vec!["*.bin".to_string(), "*.dat".to_string()]);
 
     assert!(result.is_ok(), "LFS track should succeed: {:?}", result);
     let response = result.unwrap();
@@ -34,13 +30,10 @@ fn test_lfs_track_deduplicates_patterns() {
     let repo_path = temp.path().to_str().unwrap().to_string();
 
     lit::commands::init::execute(false, Some(repo_path.clone())).unwrap();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     lit::commands::lfs::execute_track(vec!["*.bin".to_string()]).unwrap();
     let result = lit::commands::lfs::execute_track(vec!["*.bin".to_string(), "*.dat".to_string()]);
-
-    std::env::set_current_dir(&original_dir).unwrap();
 
     assert!(result.is_ok(), "Second track should succeed: {:?}", result);
     let response = result.unwrap();
@@ -54,14 +47,14 @@ fn test_lfs_migrate_empty_repo() {
     let repo_path = temp.path().to_str().unwrap().to_string();
 
     lit::commands::init::execute(false, Some(repo_path.clone())).unwrap();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::lfs::execute_migrate(Some(1024));
 
-    std::env::set_current_dir(&original_dir).unwrap();
-
     assert!(result.is_ok(), "LFS migrate should succeed: {:?}", result);
     let response = result.unwrap();
-    assert_eq!(response.files_migrated, 0, "Empty repo should migrate 0 files");
+    assert_eq!(
+        response.files_migrated, 0,
+        "Empty repo should migrate 0 files"
+    );
 }

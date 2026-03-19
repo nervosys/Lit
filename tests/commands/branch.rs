@@ -22,13 +22,10 @@ fn create_file(dir: &std::path::Path, name: &str, content: &str) {
 fn create_commit(repo_path: &std::path::Path, filename: &str, message: &str) {
     create_file(repo_path, filename, "test content");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(repo_path).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(repo_path);
 
     lit::commands::add::execute(vec![filename.to_string()]).unwrap();
     lit::commands::commit::execute(message.to_string(), None).unwrap();
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -38,8 +35,7 @@ fn test_branch_create() {
     // Need at least one commit to create a branch
     create_commit(temp.path(), "initial.txt", "Initial commit");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::branch::execute(Some("feature".to_string()), false, false);
     assert!(result.is_ok(), "Branch creation should succeed");
@@ -47,22 +43,17 @@ fn test_branch_create() {
     // Verify branch reference exists
     let branch_ref = temp.path().join(".lit/refs/heads/feature");
     assert!(branch_ref.exists(), "Branch reference should exist");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_branch_list_empty() {
     let temp = init_test_repo();
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // List branches (should show none or just main without commits)
     let result = lit::commands::branch::execute(None, false, false);
     assert!(result.is_ok(), "Listing branches should succeed");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -71,8 +62,7 @@ fn test_branch_list_with_branches() {
 
     create_commit(temp.path(), "test.txt", "Initial commit");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // Create some branches
     lit::commands::branch::execute(Some("feature1".to_string()), false, false).unwrap();
@@ -85,8 +75,6 @@ fn test_branch_list_with_branches() {
     // Verify branch files exist
     assert!(temp.path().join(".lit/refs/heads/feature1").exists());
     assert!(temp.path().join(".lit/refs/heads/feature2").exists());
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -95,8 +83,7 @@ fn test_branch_delete() {
 
     create_commit(temp.path(), "test.txt", "Initial commit");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // Create a branch
     lit::commands::branch::execute(Some("to-delete".to_string()), false, false).unwrap();
@@ -112,8 +99,6 @@ fn test_branch_delete() {
         !branch_ref.exists(),
         "Branch should not exist after deletion"
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -122,8 +107,7 @@ fn test_branch_delete_current_fails() {
 
     create_commit(temp.path(), "test.txt", "Initial commit");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // Try to delete the current branch (main)
     let result = lit::commands::branch::execute(Some("main".to_string()), true, false);
@@ -132,16 +116,13 @@ fn test_branch_delete_current_fails() {
         result.unwrap_err().contains("currently checked out"),
         "Error should mention current branch"
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_branch_delete_requires_name() {
     let temp = init_test_repo();
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // Try to delete without specifying a branch name
     let result = lit::commands::branch::execute(None, true, false);
@@ -150,8 +131,6 @@ fn test_branch_delete_requires_name() {
         result.unwrap_err().contains("required"),
         "Error should mention name required"
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -160,8 +139,7 @@ fn test_branch_points_to_same_commit() {
 
     create_commit(temp.path(), "test.txt", "Initial commit");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // Get current commit hash
     let main_hash = fs::read_to_string(temp.path().join(".lit/refs/heads/main")).unwrap();
@@ -177,8 +155,6 @@ fn test_branch_points_to_same_commit() {
         new_branch_hash.trim(),
         "New branch should point to same commit as main"
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -187,8 +163,7 @@ fn test_branch_create_multiple() {
 
     create_commit(temp.path(), "test.txt", "Initial commit");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // Create multiple branches
     lit::commands::branch::execute(Some("branch1".to_string()), false, false).unwrap();
@@ -199,6 +174,4 @@ fn test_branch_create_multiple() {
     assert!(temp.path().join(".lit/refs/heads/branch1").exists());
     assert!(temp.path().join(".lit/refs/heads/branch2").exists());
     assert!(temp.path().join(".lit/refs/heads/branch3").exists());
-
-    std::env::set_current_dir(original_dir).unwrap();
 }

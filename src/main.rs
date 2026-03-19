@@ -1,13 +1,13 @@
 #![allow(dead_code)]
 mod commands;
+mod config;
 mod core;
 mod crypto;
 mod errors;
+mod formatter;
 mod network;
 mod ontology;
 mod response;
-mod config;
-mod formatter;
 mod storage;
 
 use clap::{Parser, Subcommand};
@@ -258,7 +258,6 @@ enum Commands {
     RotateKey,
 
     // --- Phase 1.5-1.8 ---
-
     /// Stash changes temporarily
     Stash {
         #[command(subcommand)]
@@ -337,7 +336,6 @@ enum Commands {
     },
 
     // --- Phase 2: Agentic Features ---
-
     /// Execute multiple operations from JSONL stdin
     Batch {
         /// Stop on first failure
@@ -403,7 +401,6 @@ enum Commands {
     Verify,
 
     // --- Phase 3: API Server & MCP ---
-
     /// Start the Lit REST API server
     Serve {
         /// Port to listen on
@@ -413,6 +410,14 @@ enum Commands {
         /// Bearer token for authentication
         #[arg(long, env = "LIT_API_TOKEN", hide_env_values = true)]
         token: Option<String>,
+
+        /// Use stdio transport (for SSH pipe mode)
+        #[arg(long)]
+        stdio: bool,
+
+        /// Run as lit:// protocol daemon (TCP, port 9418 default)
+        #[arg(long)]
+        daemon: bool,
     },
 
     /// Start the MCP (Model Context Protocol) tool server
@@ -432,9 +437,7 @@ enum Commands {
         command: SwarmCommands,
     },
 
-
     // --- Phase 4: Git Interop ---
-
     /// Import a Git repository into Lit format
     ImportGit {
         /// Path to Git repository (directory containing .git)
@@ -448,7 +451,6 @@ enum Commands {
     },
 
     // --- Phase 5: Performance ---
-
     /// Garbage collection - pack loose objects
     Gc,
 
@@ -618,20 +620,23 @@ fn main() {
     // Set passphrase env var from CLI flags (so encryption functions pick it up)
     if let Some(passphrase) = &cli.passphrase {
         // SAFETY: Called in single-threaded main() before any thread spawning
-        unsafe { std::env::set_var("LIT_PASSPHRASE", passphrase); }
+        unsafe {
+            std::env::set_var("LIT_PASSPHRASE", passphrase);
+        }
     } else if let Some(file_path) = &cli.passphrase_file {
         // SAFETY: Called in single-threaded main() before any thread spawning
-        unsafe { std::env::set_var("LIT_PASSPHRASE_FILE", file_path); }
+        unsafe {
+            std::env::set_var("LIT_PASSPHRASE_FILE", file_path);
+        }
     }
 
-        // Load hierarchical config (user global -> repo-local -> env vars)
-    let _config = config::LitConfig::load(
-        core::find_repo_root().ok().as_deref(),
-    );
+    // Load hierarchical config (user global -> repo-local -> env vars)
+    let _config = config::LitConfig::load(core::find_repo_root().ok().as_deref());
 
     let format = Format::resolve(cli.json, cli.human, cli.output.as_deref());
 
     // Helper macro to run a command, render its response, and handle errors
+    // Structured error output uses LitError for machine-readable codes and suggestions
     macro_rules! run {
         ($expr:expr) => {
             match $expr {
@@ -644,7 +649,11 @@ fn main() {
                     println!();
                 }
                 Err(e) => {
-                    eprintln!("{}", format_error(&e, format));
+                    let lit_err = errors::LitError::general(e);
+                    let output = formatter::format_error(&lit_err, lit_err.error_code(), format);
+                    use std::io::Write;
+                    let _ = std::io::stderr().write_all(&output);
+                    let _ = std::io::stderr().write_all(b"\n");
                     process::exit(1);
                 }
             }
@@ -704,11 +713,25 @@ fn main() {
 
         // Phase 1.5-1.8
         Commands::Stash { command } => run!(commands::stash::execute(command)),
-        Commands::Reset { target, soft, hard } => run!(commands::reset::execute(target, soft, hard)),
+        Commands::Reset { target, soft, hard } => {
+            run!(commands::reset::execute(target, soft, hard))
+        }
         Commands::Revert { target } => run!(commands::revert::execute(target)),
         Commands::CherryPick { target } => run!(commands::cherry_pick::execute(target)),
-        Commands::Rebase { base, interactive, onto, abort, cont } => {
-            run!(commands::rebase::execute(base, interactive, onto, abort, cont))
+        Commands::Rebase {
+            base,
+            interactive,
+            onto,
+            abort,
+            cont,
+        } => {
+            run!(commands::rebase::execute(
+                base,
+                interactive,
+                onto,
+                abort,
+                cont
+            ))
         }
         Commands::Blame { file } => run!(commands::blame::execute(file)),
         Commands::Bisect { command } => run!(commands::bisect::execute(command)),
@@ -721,27 +744,59 @@ fn main() {
             TxCommands::Commit => run!(commands::transaction::execute_commit_tx()),
             TxCommands::Rollback => run!(commands::transaction::execute_rollback()),
         },
-        Commands::Snapshot { message, author, metadata } => {
+        Commands::Snapshot {
+            message,
+            author,
+            metadata,
+        } => {
             let meta = match metadata
                 .map(|s| serde_json::from_str::<serde_json::Value>(&s))
                 .transpose()
             {
                 Ok(v) => v,
                 Err(e) => {
-                    eprintln!("{}", format_error(&format!("Invalid metadata JSON: {}", e), format));
+                    let lit_err =
+                        errors::LitError::general(format!("Invalid metadata JSON: {}", e));
+                    let output = formatter::format_error(&lit_err, "snapshot", format);
+                    use std::io::Write;
+                    let _ = std::io::stderr().write_all(&output);
+                    let _ = std::io::stderr().write_all(b"\n");
                     process::exit(1);
                 }
             };
             run!(commands::snapshot::execute(message, author, meta))
         }
-        Commands::Search { query, messages, metadata, max_results } => {
-            run!(commands::search::execute(query, messages, metadata, max_results))
+        Commands::Search {
+            query,
+            messages,
+            metadata,
+            max_results,
+        } => {
+            run!(commands::search::execute(
+                query,
+                messages,
+                metadata,
+                max_results
+            ))
         }
         Commands::Watch { debounce, filter } => run!(commands::watch::execute(debounce, filter)),
         Commands::Verify => run!(commands::verify::execute()),
 
         // Phase 3
-        Commands::Serve { port, token } => run!(commands::serve::execute(port, token)),
+        Commands::Serve {
+            port,
+            token,
+            stdio,
+            daemon,
+        } => {
+            if stdio {
+                run!(commands::serve::execute_stdio())
+            } else if daemon {
+                run!(commands::serve::execute_daemon(port))
+            } else {
+                run!(commands::serve::execute(port, token))
+            }
+        }
         Commands::McpServe { stdio, port } => {
             if let Some(p) = port {
                 run!(commands::mcp_serve::execute_http(p))
@@ -751,10 +806,18 @@ fn main() {
             }
         }
         Commands::Swarm { command } => match command {
-            SwarmCommands::Register { agent_id } => run!(commands::swarm::execute_register(agent_id)),
+            SwarmCommands::Register { agent_id } => {
+                run!(commands::swarm::execute_register(agent_id))
+            }
             SwarmCommands::List => run!(commands::swarm::execute_list()),
-            SwarmCommands::LeaseAcquire { agent, path, duration } => {
-                run!(commands::swarm::execute_lease_acquire(agent, path, duration))
+            SwarmCommands::LeaseAcquire {
+                agent,
+                path,
+                duration,
+            } => {
+                run!(commands::swarm::execute_lease_acquire(
+                    agent, path, duration
+                ))
             }
             SwarmCommands::LeaseRelease { agent, path } => {
                 run!(commands::swarm::execute_lease_release(agent, path))
@@ -784,20 +847,5 @@ fn main() {
             }
             println!();
         }
-    }
-}
-
-fn format_error(error: &str, format: Format) -> String {
-    match format {
-        Format::Json | Format::MsgPack => {
-            let err_obj = serde_json::json!({
-                "status": "error",
-                "error": {
-                    "message": error,
-                }
-            });
-            serde_json::to_string_pretty(&err_obj).unwrap_or_else(|_| format!("Error: {}", error))
-        }
-        Format::Human => format!("Error: {}", error),
     }
 }

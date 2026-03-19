@@ -14,14 +14,11 @@ fn init_test_repo() -> TempDir {
 #[test]
 fn test_rotate_key_without_encryption() {
     let temp = init_test_repo();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::rotate_key::rotate_key();
     assert!(
         result.is_err(),
         "Rotate key should fail when encryption is not enabled"
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }

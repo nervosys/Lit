@@ -17,8 +17,7 @@ fn init_test_repo() -> TempDir {
 #[test]
 fn test_mcp_serve_http_starts() {
     let temp = init_test_repo();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let handle = std::thread::spawn(|| {
         lit::commands::mcp_serve::execute_http(19384)
@@ -27,6 +26,4 @@ fn test_mcp_serve_http_starts() {
     std::thread::sleep(std::time::Duration::from_millis(200));
 
     assert!(!handle.is_finished(), "MCP HTTP server should still be running");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }

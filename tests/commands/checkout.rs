@@ -22,13 +22,10 @@ fn create_file(dir: &std::path::Path, name: &str, content: &str) {
 fn create_commit(repo_path: &std::path::Path, filename: &str, content: &str, message: &str) {
     create_file(repo_path, filename, content);
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(repo_path).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(repo_path);
 
     lit::commands::add::execute(vec![filename.to_string()]).unwrap();
     lit::commands::commit::execute(message.to_string(), None).unwrap();
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -37,8 +34,7 @@ fn test_checkout_create_new_branch() {
 
     create_commit(temp.path(), "test.txt", "content", "Initial commit");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::checkout::execute("new-branch".to_string(), true);
     assert!(
@@ -56,8 +52,6 @@ fn test_checkout_create_new_branch() {
         head_content.contains("new-branch"),
         "HEAD should point to new branch"
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -66,8 +60,7 @@ fn test_checkout_existing_branch() {
 
     create_commit(temp.path(), "test.txt", "content", "Initial commit");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // Create a branch
     lit::commands::branch::execute(Some("feature".to_string()), false, false).unwrap();
@@ -85,16 +78,13 @@ fn test_checkout_existing_branch() {
         head_content.contains("feature"),
         "HEAD should point to feature branch"
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_checkout_switches_working_directory() {
     let temp = init_test_repo();
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // Create initial commit
     create_commit(temp.path(), "file1.txt", "content1", "First commit");
@@ -113,8 +103,6 @@ fn test_checkout_switches_working_directory() {
         temp.path().join("file1.txt").exists(),
         "file1.txt should exist"
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -123,8 +111,7 @@ fn test_checkout_updates_index() {
 
     create_commit(temp.path(), "test.txt", "content", "Initial commit");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // Create and checkout new branch
     lit::commands::checkout::execute("new-branch".to_string(), true).unwrap();
@@ -135,8 +122,6 @@ fn test_checkout_updates_index() {
         index.entries.contains_key("test.txt"),
         "Index should contain test.txt after checkout"
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -145,8 +130,7 @@ fn test_checkout_creates_branch_at_current_commit() {
 
     create_commit(temp.path(), "test.txt", "content", "Initial commit");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // Get current commit hash
     let main_hash = fs::read_to_string(temp.path().join(".lit/refs/heads/main")).unwrap();
@@ -162,16 +146,13 @@ fn test_checkout_creates_branch_at_current_commit() {
         new_branch_hash.trim(),
         "New branch should point to same commit"
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_checkout_restores_files() {
     let temp = init_test_repo();
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // Create initial commit
     create_commit(
@@ -197,16 +178,13 @@ fn test_checkout_restores_files() {
         restored_content, "original content",
         "File should be restored to committed version"
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_checkout_with_subdirectory() {
     let temp = init_test_repo();
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // Create subdirectory with file
     fs::create_dir(temp.path().join("subdir")).unwrap();
@@ -224,16 +202,13 @@ fn test_checkout_with_subdirectory() {
         temp.path().join("subdir/nested.txt").exists(),
         "Subdirectory file should exist after checkout"
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_checkout_by_commit_hash() {
     let temp = init_test_repo();
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     create_commit(temp.path(), "file.txt", "content", "Initial commit");
 
@@ -255,6 +230,4 @@ fn test_checkout_by_commit_hash() {
         head_content.contains(&commit_hash) || head_content.contains("detached"),
         "HEAD should be detached or contain commit hash"
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }

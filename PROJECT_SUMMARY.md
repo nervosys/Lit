@@ -82,7 +82,7 @@ lit/
 │   │   └── audit.rs         # Audit logging with tamper detection
 │   └── crypto/              # Cryptography
 │       └── encryption.rs    # AES-256-GCM + ML-DSA signing
-├── tests/                   # 329 tests
+├── tests/                   # 341 tests
 │   └── commands/            # Integration tests for all commands
 ```
 
@@ -191,8 +191,10 @@ $ cat ~/.lit/audit.log
 
 ### Test Coverage
 - ✅ 63 unit tests (core objects, crypto, network, storage)
-- ✅ 198 command integration tests (all major command workflows)
+- ✅ 227 command integration tests (all major command workflows)
 - ✅ Transport detection and rejection tests
+- ✅ 16 HTTPS transport tests (API, auth, object transfer, push/fetch/clone roundtrip)
+- ✅ 13 SSH transport tests (URL parsing, pipe protocol, negotiate, upload/download, roundtrip)
 - ✅ Diff engine with word-diff tests
 - ✅ Encryption and passphrase cache tests
 - ✅ Airgap validation and audit log tests
@@ -315,7 +317,7 @@ lit --version
 
 ### Planned Features
 1. **lit Server**
-   - Implement lit:// protocol server
+   - ~~Implement lit:// protocol server~~ ✅ (TCP daemon via `lit serve --daemon`)
    - Repository hosting
    - Authentication/authorization
    - Push/pull operations

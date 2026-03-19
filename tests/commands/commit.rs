@@ -24,8 +24,7 @@ fn test_commit_creates_commit_object() {
 
     create_file(temp.path(), "test.txt", "Hello, World!");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // Add file
     lit::commands::add::execute(vec!["test.txt".to_string()]).unwrap();
@@ -47,16 +46,13 @@ fn test_commit_creates_commit_object() {
     // Verify branch ref exists
     let branch_ref = temp.path().join(".lit/refs/heads/main");
     assert!(branch_ref.exists(), "main branch reference should exist");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_commit_fails_with_empty_staging() {
     let temp = init_test_repo();
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::commit::execute("Empty commit".to_string(), None);
     assert!(result.is_err(), "Commit with empty staging should fail");
@@ -64,8 +60,6 @@ fn test_commit_fails_with_empty_staging() {
         result.unwrap_err().contains("empty"),
         "Error should mention empty staging"
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -74,24 +68,20 @@ fn test_commit_with_message() {
 
     create_file(temp.path(), "file.txt", "content");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     lit::commands::add::execute(vec!["file.txt".to_string()]).unwrap();
 
     let message = "Test commit message";
     let result = lit::commands::commit::execute(message.to_string(), None);
     assert!(result.is_ok(), "Commit should succeed");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_commit_creates_parent_chain() {
     let temp = init_test_repo();
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // First commit
     create_file(temp.path(), "file1.txt", "content1");
@@ -113,8 +103,6 @@ fn test_commit_creates_parent_chain() {
         second_commit_hash.trim(),
         "Commits should have different hashes"
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -123,8 +111,7 @@ fn test_commit_with_custom_author() {
 
     create_file(temp.path(), "test.txt", "content");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     lit::commands::add::execute(vec!["test.txt".to_string()]).unwrap();
 
@@ -133,8 +120,6 @@ fn test_commit_with_custom_author() {
         Some("Custom Author <author@example.com>".to_string()),
     );
     assert!(result.is_ok(), "Commit with custom author should succeed");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -143,8 +128,7 @@ fn test_commit_updates_branch_reference() {
 
     create_file(temp.path(), "file.txt", "content");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     lit::commands::add::execute(vec!["file.txt".to_string()]).unwrap();
 
@@ -168,8 +152,6 @@ fn test_commit_updates_branch_reference() {
         !commit_hash.trim().is_empty(),
         "Commit hash should not be empty"
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -180,8 +162,7 @@ fn test_commit_with_multiple_files() {
     create_file(temp.path(), "file2.txt", "content2");
     create_file(temp.path(), "file3.txt", "content3");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     lit::commands::add::execute(vec![
         "file1.txt".to_string(),
@@ -192,8 +173,6 @@ fn test_commit_with_multiple_files() {
 
     let result = lit::commands::commit::execute("Multi-file commit".to_string(), None);
     assert!(result.is_ok(), "Commit with multiple files should succeed");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -203,13 +182,10 @@ fn test_commit_with_subdirectory() {
     fs::create_dir(temp.path().join("subdir")).unwrap();
     create_file(&temp.path().join("subdir"), "nested.txt", "nested content");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     lit::commands::add::execute(vec!["subdir".to_string()]).unwrap();
 
     let result = lit::commands::commit::execute("Commit with subdirectory".to_string(), None);
     assert!(result.is_ok(), "Commit with subdirectory should succeed");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }

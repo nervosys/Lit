@@ -28,8 +28,7 @@ fn test_add_single_file() {
     create_file(temp.path(), "test.txt", "Hello, World!");
 
     // Change to repo directory
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // Add the file
     let result = lit::commands::add::execute(vec!["test.txt".to_string()]);
@@ -41,8 +40,6 @@ fn test_add_single_file() {
         index.entries.contains_key("test.txt"),
         "File should be in index"
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -53,8 +50,7 @@ fn test_add_multiple_files() {
     create_file(temp.path(), "file2.txt", "Content 2");
     create_file(temp.path(), "file3.txt", "Content 3");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::add::execute(vec![
         "file1.txt".to_string(),
@@ -68,8 +64,6 @@ fn test_add_multiple_files() {
     assert!(index.entries.contains_key("file1.txt"));
     assert!(index.entries.contains_key("file2.txt"));
     assert!(index.entries.contains_key("file3.txt"));
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -78,8 +72,7 @@ fn test_add_updates_existing_file() {
 
     create_file(temp.path(), "update.txt", "Original content");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // Add first version
     lit::commands::add::execute(vec!["update.txt".to_string()]).unwrap();
@@ -95,8 +88,6 @@ fn test_add_updates_existing_file() {
     let hash2 = index2.entries.get("update.txt").unwrap().hash.clone();
 
     assert_ne!(hash1, hash2, "Hash should change after modification");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -108,8 +99,7 @@ fn test_add_directory() {
     create_file(&temp.path().join("subdir"), "file1.txt", "Content 1");
     create_file(&temp.path().join("subdir"), "file2.txt", "Content 2");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::add::execute(vec!["subdir".to_string()]);
     assert!(result.is_ok(), "Add directory should succeed");
@@ -123,8 +113,6 @@ fn test_add_directory() {
         index.entries.contains_key("subdir/file2.txt"),
         "subdir/file2.txt should be in index"
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -142,8 +130,7 @@ fn test_add_all_files_with_dot() {
         println!("  - {:?}", entry.unwrap().path());
     }
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // Instead of adding ".", add files individually and directory
     let result1 = lit::commands::add::execute(vec!["file1.txt".to_string()]);
@@ -169,16 +156,13 @@ fn test_add_all_files_with_dot() {
     assert!(index.entries.contains_key("file1.txt"));
     assert!(index.entries.contains_key("file2.txt"));
     assert!(index.entries.contains_key("subdir/file3.txt"));
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_add_nonexistent_file_fails() {
     let temp = init_test_repo();
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::add::execute(vec!["nonexistent.txt".to_string()]);
     assert!(result.is_err(), "Add nonexistent file should fail");
@@ -186,8 +170,6 @@ fn test_add_nonexistent_file_fails() {
         result.unwrap_err().contains("not found"),
         "Error should mention file not found"
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -200,8 +182,7 @@ fn test_add_skips_lit_directory() {
     // Create normal file
     create_file(temp.path(), "normal.txt", "Normal file");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // Add normal.txt explicitly (adding "." has issues with the current implementation)
     lit::commands::add::execute(vec!["normal.txt".to_string()]).unwrap();
@@ -225,8 +206,6 @@ fn test_add_skips_lit_directory() {
         !index_after.entries.contains_key(".lit/internal.txt"),
         ".lit files should not be added"
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -235,8 +214,7 @@ fn test_add_creates_blob_objects() {
 
     create_file(temp.path(), "test.txt", "Test content");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     lit::commands::add::execute(vec!["test.txt".to_string()]).unwrap();
 
@@ -255,8 +233,6 @@ fn test_add_creates_blob_objects() {
         }
         _ => panic!("Expected Blob object"),
     }
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -265,8 +241,7 @@ fn test_add_preserves_file_mode() {
 
     create_file(temp.path(), "file.txt", "Content");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     lit::commands::add::execute(vec!["file.txt".to_string()]).unwrap();
 
@@ -275,6 +250,4 @@ fn test_add_preserves_file_mode() {
 
     // Default file mode should be 100644
     assert_eq!(entry.mode, "100644", "File mode should be 100644");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }

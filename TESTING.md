@@ -2,10 +2,10 @@
 
 ## Automated Test Suite
 
-Lit has a comprehensive automated test suite with **387 tests** covering all features:
+Lit has a comprehensive automated test suite with **428 tests** covering all features:
 
-- **198 CLI command tests** (coverage across 41 command modules)
-- **63 unit tests** (core objects, crypto, network, storage)
+- **239 CLI command tests** (coverage across 44 command modules incl. HTTPS, SSH, and lit:// transport)
+- **61 unit tests** (core objects, crypto, network, storage)
 - **Integration tests** (core functionality, network transport)
 - **Performance benchmarks** (baseline metrics)
 - **Adversarial/security tests** (airgap validation)

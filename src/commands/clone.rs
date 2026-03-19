@@ -1,9 +1,8 @@
 use crate::core::ObjectHash;
-use crate::network::transport;
+use crate::network::transport::{self, RemoteRepo};
 use crate::network::AirgapValidator;
 use crate::response::CloneResponse;
 use crate::storage::ObjectStore;
-use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 
@@ -11,16 +10,25 @@ pub fn execute(url: String, directory: Option<String>) -> Result<CloneResponse, 
     let validator = AirgapValidator::new()?;
     validator.validate_transport(&url)?;
 
-    let remote_path = transport::resolve_url(&url)?;
+    let remote_repo = RemoteRepo::open(&url)?;
 
     // Determine target directory
     let dir_name = if let Some(d) = directory {
         d
     } else {
-        remote_path
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| "repo".to_string())
+        // Extract a sensible name from the URL
+        let name = url
+            .trim_end_matches('/')
+            .rsplit('/')
+            .next()
+            .unwrap_or("repo")
+            .trim_end_matches(".git")
+            .trim_end_matches(".lit");
+        if name.is_empty() {
+            "repo".to_string()
+        } else {
+            name.to_string()
+        }
     };
 
     let target = std::env::current_dir()
@@ -34,7 +42,6 @@ pub fn execute(url: String, directory: Option<String>) -> Result<CloneResponse, 
     // Initialize the new repo
     fs::create_dir_all(&target).map_err(|e| format!("Failed to create directory: {}", e))?;
 
-    // Store current dir, cd into target, init, then restore
     let original_dir =
         std::env::current_dir().map_err(|e| format!("Failed to get current directory: {}", e))?;
     std::env::set_current_dir(&target).map_err(|e| format!("Failed to change directory: {}", e))?;
@@ -59,26 +66,21 @@ pub fn execute(url: String, directory: Option<String>) -> Result<CloneResponse, 
     )
     .map_err(|e| format!("Failed to write remotes config: {}", e))?;
 
-    // Transfer all objects
-    let remote_store = ObjectStore::new(&remote_path);
+    // Get remote branches and download objects
     let local_store = ObjectStore::new(&target);
+    let remote_branches = remote_repo.list_branches()?;
 
-    let remote_branches = transport::list_remote_branches(&remote_path)?;
-    let known: HashSet<String> = HashSet::new();
-    let mut total_transferred = 0;
+    let wants: Vec<String> = remote_branches.iter().map(|(_, h)| h.clone()).collect();
+    let needed = remote_repo.negotiate_download(&local_store, &wants)?;
+    let total_transferred = remote_repo.download_objects(&local_store, &needed)?;
 
+    // Create remote-tracking refs
     for (branch_name, hash) in &remote_branches {
-        let commit_hash = ObjectHash::from_hex(hash.clone());
-        let needed = transport::walk_commit_graph(&remote_store, &commit_hash, &known)?;
-        let transferred = transport::transfer_objects(&remote_store, &local_store, &needed)?;
-        total_transferred += transferred;
-
-        // Create remote-tracking ref
         transport::update_remote_tracking_ref(&target, "origin", branch_name, hash)?;
     }
 
     // Determine default branch from remote HEAD
-    let remote_head = transport::read_remote_head(&remote_path)?;
+    let remote_head = remote_repo.read_head()?;
     let default_branch = if remote_head.starts_with("ref: refs/heads/") {
         remote_head
             .strip_prefix("ref: refs/heads/")
@@ -94,14 +96,12 @@ pub fn execute(url: String, directory: Option<String>) -> Result<CloneResponse, 
         .find(|(name, _)| name == &default_branch)
     {
         crate::core::refs::write_ref(&target, &format!("heads/{}", default_branch), hash)?;
-        // Set HEAD to point to the default branch
         fs::write(
             target.join(".lit").join("HEAD"),
             format!("ref: refs/heads/{}\n", default_branch),
         )
         .map_err(|e| format!("Failed to write HEAD: {}", e))?;
 
-        // Checkout working tree
         checkout_tree(&target, &ObjectHash::from_hex(hash.clone()), &local_store)?;
     }
 

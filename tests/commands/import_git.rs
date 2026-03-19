@@ -22,8 +22,7 @@ fn create_test_git_repo(path: &std::path::Path) {
     hasher.update(&raw);
     let hash = hex::encode(hasher.finalize());
 
-    let mut encoder =
-        flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+    let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
     encoder.write_all(&raw).unwrap();
     let compressed = encoder.finish().unwrap();
 
@@ -39,13 +38,11 @@ fn test_import_git_creates_lit_repo() {
 
     let lit_temp = TempDir::new().unwrap();
     // Init a lit repo at the explicit path
-    lit::commands::init::execute(false, Some(lit_temp.path().to_str().unwrap().to_string())).unwrap();
+    lit::commands::init::execute(false, Some(lit_temp.path().to_str().unwrap().to_string()))
+        .unwrap();
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(lit_temp.path()).unwrap();
-    let result =
-        lit::commands::import_git::execute(git_temp.path().to_str().unwrap().to_string());
-    std::env::set_current_dir(&original_dir).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(lit_temp.path());
+    let result = lit::commands::import_git::execute(git_temp.path().to_str().unwrap().to_string());
 
     assert!(result.is_ok(), "import-git should succeed: {:?}", result);
     let response = result.unwrap();
@@ -60,10 +57,8 @@ fn test_import_git_invalid_source() {
     let temp = TempDir::new().unwrap();
     lit::commands::init::execute(false, Some(temp.path().to_str().unwrap().to_string())).unwrap();
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
     let result = lit::commands::import_git::execute("/nonexistent/path".to_string());
-    std::env::set_current_dir(&original_dir).unwrap();
 
     assert!(result.is_err(), "Should fail with invalid source path");
 }

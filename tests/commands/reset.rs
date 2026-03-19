@@ -26,8 +26,7 @@ fn add_and_commit(temp: &TempDir, filename: &str, content: &str, msg: &str) -> S
 #[test]
 fn test_reset_soft() {
     let temp = init_test_repo();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let hash1 = add_and_commit(&temp, "f1.txt", "v1", "commit 1");
     add_and_commit(&temp, "f2.txt", "v2", "commit 2");
@@ -47,15 +46,12 @@ fn test_reset_soft() {
     // Files should still exist in working tree after soft reset
     assert!(temp.path().join("f1.txt").exists());
     assert!(temp.path().join("f2.txt").exists());
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_reset_hard() {
     let temp = init_test_repo();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let hash1 = add_and_commit(&temp, "first.txt", "original", "commit 1");
     add_and_commit(&temp, "first.txt", "modified", "commit 2");
@@ -73,15 +69,12 @@ fn test_reset_hard() {
         content, "original",
         "File should be restored to commit 1 version"
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_reset_head_tilde() {
     let temp = init_test_repo();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     add_and_commit(&temp, "a.txt", "a", "commit 1");
     add_and_commit(&temp, "b.txt", "b", "commit 2");
@@ -93,20 +86,15 @@ fn test_reset_head_tilde() {
         "Reset HEAD~2 should succeed: {:?}",
         result.err()
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_reset_invalid_target() {
     let temp = init_test_repo();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     add_and_commit(&temp, "f.txt", "x", "first");
 
     let result = lit::commands::reset::execute("nonexistent".to_string(), false, false);
     assert!(result.is_err(), "Reset to invalid target should fail");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }

@@ -812,11 +812,17 @@ pub struct StashEntryInfo {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(tag = "action")]
 pub enum StashResponse {
+    #[serde(rename = "push")]
     Push { index: usize, message: String },
+    #[serde(rename = "pop")]
     Pop { index: usize, message: String },
+    #[serde(rename = "apply")]
     Apply { index: usize, message: String },
+    #[serde(rename = "list")]
     List { entries: Vec<StashEntryInfo> },
+    #[serde(rename = "drop")]
     Drop { index: usize, message: String },
 }
 
@@ -827,7 +833,10 @@ impl CommandResponse for StashResponse {
     fn human_readable(&self) -> String {
         match self {
             StashResponse::Push { index, message } => {
-                format!("Saved working directory to stash@{{{}}}: {}", index, message)
+                format!(
+                    "Saved working directory to stash@{{{}}}: {}",
+                    index, message
+                )
             }
             StashResponse::Pop { index, message } => {
                 format!("Applied and dropped stash@{{{}}}: {}", index, message)
@@ -865,7 +874,10 @@ impl CommandResponse for ResetResponse {
         "reset"
     }
     fn human_readable(&self) -> String {
-        format!("HEAD is now at {} ({})\n{}", self.target, self.mode, self.message)
+        format!(
+            "HEAD is now at {} ({})\n{}",
+            self.target, self.mode, self.message
+        )
     }
 }
 
@@ -932,7 +944,10 @@ impl CommandResponse for RebaseResponse {
             ));
         }
         if let Some(ref todo) = self.todo {
-            out.push_str(&format!("Todo: {}\n", serde_json::to_string_pretty(todo).unwrap_or_default()));
+            out.push_str(&format!(
+                "Todo: {}\n",
+                serde_json::to_string_pretty(todo).unwrap_or_default()
+            ));
         }
         out
     }
@@ -1086,7 +1101,12 @@ impl CommandResponse for TransactionResponse {
     }
     fn human_readable(&self) -> String {
         if let Some(ref id) = self.tx_id {
-            format!("Transaction {}: {} [{}]", self.action, self.message, &id[..8.min(id.len())])
+            format!(
+                "Transaction {}: {} [{}]",
+                self.action,
+                self.message,
+                &id[..8.min(id.len())]
+            )
         } else {
             format!("Transaction {}: {}", self.action, self.message)
         }
@@ -1143,7 +1163,12 @@ impl CommandResponse for SearchResponse {
         for m in &self.matches {
             match m.match_type.as_str() {
                 "content" => {
-                    out.push_str(&format!("  {}:{}: {}\n", m.file, m.line_number, m.content.trim()));
+                    out.push_str(&format!(
+                        "  {}:{}: {}\n",
+                        m.file,
+                        m.line_number,
+                        m.content.trim()
+                    ));
                 }
                 "message" => {
                     out.push_str(&format!(
@@ -1353,7 +1378,11 @@ impl CommandResponse for GcResponse {
     fn human_readable(&self) -> String {
         format!(
             "{}\n  Objects packed: {}\n  Packs created: {}\n  Loose removed: {}\n  Bytes saved: {}",
-            self.message, self.objects_packed, self.packs_created, self.loose_removed, self.bytes_saved
+            self.message,
+            self.objects_packed,
+            self.packs_created,
+            self.loose_removed,
+            self.bytes_saved
         )
     }
 }

@@ -1,37 +1,37 @@
 /// Integration tests for transport detection
 
 #[test]
-fn test_https_url_rejected_with_message() {
+fn test_https_url_rejected_by_resolve() {
     let result = lit::network::transport::resolve_url("https://github.com/example/repo.git");
     assert!(result.is_err());
     let err = result.unwrap_err();
     assert!(
-        err.contains("HTTPS transport is not yet implemented"),
-        "Error should mention HTTPS transport: {}",
+        err.contains("cannot be resolved to a local path"),
+        "Error should explain HTTPS needs RemoteRepo::open(): {}",
         err
     );
 }
 
 #[test]
-fn test_ssh_url_rejected_with_message() {
+fn test_ssh_url_rejected_by_resolve() {
     let result = lit::network::transport::resolve_url("ssh://git@github.com/example/repo.git");
     assert!(result.is_err());
     let err = result.unwrap_err();
     assert!(
-        err.contains("SSH transport is not yet implemented"),
-        "Error should mention SSH transport: {}",
+        err.contains("cannot be resolved to a local path"),
+        "Error should explain SSH needs RemoteRepo::open(): {}",
         err
     );
 }
 
 #[test]
-fn test_lit_protocol_url_rejected_with_message() {
+fn test_lit_protocol_url_rejected_by_resolve() {
     let result = lit::network::transport::resolve_url("lit://example.com/repo");
     assert!(result.is_err());
     let err = result.unwrap_err();
     assert!(
-        err.contains("lit:// transport is not yet implemented"),
-        "Error should mention lit:// transport: {}",
+        err.contains("cannot be resolved to a local path"),
+        "Error should explain lit:// needs RemoteRepo::open(): {}",
         err
     );
 }

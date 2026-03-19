@@ -25,8 +25,7 @@ fn add_and_commit(temp: &TempDir, filename: &str, content: &str, msg: &str) {
 #[test]
 fn test_resolve_no_merge_in_progress() {
     let temp = init_test_repo();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     add_and_commit(&temp, "f.txt", "content", "initial");
 
@@ -37,22 +36,17 @@ fn test_resolve_no_merge_in_progress() {
         false,
     );
     assert!(result.is_err(), "Resolve without active merge should fail");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_resolve_finish_no_merge() {
     let temp = init_test_repo();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     add_and_commit(&temp, "f.txt", "content", "initial");
 
     let result = lit::commands::resolve::execute(None, None, false, true);
     assert!(result.is_err(), "Finish without active merge should fail");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 
@@ -84,8 +78,7 @@ fn setup_merge_conflict(temp: &TempDir) {
 #[test]
 fn test_resolve_ours_strategy() {
     let temp = init_test_repo();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     setup_merge_conflict(&temp);
 
@@ -93,7 +86,6 @@ fn test_resolve_ours_strategy() {
     let merge_dir = temp.path().join(".lit").join("merge");
     if !merge_dir.exists() {
         // If the merge auto-resolved (no real conflict), skip gracefully
-        std::env::set_current_dir(original_dir).unwrap();
         return;
     }
 
@@ -109,21 +101,17 @@ fn test_resolve_ours_strategy() {
         resp.resolved_files.contains(&"conflict.txt".to_string()),
         "conflict.txt should be resolved"
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_resolve_theirs_strategy() {
     let temp = init_test_repo();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     setup_merge_conflict(&temp);
 
     let merge_dir = temp.path().join(".lit").join("merge");
     if !merge_dir.exists() {
-        std::env::set_current_dir(original_dir).unwrap();
         return;
     }
 
@@ -139,21 +127,17 @@ fn test_resolve_theirs_strategy() {
         resp.resolved_files.contains(&"conflict.txt".to_string()),
         "conflict.txt should be resolved"
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_resolve_recursive_rejected() {
     let temp = init_test_repo();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     setup_merge_conflict(&temp);
 
     let merge_dir = temp.path().join(".lit").join("merge");
     if !merge_dir.exists() {
-        std::env::set_current_dir(original_dir).unwrap();
         return;
     }
 
@@ -169,21 +153,17 @@ fn test_resolve_recursive_rejected() {
         err.contains("recursive"),
         "Error should mention recursive strategy: {}", err
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_resolve_missing_strategy() {
     let temp = init_test_repo();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     setup_merge_conflict(&temp);
 
     let merge_dir = temp.path().join(".lit").join("merge");
     if !merge_dir.exists() {
-        std::env::set_current_dir(original_dir).unwrap();
         return;
     }
 
@@ -199,6 +179,4 @@ fn test_resolve_missing_strategy() {
         err.contains("strategy"),
         "Error should mention --strategy: {}", err
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }

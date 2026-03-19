@@ -25,13 +25,10 @@ fn create_file(dir: &std::path::Path, name: &str, content: &str) {
 fn create_commit(repo_path: &std::path::Path, filename: &str, content: &str, message: &str) {
     create_file(repo_path, filename, content);
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(repo_path).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(repo_path);
 
     lit::commands::add::execute(vec![filename.to_string()]).unwrap();
     lit::commands::commit::execute(message.to_string(), None).unwrap();
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -45,8 +42,7 @@ fn test_search_file_contents() {
     );
     create_file(temp.path(), "data.txt", "Some data\nHello again\nMore data");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::search::execute(
         "Hello".to_string(),
@@ -63,8 +59,6 @@ fn test_search_file_contents() {
         "Should find 'Hello' in at least 2 lines"
     );
     assert_eq!(response.query, "Hello");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -77,8 +71,7 @@ fn test_search_case_insensitive() {
         "HELLO world\nhello WORLD\nHeLLo WoRLD",
     );
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::search::execute("hello".to_string(), false, None, 100);
     assert!(result.is_ok(), "Search should succeed");
@@ -88,8 +81,6 @@ fn test_search_case_insensitive() {
         response.total, 3,
         "Case-insensitive search should find all 3 lines"
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -98,8 +89,7 @@ fn test_search_no_matches() {
 
     create_file(temp.path(), "test.txt", "hello world");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result =
         lit::commands::search::execute("nonexistent_string_xyz".to_string(), false, None, 100);
@@ -107,8 +97,6 @@ fn test_search_no_matches() {
 
     let response = result.unwrap();
     assert_eq!(response.total, 0, "Should find no matches");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -119,8 +107,7 @@ fn test_search_max_results() {
     let content: String = (1..=20).map(|i| format!("match line {}\n", i)).collect();
     create_file(temp.path(), "many.txt", &content);
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::search::execute(
         "match".to_string(),
@@ -132,8 +119,6 @@ fn test_search_max_results() {
 
     let response = result.unwrap();
     assert!(response.total <= 5, "Should respect max_results limit");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -149,8 +134,7 @@ fn test_search_commit_messages() {
     create_commit(temp.path(), "file2.txt", "content2", "Add new feature");
     create_commit(temp.path(), "file3.txt", "content3", "Fix another bug");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::search::execute(
         "Fix".to_string(),
@@ -166,16 +150,13 @@ fn test_search_commit_messages() {
         response.total >= 2,
         "Should find 'Fix' in at least 2 commit messages"
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_search_commit_messages_no_commits() {
     let temp = init_test_repo();
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::search::execute("anything".to_string(), true, None, 100);
     assert!(
@@ -185,6 +166,4 @@ fn test_search_commit_messages_no_commits() {
 
     let response = result.unwrap();
     assert_eq!(response.total, 0, "Should find no matches with no commits");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }

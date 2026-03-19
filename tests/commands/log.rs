@@ -22,26 +22,20 @@ fn create_file(dir: &std::path::Path, name: &str, content: &str) {
 fn create_commit(repo_path: &std::path::Path, filename: &str, content: &str, message: &str) {
     create_file(repo_path, filename, content);
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(repo_path).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(repo_path);
 
     lit::commands::add::execute(vec![filename.to_string()]).unwrap();
     lit::commands::commit::execute(message.to_string(), None).unwrap();
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_log_empty_repository() {
     let temp = init_test_repo();
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::log::execute(10, false);
     assert!(result.is_ok(), "Log on empty repository should succeed");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -50,13 +44,10 @@ fn test_log_single_commit() {
 
     create_commit(temp.path(), "test.txt", "content", "Initial commit");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::log::execute(10, false);
     assert!(result.is_ok(), "Log with single commit should succeed");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -67,13 +58,10 @@ fn test_log_multiple_commits() {
     create_commit(temp.path(), "file2.txt", "content2", "Second commit");
     create_commit(temp.path(), "file3.txt", "content3", "Third commit");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::log::execute(10, false);
     assert!(result.is_ok(), "Log with multiple commits should succeed");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -87,14 +75,11 @@ fn test_log_with_count_limit() {
     create_commit(temp.path(), "file4.txt", "content4", "Commit 4");
     create_commit(temp.path(), "file5.txt", "content5", "Commit 5");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // Request only 3 commits
     let result = lit::commands::log::execute(3, false);
     assert!(result.is_ok(), "Log with count limit should succeed");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -103,13 +88,10 @@ fn test_log_oneline_format() {
 
     create_commit(temp.path(), "test.txt", "content", "Test commit");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::log::execute(10, true);
     assert!(result.is_ok(), "Log with oneline format should succeed");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -123,13 +105,10 @@ fn test_log_shows_most_recent_first() {
 
     create_commit(temp.path(), "file2.txt", "content2", "Second commit");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::log::execute(10, false);
     assert!(result.is_ok(), "Log should show most recent commit first");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -139,13 +118,10 @@ fn test_log_with_multiline_message() {
     let message = "First line\nSecond line\nThird line";
     create_commit(temp.path(), "test.txt", "content", message);
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::log::execute(10, false);
     assert!(result.is_ok(), "Log with multiline message should succeed");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -154,13 +130,10 @@ fn test_log_displays_author() {
 
     create_commit(temp.path(), "test.txt", "content", "Test commit");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::log::execute(10, false);
     assert!(result.is_ok(), "Log should display author information");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -169,13 +142,10 @@ fn test_log_displays_date() {
 
     create_commit(temp.path(), "test.txt", "content", "Test commit");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::log::execute(10, false);
     assert!(result.is_ok(), "Log should display date information");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
@@ -186,14 +156,11 @@ fn test_log_oneline_with_multiple_commits() {
     create_commit(temp.path(), "file2.txt", "content2", "Second commit");
     create_commit(temp.path(), "file3.txt", "content3", "Third commit");
 
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     let result = lit::commands::log::execute(10, true);
     assert!(
         result.is_ok(),
         "Log oneline with multiple commits should succeed"
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 }

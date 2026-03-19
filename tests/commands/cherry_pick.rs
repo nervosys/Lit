@@ -26,8 +26,7 @@ fn add_and_commit(temp: &TempDir, filename: &str, content: &str, msg: &str) -> S
 #[test]
 fn test_cherry_pick_commit() {
     let temp = init_test_repo();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     // Create base commit on main
     add_and_commit(&temp, "base.txt", "base", "base commit");
@@ -52,20 +51,15 @@ fn test_cherry_pick_commit() {
     assert!(temp.path().join("feature.txt").exists());
     let content = fs::read_to_string(temp.path().join("feature.txt")).unwrap();
     assert_eq!(content, "feature content");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
 
 #[test]
 fn test_cherry_pick_invalid_target() {
     let temp = init_test_repo();
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
 
     add_and_commit(&temp, "f.txt", "x", "first");
 
     let result = lit::commands::cherry_pick::execute("nonexistent_hash".to_string());
     assert!(result.is_err(), "Cherry-pick of invalid target should fail");
-
-    std::env::set_current_dir(original_dir).unwrap();
 }
