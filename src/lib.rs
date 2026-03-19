@@ -29,14 +29,14 @@
 pub mod commands;
 /// Hierarchical configuration (repo-local → user global → env vars)
 pub mod config;
-/// Output formatting (JSON, human-readable, MessagePack)
-pub mod formatter;
 /// Core VCS primitives: objects (blob, tree, commit, tag), refs, and repo discovery
 pub mod core;
 /// Post-quantum cryptographic operations: hashing, signing, encryption, key management
 pub mod crypto;
 /// Typed error system with machine-readable error codes and remediation hints
 pub mod errors;
+/// Output formatting (JSON, human-readable, MessagePack)
+pub mod formatter;
 /// Network transport layer: HTTPS, SSH, lit:// protocol, air-gap enforcement
 pub mod network;
 /// Machine-readable ontology and JSON Schema generation for agent discovery

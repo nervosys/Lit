@@ -669,60 +669,125 @@ fn call_tool(
         }
         "lit_init" => {
             let bare = args.get("bare").and_then(|v| v.as_bool()).unwrap_or(false);
-            let path = args.get("path").and_then(|v| v.as_str()).map(|s| s.to_string());
+            let path = args
+                .get("path")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
             let resp = commands::init::execute(bare, path)?;
             serde_json::to_value(&resp).map_err(|e| e.to_string().into())
         }
         "lit_tag" => {
-            let name = args.get("name").and_then(|v| v.as_str()).map(|s| s.to_string());
-            let message = args.get("message").and_then(|v| v.as_str()).map(|s| s.to_string());
-            let annotate = args.get("annotate").and_then(|v| v.as_bool()).unwrap_or(false);
-            let delete = args.get("delete").and_then(|v| v.as_bool()).unwrap_or(false);
+            let name = args
+                .get("name")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let message = args
+                .get("message")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let annotate = args
+                .get("annotate")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let delete = args
+                .get("delete")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
             let sign = args.get("sign").and_then(|v| v.as_bool()).unwrap_or(false);
-            let verify = args.get("verify").and_then(|v| v.as_bool()).unwrap_or(false);
+            let verify = args
+                .get("verify")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
             let list = args.get("list").and_then(|v| v.as_bool()).unwrap_or(false);
-            let commit = args.get("commit").and_then(|v| v.as_str()).map(|s| s.to_string());
-            let resp = commands::tag::execute(name, message, annotate, delete, sign, verify, list, commit)?;
+            let commit = args
+                .get("commit")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let resp = commands::tag::execute(
+                name, message, annotate, delete, sign, verify, list, commit,
+            )?;
             serde_json::to_value(&resp).map_err(|e| e.to_string().into())
         }
         "lit_push" => {
-            let remote = args.get("remote").and_then(|v| v.as_str()).ok_or("Missing 'remote'")?.to_string();
-            let branch = args.get("branch").and_then(|v| v.as_str()).ok_or("Missing 'branch'")?.to_string();
+            let remote = args
+                .get("remote")
+                .and_then(|v| v.as_str())
+                .ok_or("Missing 'remote'")?
+                .to_string();
+            let branch = args
+                .get("branch")
+                .and_then(|v| v.as_str())
+                .ok_or("Missing 'branch'")?
+                .to_string();
             let force = args.get("force").and_then(|v| v.as_bool()).unwrap_or(false);
             let resp = commands::push::execute(remote, branch, force)?;
             serde_json::to_value(&resp).map_err(|e| e.to_string().into())
         }
         "lit_pull" => {
-            let remote = args.get("remote").and_then(|v| v.as_str()).ok_or("Missing 'remote'")?.to_string();
-            let branch = args.get("branch").and_then(|v| v.as_str()).ok_or("Missing 'branch'")?.to_string();
+            let remote = args
+                .get("remote")
+                .and_then(|v| v.as_str())
+                .ok_or("Missing 'remote'")?
+                .to_string();
+            let branch = args
+                .get("branch")
+                .and_then(|v| v.as_str())
+                .ok_or("Missing 'branch'")?
+                .to_string();
             let resp = commands::pull::execute(remote, branch)?;
             serde_json::to_value(&resp).map_err(|e| e.to_string().into())
         }
         "lit_fetch" => {
-            let remote = args.get("remote").and_then(|v| v.as_str()).ok_or("Missing 'remote'")?.to_string();
-            let branch = args.get("branch").and_then(|v| v.as_str()).map(|s| s.to_string());
+            let remote = args
+                .get("remote")
+                .and_then(|v| v.as_str())
+                .ok_or("Missing 'remote'")?
+                .to_string();
+            let branch = args
+                .get("branch")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
             let resp = commands::fetch::execute(remote, branch)?;
             serde_json::to_value(&resp).map_err(|e| e.to_string().into())
         }
         "lit_clone" => {
-            let url = args.get("url").and_then(|v| v.as_str()).ok_or("Missing 'url'")?.to_string();
-            let directory = args.get("directory").and_then(|v| v.as_str()).map(|s| s.to_string());
+            let url = args
+                .get("url")
+                .and_then(|v| v.as_str())
+                .ok_or("Missing 'url'")?
+                .to_string();
+            let directory = args
+                .get("directory")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
             let resp = commands::clone::execute(url, directory)?;
             serde_json::to_value(&resp).map_err(|e| e.to_string().into())
         }
         "lit_stash" => {
             // Default to stash push with optional message
-            let message = args.get("message").and_then(|v| v.as_str()).map(|s| s.to_string());
-            let action = args.get("action").and_then(|v| v.as_str()).unwrap_or("push");
+            let message = args
+                .get("message")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let action = args
+                .get("action")
+                .and_then(|v| v.as_str())
+                .unwrap_or("push");
             let stash_cmd = match action {
                 "pop" => Some(crate::StashCommands::Pop),
                 "list" => Some(crate::StashCommands::List),
                 "apply" => {
-                    let index = args.get("index").and_then(|v| v.as_u64()).map(|i| i as usize);
+                    let index = args
+                        .get("index")
+                        .and_then(|v| v.as_u64())
+                        .map(|i| i as usize);
                     Some(crate::StashCommands::Apply { index })
                 }
                 "drop" => {
-                    let index = args.get("index").and_then(|v| v.as_u64()).map(|i| i as usize);
+                    let index = args
+                        .get("index")
+                        .and_then(|v| v.as_u64())
+                        .map(|i| i as usize);
                     Some(crate::StashCommands::Drop { index })
                 }
                 _ => Some(crate::StashCommands::Push { message }),
@@ -731,47 +796,88 @@ fn call_tool(
             serde_json::to_value(&resp).map_err(|e| e.to_string().into())
         }
         "lit_reset" => {
-            let target = args.get("target").and_then(|v| v.as_str()).ok_or("Missing 'target'")?.to_string();
+            let target = args
+                .get("target")
+                .and_then(|v| v.as_str())
+                .ok_or("Missing 'target'")?
+                .to_string();
             let soft = args.get("soft").and_then(|v| v.as_bool()).unwrap_or(false);
             let hard = args.get("hard").and_then(|v| v.as_bool()).unwrap_or(false);
             let resp = commands::reset::execute(target, soft, hard)?;
             serde_json::to_value(&resp).map_err(|e| e.to_string().into())
         }
         "lit_revert" => {
-            let target = args.get("target").and_then(|v| v.as_str()).ok_or("Missing 'target'")?.to_string();
+            let target = args
+                .get("target")
+                .and_then(|v| v.as_str())
+                .ok_or("Missing 'target'")?
+                .to_string();
             let resp = commands::revert::execute(target)?;
             serde_json::to_value(&resp).map_err(|e| e.to_string().into())
         }
         "lit_cherry_pick" => {
-            let target = args.get("target").and_then(|v| v.as_str()).ok_or("Missing 'target'")?.to_string();
+            let target = args
+                .get("target")
+                .and_then(|v| v.as_str())
+                .ok_or("Missing 'target'")?
+                .to_string();
             let resp = commands::cherry_pick::execute(target)?;
             serde_json::to_value(&resp).map_err(|e| e.to_string().into())
         }
         "lit_rebase" => {
-            let base = args.get("base").and_then(|v| v.as_str()).ok_or("Missing 'base'")?.to_string();
-            let interactive = args.get("interactive").and_then(|v| v.as_bool()).unwrap_or(false);
-            let onto = args.get("onto").and_then(|v| v.as_str()).map(|s| s.to_string());
+            let base = args
+                .get("base")
+                .and_then(|v| v.as_str())
+                .ok_or("Missing 'base'")?
+                .to_string();
+            let interactive = args
+                .get("interactive")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let onto = args
+                .get("onto")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
             let abort = args.get("abort").and_then(|v| v.as_bool()).unwrap_or(false);
-            let cont = args.get("continue").and_then(|v| v.as_bool()).unwrap_or(false);
+            let cont = args
+                .get("continue")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
             let resp = commands::rebase::execute(base, interactive, onto, abort, cont)?;
             serde_json::to_value(&resp).map_err(|e| e.to_string().into())
         }
         "lit_blame" => {
-            let file = args.get("file").and_then(|v| v.as_str()).ok_or("Missing 'file'")?.to_string();
+            let file = args
+                .get("file")
+                .and_then(|v| v.as_str())
+                .ok_or("Missing 'file'")?
+                .to_string();
             let resp = commands::blame::execute(file)?;
             serde_json::to_value(&resp).map_err(|e| e.to_string().into())
         }
         "lit_reflog" => {
-            let ref_name = args.get("ref_name").and_then(|v| v.as_str()).map(|s| s.to_string());
+            let ref_name = args
+                .get("ref_name")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
             let count = args.get("count").and_then(|v| v.as_u64()).unwrap_or(20) as usize;
             let resp = commands::reflog::execute(ref_name, count)?;
             serde_json::to_value(&resp).map_err(|e| e.to_string().into())
         }
         "lit_resolve" => {
-            let file = args.get("file").and_then(|v| v.as_str()).map(|s| s.to_string());
-            let strategy = args.get("strategy").and_then(|v| v.as_str()).map(|s| s.to_string());
+            let file = args
+                .get("file")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let strategy = args
+                .get("strategy")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
             let all = args.get("all").and_then(|v| v.as_bool()).unwrap_or(false);
-            let finish = args.get("finish").and_then(|v| v.as_bool()).unwrap_or(false);
+            let finish = args
+                .get("finish")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
             let resp = commands::resolve::execute(file, strategy, all, finish)?;
             serde_json::to_value(&resp).map_err(|e| e.to_string().into())
         }
@@ -780,15 +886,30 @@ fn call_tool(
             serde_json::to_value(&resp).map_err(|e| e.to_string().into())
         }
         "lit_config" => {
-            let action = args.get("action").and_then(|v| v.as_str()).unwrap_or("show");
+            let action = args
+                .get("action")
+                .and_then(|v| v.as_str())
+                .unwrap_or("show");
             let config_cmd = match action {
                 "get" => {
-                    let key = args.get("key").and_then(|v| v.as_str()).ok_or("Missing 'key'")?.to_string();
+                    let key = args
+                        .get("key")
+                        .and_then(|v| v.as_str())
+                        .ok_or("Missing 'key'")?
+                        .to_string();
                     Some(crate::ConfigCommands::Get { key })
                 }
                 "set" => {
-                    let key = args.get("key").and_then(|v| v.as_str()).ok_or("Missing 'key'")?.to_string();
-                    let value = args.get("value").and_then(|v| v.as_str()).ok_or("Missing 'value'")?.to_string();
+                    let key = args
+                        .get("key")
+                        .and_then(|v| v.as_str())
+                        .ok_or("Missing 'key'")?
+                        .to_string();
+                    let value = args
+                        .get("value")
+                        .and_then(|v| v.as_str())
+                        .ok_or("Missing 'value'")?
+                        .to_string();
                     Some(crate::ConfigCommands::Set { key, value })
                 }
                 _ => Some(crate::ConfigCommands::Show),

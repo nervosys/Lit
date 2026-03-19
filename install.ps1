@@ -68,6 +68,50 @@ else {
     Write-Host "✓ Configuration file created at $configPath" -ForegroundColor Green
 }
 
+# Set environment variables (user-scoped, not machine-global)
+Write-Host ""
+Write-Host "Configuring environment variables (user scope)..." -ForegroundColor Yellow
+
+$envVars = @{
+    "LIT_OUTPUT"                  = "json"
+    "OTEL_EXPORTER_OTLP_ENDPOINT" = "https://nervosys.ai/otlp"
+    "OTEL_EXPORTER_OTLP_PROTOCOL" = "http/protobuf"
+    "OTEL_SERVICE_NAME"           = "lit"
+}
+
+foreach ($kv in $envVars.GetEnumerator()) {
+    $existing = [Environment]::GetEnvironmentVariable($kv.Key, "User")
+    if ($existing) {
+        Write-Host "  ⚠ $($kv.Key) already set, keeping existing value" -ForegroundColor Yellow
+    }
+    else {
+        [Environment]::SetEnvironmentVariable($kv.Key, $kv.Value, "User")
+        Set-Item -Path "env:$($kv.Key)" -Value $kv.Value
+        Write-Host "  ✓ $($kv.Key) = $($kv.Value)" -ForegroundColor Green
+    }
+}
+
+# OTEL auth header (sensitive — prompt if not already set)
+$existingHeaders = [Environment]::GetEnvironmentVariable("OTEL_EXPORTER_OTLP_HEADERS", "User")
+if (-not $existingHeaders) {
+    Write-Host ""
+    Write-Host "  OpenTelemetry auth header (OTEL_EXPORTER_OTLP_HEADERS) is not set." -ForegroundColor Yellow
+    Write-Host "  Format: Authorization=Bearer <token>" -ForegroundColor Gray
+    $otelHeaders = Read-Host "  Enter OTEL auth header (or press Enter to skip)"
+    if ($otelHeaders) {
+        [Environment]::SetEnvironmentVariable("OTEL_EXPORTER_OTLP_HEADERS", $otelHeaders, "User")
+        $env:OTEL_EXPORTER_OTLP_HEADERS = $otelHeaders
+        Write-Host "  ✓ OTEL_EXPORTER_OTLP_HEADERS configured" -ForegroundColor Green
+    }
+    else {
+        Write-Host "  ⚠ Skipped — set manually later with:" -ForegroundColor Yellow
+        Write-Host '    [Environment]::SetEnvironmentVariable("OTEL_EXPORTER_OTLP_HEADERS", "Authorization=Bearer <token>", "User")' -ForegroundColor Gray
+    }
+}
+else {
+    Write-Host "  ⚠ OTEL_EXPORTER_OTLP_HEADERS already set, keeping existing value" -ForegroundColor Yellow
+}
+
 # Verify installation
 Write-Host ""
 Write-Host "Verifying installation..." -ForegroundColor Yellow
@@ -99,6 +143,11 @@ Write-Host "Next steps:" -ForegroundColor Yellow
 Write-Host "  1. Edit $configPath to configure your intranet networks"
 Write-Host "  2. Run 'lit init' in a directory to create a repository"
 Write-Host "  3. See QUICKSTART.md for usage examples"
+Write-Host ""
+Write-Host "Environment variables set (user scope):" -ForegroundColor Gray
+Write-Host "  LIT_OUTPUT, OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_PROTOCOL," -ForegroundColor Gray
+Write-Host "  OTEL_SERVICE_NAME, OTEL_EXPORTER_OTLP_HEADERS" -ForegroundColor Gray
+Write-Host "  Restart your shell for changes to take effect." -ForegroundColor Gray
 Write-Host ""
 Write-Host "Documentation:" -ForegroundColor Yellow
 Write-Host "  - README.md         : Overview"

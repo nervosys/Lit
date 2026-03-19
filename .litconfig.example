@@ -26,3 +26,22 @@ audit_log = true
 # Path to audit log file
 # Use ~ for home directory
 audit_log_path = "~/.lit/audit.log"
+
+# =============================================================================
+# Environment Variables (set via install.ps1 / install.sh, not this file)
+# =============================================================================
+#
+# Lit-specific:
+#   LIT_OUTPUT              Output format: json | human | msgpack (default: json)
+#   LIT_PASSPHRASE          Encryption passphrase (sensitive)
+#   LIT_PASSPHRASE_FILE     Path to file containing passphrase
+#   LIT_API_TOKEN           Bearer token for lit serve (sensitive)
+#
+# OpenTelemetry (configured during installation, stored user-scoped):
+#   OTEL_EXPORTER_OTLP_ENDPOINT    OTLP collector endpoint
+#   OTEL_EXPORTER_OTLP_PROTOCOL    Export protocol (http/protobuf)
+#   OTEL_EXPORTER_OTLP_HEADERS     Auth header (sensitive — Bearer token)
+#   OTEL_SERVICE_NAME               Service identifier
+#
+# Windows:  Set at User scope via [Environment]::SetEnvironmentVariable()
+# Linux/macOS: Stored in ~/.config/lit/env (mode 600), sourced by shell profile
