@@ -607,3 +607,58 @@ $ lit status --output json
 # Parse with jq
 $ lit log --output json | jq '.hash'
 ```
+
+## Example 19: Sandboxed Execution
+
+```bash
+# Create a sandbox from the current working tree
+$ lit sandbox init demo
+sandbox 'demo' created
+
+# List sandboxes
+$ lit sandbox list
+demo
+
+# Run a command inside the sandbox (fully isolated environment)
+# HOME, TEMP, PATH are redirected; network is airgapped
+$ lit sandbox run demo -- sh -c "echo HOME=\$HOME; echo PATH=\$PATH; ls"
+command completed successfully
+HOME=/path/to/repo/.lit/sandboxes/demo
+PATH=/usr/bin:/bin
+README.md
+src
+tests
+
+# Verify the sandbox environment is isolated
+$ lit sandbox run demo -- sh -c "env | sort"
+GIT_CONFIG_NOSYSTEM=1
+GIT_TERMINAL_PROMPT=0
+HOME=/path/to/repo/.lit/sandboxes/demo
+LIT_AIRGAPPED=1
+LIT_OUTPUT=json
+PATH=/usr/bin:/bin
+TEMP=/path/to/repo/.lit/sandboxes/demo/tmp
+TMP=/path/to/repo/.lit/sandboxes/demo/tmp
+TMPDIR=/path/to/repo/.lit/sandboxes/demo/tmp
+
+# Run a build or test command safely
+$ lit sandbox run demo -- python3 -m pytest tests/
+command completed successfully
+...test output...
+
+# Destroy the sandbox when done
+$ lit sandbox destroy demo
+sandbox 'demo' destroyed
+```
+
+### Sandbox Isolation Layers
+
+| Layer         | Protection                                              |
+|---------------|----------------------------------------------------------|
+| Filesystem    | Working tree copied into `.lit/sandboxes/<name>/`        |
+| Environment   | `env_clear()` — only minimal vars exposed                |
+| Home / Temp   | HOME, USERPROFILE, TEMP, TMP redirected to sandbox dir   |
+| PATH          | Restricted to system directories only                    |
+| Network       | `LIT_AIRGAPPED=1` — blocks all network protocols         |
+| Git config    | `GIT_CONFIG_NOSYSTEM=1` — prevents config file leaks     |
+| Credentials   | Cleared — no cloud tokens, SSH keys, or API keys present |
