@@ -1,4 +1,4 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 /// Output format for command responses
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -166,6 +166,7 @@ impl CommandResponse for StatusResponse {
     fn human_readable(&self) -> String {
         // ANSI color codes (matches git's palette)
         const GREEN: &str = "\x1b[32m";
+        const ORANGE: &str = "\x1b[33m";
         const RED: &str = "\x1b[31m";
         const BOLD: &str = "\x1b[1m";
         const RESET: &str = "\x1b[0m";
@@ -183,19 +184,15 @@ impl CommandResponse for StatusResponse {
         }
 
         if !self.staged.is_empty() {
-            out.push_str(&format!(
-                "\n{BOLD}Changes to be committed:{RESET}\n"
-            ));
+            out.push_str(&format!("\n{BOLD}Changes to be committed:{RESET}\n"));
             for f in &self.staged {
                 out.push_str(&format!("{GREEN}  new file:   {f}{RESET}\n"));
             }
         }
         if !self.modified.is_empty() {
-            out.push_str(&format!(
-                "\n{BOLD}Changes not staged for commit:{RESET}\n"
-            ));
+            out.push_str(&format!("\n{BOLD}Changes not staged for commit:{RESET}\n"));
             for f in &self.modified {
-                out.push_str(&format!("{RED}  modified:   {f}{RESET}\n"));
+                out.push_str(&format!("{ORANGE}  modified:   {f}{RESET}\n"));
             }
         }
         if !self.untracked.is_empty() {
