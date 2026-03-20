@@ -164,11 +164,17 @@ impl CommandResponse for StatusResponse {
         "status"
     }
     fn human_readable(&self) -> String {
+        // ANSI color codes (matches git's palette)
+        const GREEN: &str = "\x1b[32m";
+        const RED: &str = "\x1b[31m";
+        const BOLD: &str = "\x1b[1m";
+        const RESET: &str = "\x1b[0m";
+
         let mut out = String::new();
         if let Some(branch) = &self.branch {
-            out.push_str(&format!("On branch {}\n", branch));
+            out.push_str(&format!("On branch {BOLD}{branch}{RESET}\n"));
         } else {
-            out.push_str("HEAD detached\n");
+            out.push_str(&format!("{BOLD}HEAD detached{RESET}\n"));
         }
 
         if self.clean {
@@ -177,21 +183,25 @@ impl CommandResponse for StatusResponse {
         }
 
         if !self.staged.is_empty() {
-            out.push_str("\nChanges to be committed:\n");
+            out.push_str(&format!(
+                "\n{BOLD}Changes to be committed:{RESET}\n"
+            ));
             for f in &self.staged {
-                out.push_str(&format!("  new file:   {}\n", f));
+                out.push_str(&format!("{GREEN}  new file:   {f}{RESET}\n"));
             }
         }
         if !self.modified.is_empty() {
-            out.push_str("\nChanges not staged for commit:\n");
+            out.push_str(&format!(
+                "\n{BOLD}Changes not staged for commit:{RESET}\n"
+            ));
             for f in &self.modified {
-                out.push_str(&format!("  modified:   {}\n", f));
+                out.push_str(&format!("{RED}  modified:   {f}{RESET}\n"));
             }
         }
         if !self.untracked.is_empty() {
-            out.push_str("\nUntracked files:\n");
+            out.push_str(&format!("\n{BOLD}Untracked files:{RESET}\n"));
             for f in &self.untracked {
-                out.push_str(&format!("  {}\n", f));
+                out.push_str(&format!("{RED}  {f}{RESET}\n"));
             }
         }
         out
