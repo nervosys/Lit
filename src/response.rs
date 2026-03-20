@@ -1446,3 +1446,35 @@ impl CommandResponse for LfsMigrateResponse {
         )
     }
 }
+
+// ============================================================================
+// Sandbox Response
+// ============================================================================
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SandboxResponse {
+    pub action: String,
+    pub name: String,
+    pub path: String,
+    pub message: String,
+    pub output: Option<String>,
+    pub exit_code: Option<i32>,
+}
+
+impl CommandResponse for SandboxResponse {
+    fn command_name(&self) -> &'static str {
+        "sandbox"
+    }
+    fn human_readable(&self) -> String {
+        let mut out = format!("{}\n", self.message);
+        if let Some(ref text) = self.output {
+            if !text.is_empty() {
+                out.push_str(text);
+                if !text.ends_with('\n') {
+                    out.push('\n');
+                }
+            }
+        }
+        out
+    }
+}
