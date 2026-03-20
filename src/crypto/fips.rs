@@ -199,12 +199,32 @@ impl FipsModule {
     /// FIPS 140-3 IG 9.8 - DRBG Health Tests (SP 800-90A Rev. 1)
     /// Verifies randomness source meets entropy requirements
     fn test_rng(&self) -> Result<bool, String> {
-        // For software implementation using OS CSPRNG, verify entropy source
-        // In production FIPS 140-3 validated module, this tests:
-        // - Instantiate health test
-        // - Generate health test
-        // - Reseed health test
-        // - Continuous random number generator test
+        use aes_gcm::aead::rand_core::RngCore;
+        use aes_gcm::aead::OsRng;
+
+        // Generate two independent 32-byte blocks from the OS CSPRNG
+        let mut block_a = [0u8; 32];
+        let mut block_b = [0u8; 32];
+        OsRng.fill_bytes(&mut block_a);
+        OsRng.fill_bytes(&mut block_b);
+
+        // Continuous RNG test: two consecutive outputs must not be identical
+        if block_a == block_b {
+            return Err("FIPS RNG test failed: consecutive outputs are identical".to_string());
+        }
+
+        // Stuck-at-fault check: output must not be all zeros or all ones
+        if block_a.iter().all(|&b| b == 0) || block_a.iter().all(|&b| b == 0xFF) {
+            return Err("FIPS RNG test failed: output stuck at constant value".to_string());
+        }
+        if block_b.iter().all(|&b| b == 0) || block_b.iter().all(|&b| b == 0xFF) {
+            return Err("FIPS RNG test failed: output stuck at constant value".to_string());
+        }
+
+        // Zeroize temporary buffers
+        block_a.zeroize();
+        block_b.zeroize();
+
         Ok(true)
     }
 

@@ -772,7 +772,6 @@ dependencies = [
  "memmap2",
  "pbkdf2",
  "pqcrypto-dilithium",
- "pqcrypto-kyber",
  "pqcrypto-traits",
  "rand",
  "rayon",
@@ -948,19 +947,6 @@ dependencies = [
  "dunce",
  "getrandom 0.3.4",
  "libc",
-]
-
-[[package]]
-name = "pqcrypto-kyber"
-version = "0.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "15c00293cf898859d0c771455388054fd69ab712263c73fdc7f287a39b1ba000"
-dependencies = [
- "cc",
- "glob",
- "libc",
- "pqcrypto-internals",
- "pqcrypto-traits",
 ]
 
 [[package]]
@@ -1176,9 +1162,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-webpki"
-version = "0.103.9"
+version = "0.103.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d7df23109aa6c1567d1c575b9952556388da57401e4ace1d15f79eedad0d8f53"
+checksum = "df33b2b81ac578cabaf06b89b0631153a3f416b0a886e8a7a1707fb51abbd1ef"
 dependencies = [
  "ring",
  "rustls-pki-types",

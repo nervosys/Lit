@@ -328,7 +328,8 @@ impl EncryptionKey {
     }
 
     /// Save key to encrypted key file
-    /// SECURITY: Includes verification hash for passphrase validation
+    /// SECURITY: Uses atomic write (temp file + rename) to prevent corruption
+    /// on crash or power loss. Includes verification hash for passphrase validation.
     pub fn save(&self, key_file_str: &str, _passphrase: &str) -> Result<(), String> {
         let expanded = shellexpand::tilde(key_file_str);
         let key_file = Path::new(expanded.as_ref());
@@ -352,7 +353,12 @@ impl EncryptionKey {
         data.push(ENCRYPTION_VERSION);
         data.extend_from_slice(&verification_hash);
 
-        fs::write(key_file, data).map_err(|e| format!("Failed to write key file: {}", e))?;
+        // Atomic write: write to temp file then rename to prevent corruption
+        let temp_file = key_file.with_extension("tmp");
+        fs::write(&temp_file, &data)
+            .map_err(|e| format!("Failed to write temp key file: {}", e))?;
+        fs::rename(&temp_file, key_file)
+            .map_err(|e| format!("Failed to rename key file: {}", e))?;
 
         Ok(())
     }
@@ -482,12 +488,11 @@ pub fn cache_passphrase(repo_path: &str, passphrase: String, timeout: Option<Dur
 
 /// Retrieve cached passphrase if valid
 /// SECURITY: Returns clone of Zeroizing-wrapped passphrase
-pub fn get_cached_passphrase(repo_path: &str) -> Option<String> {
+pub fn get_cached_passphrase(repo_path: &str) -> Option<Zeroizing<String>> {
     if let Ok(mut cache) = PASSPHRASE_CACHE.lock() {
         if let Some(entry) = cache.get(repo_path) {
             if entry.is_valid() {
-                // Clone the inner String from Zeroizing wrapper
-                return Some((*entry.passphrase).clone());
+                return Some(entry.passphrase.clone());
             } else {
                 // Remove expired entry (passphrase auto-zeroized on drop)
                 cache.remove(repo_path);
@@ -515,11 +520,15 @@ pub fn clear_cached_passphrase(repo_path: &str) {
 ///
 /// Priority: LIT_PASSPHRASE env var > LIT_PASSPHRASE_FILE env var > cache
 /// Returns None if no non-interactive source is available.
-fn get_passphrase_non_interactive(repo_path: &str, config: &EncryptionConfig) -> Option<String> {
+/// SECURITY: Returns Zeroizing<String> to ensure passphrase is cleared from memory.
+fn get_passphrase_non_interactive(
+    repo_path: &str,
+    config: &EncryptionConfig,
+) -> Option<Zeroizing<String>> {
     // 1. Check LIT_PASSPHRASE env var
     if let Ok(pass) = std::env::var("LIT_PASSPHRASE") {
         if !pass.is_empty() {
-            return Some(pass);
+            return Some(Zeroizing::new(pass));
         }
     }
 
@@ -531,7 +540,7 @@ fn get_passphrase_non_interactive(repo_path: &str, config: &EncryptionConfig) ->
                 .trim_end_matches('\r')
                 .to_string();
             if !pass.is_empty() {
-                return Some(pass);
+                return Some(Zeroizing::new(pass));
             }
         }
     }
@@ -555,14 +564,16 @@ pub fn prompt_for_passphrase(
     repo_path: &str,
     config: &EncryptionConfig,
     prompt_text: &str,
-) -> Result<String, String> {
+) -> Result<Zeroizing<String>, String> {
     // Try non-interactive sources first
     if let Some(pass) = get_passphrase_non_interactive(repo_path, config) {
         return Ok(pass);
     }
 
     // Fall back to interactive prompt
-    rpassword::prompt_password(prompt_text).map_err(|e| format!("Failed to read passphrase: {}", e))
+    rpassword::prompt_password(prompt_text)
+        .map(Zeroizing::new)
+        .map_err(|e| format!("Failed to read passphrase: {}", e))
 }
 
 /// Minimum passphrase length (NIST SP 800-63B recommendation for high security)
@@ -610,12 +621,12 @@ fn validate_passphrase_strength(passphrase: &str) -> Result<(), String> {
 /// Prompt for passphrase confirmation (for new passphrases)
 ///
 /// Priority: LIT_PASSPHRASE env > LIT_PASSPHRASE_FILE > interactive prompt (with confirmation).
-pub fn prompt_for_passphrase_confirmation(prompt_text: &str) -> Result<String, String> {
+pub fn prompt_for_passphrase_confirmation(prompt_text: &str) -> Result<Zeroizing<String>, String> {
     // Check LIT_PASSPHRASE env var
     if let Ok(pass) = std::env::var("LIT_PASSPHRASE") {
         if !pass.is_empty() {
             validate_passphrase_strength(&pass)?;
-            return Ok(pass);
+            return Ok(Zeroizing::new(pass));
         }
     }
 
@@ -628,7 +639,7 @@ pub fn prompt_for_passphrase_confirmation(prompt_text: &str) -> Result<String, S
                 .to_string();
             if !pass.is_empty() {
                 validate_passphrase_strength(&pass)?;
-                return Ok(pass);
+                return Ok(Zeroizing::new(pass));
             }
         }
     }
@@ -646,7 +657,7 @@ pub fn prompt_for_passphrase_confirmation(prompt_text: &str) -> Result<String, S
 
     validate_passphrase_strength(&pass1)?;
 
-    Ok(pass1)
+    Ok(Zeroizing::new(pass1))
 }
 
 /// Encryption manager for repository
@@ -703,8 +714,8 @@ impl EncryptionManager {
         self.repo_path = Some(repo_path.to_string());
 
         // Try to get cached passphrase first
-        let actual_passphrase = if let Some(pass) = passphrase {
-            pass.to_string()
+        let actual_passphrase: Zeroizing<String> = if let Some(pass) = passphrase {
+            Zeroizing::new(pass.to_string())
         } else if let Some(cached) = get_cached_passphrase(repo_path) {
             cached
         } else {
@@ -717,7 +728,7 @@ impl EncryptionManager {
         // Cache the passphrase if caching is enabled
         if self.config.cache_timeout_secs > 0 {
             let timeout = Duration::from_secs(self.config.cache_timeout_secs);
-            cache_passphrase(repo_path, actual_passphrase, Some(timeout));
+            cache_passphrase(repo_path, (*actual_passphrase).clone(), Some(timeout));
         }
 
         Ok(())
@@ -868,7 +879,7 @@ mod tests {
         cache_passphrase(repo_path, passphrase.clone(), Some(Duration::from_secs(5)));
 
         // Should retrieve cached passphrase
-        assert_eq!(get_cached_passphrase(repo_path).unwrap(), passphrase);
+        assert_eq!(&*get_cached_passphrase(repo_path).unwrap(), &passphrase);
 
         // Clear specific entry
         clear_cached_passphrase(repo_path);
@@ -890,7 +901,7 @@ mod tests {
         );
 
         // Immediately should be available
-        assert_eq!(get_cached_passphrase(repo_path).unwrap(), passphrase);
+        assert_eq!(&*get_cached_passphrase(repo_path).unwrap(), &passphrase);
 
         // Wait for expiration
         std::thread::sleep(Duration::from_millis(1000));
@@ -906,13 +917,15 @@ mod tests {
         let pass1 = "password1".to_string();
         let pass2 = "password2".to_string();
 
+        clear_passphrase_cache();
+
         // Cache different passphrases for different repos
         cache_passphrase(repo1, pass1.clone(), Some(Duration::from_secs(60)));
         cache_passphrase(repo2, pass2.clone(), Some(Duration::from_secs(60)));
 
         // Should retrieve correct passphrase for each repo
-        assert_eq!(get_cached_passphrase(repo1).unwrap(), pass1);
-        assert_eq!(get_cached_passphrase(repo2).unwrap(), pass2);
+        assert_eq!(&*get_cached_passphrase(repo1).unwrap(), &pass1);
+        assert_eq!(&*get_cached_passphrase(repo2).unwrap(), &pass2);
     }
 
     #[test]
@@ -945,7 +958,7 @@ mod tests {
             .unwrap();
 
         // Passphrase should be cached
-        assert_eq!(get_cached_passphrase(repo_str).unwrap(), passphrase);
+        assert_eq!(&*get_cached_passphrase(repo_str).unwrap(), passphrase);
 
         // Should be able to initialize again without providing passphrase
         let mut manager2 = EncryptionManager::new(manager.config.clone());

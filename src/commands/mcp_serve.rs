@@ -104,6 +104,9 @@ pub fn execute_stdio() -> Result<McpServeResponse, crate::errors::LitError> {
 }
 
 /// Run MCP server over HTTP (uses tiny_http)
+/// SECURITY: Binds to 127.0.0.1 only — localhost binding provides implicit
+/// authentication since only local processes can connect. For remote access,
+/// use a reverse proxy with proper authentication.
 pub fn execute_http(port: u16) -> Result<McpServeResponse, crate::errors::LitError> {
     let bind_addr = format!("127.0.0.1:{}", port);
     let server = tiny_http::Server::http(&bind_addr)

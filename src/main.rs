@@ -667,6 +667,32 @@ fn main() {
         }
     }
 
+    // SECURITY: Clear passphrase from environment immediately after encryption
+    // subsystem reads it, to minimize exposure window. Deferred to after command
+    // dispatch so encryption functions can still read it.
+    // We use a scope guard pattern: set a flag to clear on exit.
+    struct PassphraseCleaner {
+        clear_passphrase: bool,
+        clear_passphrase_file: bool,
+    }
+    impl Drop for PassphraseCleaner {
+        fn drop(&mut self) {
+            // SAFETY: Called during main() cleanup, no other threads accessing env
+            unsafe {
+                if self.clear_passphrase {
+                    std::env::remove_var("LIT_PASSPHRASE");
+                }
+                if self.clear_passphrase_file {
+                    std::env::remove_var("LIT_PASSPHRASE_FILE");
+                }
+            }
+        }
+    }
+    let _passphrase_cleaner = PassphraseCleaner {
+        clear_passphrase: cli.passphrase.is_some(),
+        clear_passphrase_file: cli.passphrase_file.is_some(),
+    };
+
     // Load hierarchical config (user global -> repo-local -> env vars)
     let _config = config::LitConfig::load(core::find_repo_root().ok().as_deref());
 

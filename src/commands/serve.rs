@@ -79,9 +79,11 @@ pub fn execute_at(
                 let _ = request.respond(resp);
             }
             Err(e) => {
+                // SECURITY: Log internal message server-side, return generic message to client
+                eprintln!("API error: {}", e.internal_message());
                 let body = serde_json::json!({
                     "status": "error",
-                    "error": {"message": e.internal_message()}
+                    "error": {"message": e.user_message()}
                 })
                 .to_string();
                 let resp = Response::from_string(body)
@@ -143,9 +145,11 @@ pub fn execute_stdio() -> Result<ServeResponse, crate::errors::LitError> {
         let (status, response_body) = match route_request(method, path, body, &repo_root) {
             Ok((s, b)) => (s, b),
             Err(e) => {
+                // SECURITY: Log internal message server-side, return generic message to client
+                eprintln!("Stdio API error: {}", e.internal_message());
                 let err_body = serde_json::json!({
                     "status": "error",
-                    "error": {"message": e.internal_message()}
+                    "error": {"message": e.user_message()}
                 })
                 .to_string();
                 (500, err_body)
@@ -167,11 +171,12 @@ pub fn execute_stdio() -> Result<ServeResponse, crate::errors::LitError> {
 /// JSON protocol as stdio mode. Used by the `lit://` native transport.
 pub fn execute_daemon(port: u16) -> Result<ServeResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
-    let bind_addr = format!("0.0.0.0:{}", port);
+    // SECURITY: Bind to localhost only — network exposure requires explicit reverse proxy
+    let bind_addr = format!("127.0.0.1:{}", port);
     let listener = TcpListener::bind(&bind_addr)
         .map_err(|e| format!("Failed to bind lit:// daemon on {}: {}", bind_addr, e))?;
 
-    eprintln!("Lit daemon listening on lit://0.0.0.0:{}", port);
+    eprintln!("Lit daemon listening on lit://127.0.0.1:{}", port);
     eprintln!("Repository: {}", repo_root.display());
     eprintln!("Press Ctrl+C to stop");
 
@@ -352,6 +357,9 @@ fn route_request(
             if object.is_empty() {
                 return Ok((400, r#"{"status":"error","error":{"message":"Missing object ref"}}"#.to_string()));
             }
+            if !is_valid_ref(object) {
+                return Ok((400, r#"{"status":"error","error":{"message":"Invalid object ref"}}"#.to_string()));
+            }
             let resp = commands::show::execute(object.to_string())?;
             Ok((200, resp.to_json_output()))
         }
@@ -524,6 +532,9 @@ fn route_request(
         // Read a specific ref
         (Method::Get, p) if p.starts_with("/api/v1/transport/refs/heads/") => {
             let branch = &p["/api/v1/transport/refs/heads/".len()..];
+            if !is_valid_ref(branch) {
+                return Ok((400, r#"{"status":"error","error":{"message":"Invalid branch name"}}"#.to_string()));
+            }
             let hash = crate::core::refs::read_ref(repo_root, &format!("heads/{}", branch))?;
             Ok((200, serde_json::json!({"branch": branch, "hash": hash}).to_string()))
         }
@@ -531,6 +542,9 @@ fn route_request(
         // Check if object exists
         (Method::Get, p) if p.starts_with("/api/v1/transport/objects/") && p.ends_with("/exists") => {
             let hash_str = &p["/api/v1/transport/objects/".len()..p.len() - "/exists".len()];
+            if !is_valid_hex_hash(hash_str) {
+                return Ok((400, r#"{"status":"error","error":{"message":"Invalid object hash"}}"#.to_string()));
+            }
             let store = ObjectStore::new(repo_root);
             let exists = store.exists(&ObjectHash::from_hex(hash_str.to_string()));
             Ok((200, serde_json::json!({"hash": hash_str, "exists": exists}).to_string()))
@@ -539,6 +553,9 @@ fn route_request(
         // Download a single object (serialized bytes, base64 encoded)
         (Method::Get, p) if p.starts_with("/api/v1/transport/objects/") => {
             let hash_str = &p["/api/v1/transport/objects/".len()..];
+            if !is_valid_hex_hash(hash_str) {
+                return Ok((400, r#"{"status":"error","error":{"message":"Invalid object hash"}}"#.to_string()));
+            }
             let store = ObjectStore::new(repo_root);
             let hash = ObjectHash::from_hex(hash_str.to_string());
             let obj = store.read(&hash)?;
@@ -580,6 +597,9 @@ fn route_request(
         // Update a branch ref
         (Method::Put, p) if p.starts_with("/api/v1/transport/refs/heads/") => {
             let branch = &p["/api/v1/transport/refs/heads/".len()..];
+            if !is_valid_ref(branch) {
+                return Ok((400, r#"{"status":"error","error":{"message":"Invalid branch name"}}"#.to_string()));
+            }
             let payload: serde_json::Value = serde_json::from_str(body)
                 .map_err(|e| format!("Invalid JSON: {}", e))?;
             let hash = payload.get("hash")
@@ -678,6 +698,24 @@ fn parse_query_param(url: &str, key: &str) -> Option<String> {
         }
     }
     None
+}
+
+/// Validate a ref name (branch, tag) — alphanumeric, hyphens, underscores, dots, slashes.
+/// Rejects empty strings, leading/trailing slashes, double dots, and path traversal.
+fn is_valid_ref(name: &str) -> bool {
+    if name.is_empty() || name.len() > 256 {
+        return false;
+    }
+    if name.contains("..") || name.contains("//") || name.starts_with('/') || name.ends_with('/') {
+        return false;
+    }
+    name.chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' || c == '/')
+}
+
+/// Validate a hex-encoded object hash (up to 192 hex characters for SHA3-512+BLAKE3 composite).
+fn is_valid_hex_hash(s: &str) -> bool {
+    !s.is_empty() && s.len() <= 192 && s.chars().all(|c| c.is_ascii_hexdigit())
 }
 
 /// Base64 encode bytes (standard alphabet, no padding)

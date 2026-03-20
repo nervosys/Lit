@@ -9,6 +9,32 @@ use walkdir::WalkDir;
 /// Metadata file placed inside every sandbox root.
 const SANDBOX_META: &str = ".sandbox.toml";
 
+/// SECURITY: Validate sandbox name to prevent path traversal.
+/// Only allows alphanumeric characters, hyphens, underscores, and dots.
+/// Rejects empty names, names starting with a dot, and any path separators.
+fn validate_sandbox_name(name: &str) -> Result<(), LitError> {
+    if name.is_empty() || name.len() > 128 {
+        return Err(LitError::general(
+            "sandbox name must be 1-128 characters".to_string(),
+        ));
+    }
+    if name.starts_with('.') {
+        return Err(LitError::general(
+            "sandbox name must not start with '.'".to_string(),
+        ));
+    }
+    if !name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
+    {
+        return Err(LitError::general(
+            "sandbox name contains invalid characters (allowed: a-z, A-Z, 0-9, -, _, .)"
+                .to_string(),
+        ));
+    }
+    Ok(())
+}
+
 /// Default sandbox base directory under the repo's `.lit/` folder.
 fn sandbox_base(repo_root: &Path) -> PathBuf {
     repo_root.join(".lit").join("sandboxes")
@@ -37,6 +63,7 @@ pub fn execute_init(name: Option<String>) -> Result<SandboxResponse, LitError> {
 
     let name =
         name.unwrap_or_else(|| format!("sandbox-{}", chrono::Utc::now().format("%Y%m%d-%H%M%S")));
+    validate_sandbox_name(&name)?;
 
     let sb_dir = sandbox_dir(&repo_root, &name);
     if sb_dir.exists() {
@@ -75,6 +102,7 @@ pub fn execute_init(name: Option<String>) -> Result<SandboxResponse, LitError> {
 /// Run a command inside an existing sandbox with restricted environment.
 pub fn execute_run(name: String, cmd: Vec<String>) -> Result<SandboxResponse, LitError> {
     let repo_root = crate::core::find_repo_root()?;
+    validate_sandbox_name(&name)?;
     let sb_dir = sandbox_dir(&repo_root, &name);
 
     if !sb_dir.join(SANDBOX_META).exists() {
@@ -166,6 +194,7 @@ pub fn execute_list() -> Result<SandboxResponse, LitError> {
 /// Destroy a sandbox.
 pub fn execute_destroy(name: String) -> Result<SandboxResponse, LitError> {
     let repo_root = crate::core::find_repo_root()?;
+    validate_sandbox_name(&name)?;
     let sb_dir = sandbox_dir(&repo_root, &name);
 
     if !sb_dir.join(SANDBOX_META).exists() {

@@ -183,6 +183,19 @@ impl AuditLog {
                     .map_err(|e| format!("Failed to set key file permissions: {}", e))?;
             }
 
+            #[cfg(windows)]
+            {
+                // SECURITY: On Windows, mark file as read-only for the owner.
+                // Full DACL restriction would require winapi; read-only is a
+                // reasonable baseline to prevent accidental writes.
+                let mut perms = fs::metadata(&key_path)
+                    .map_err(|e| format!("Failed to get key file metadata: {}", e))?
+                    .permissions();
+                perms.set_readonly(true);
+                fs::set_permissions(&key_path, perms)
+                    .map_err(|e| format!("Failed to set key file permissions: {}", e))?;
+            }
+
             Ok(Zeroizing::new(key))
         }
     }

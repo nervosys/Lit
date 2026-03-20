@@ -42,7 +42,8 @@ regex = "1.10"
 dirs = "5.0"
 shellexpand = "3.1"
 # Post-Quantum Cryptography (NIST standards)
-pqcrypto-kyber = "0.8"     # ML-KEM (Kyber) - NIST post-quantum KEM
+# NOTE: pqcrypto-dilithium is unmaintained (RUSTSEC-2024-0380).
+# Migrate to pqcrypto-mldsa when a stable release is available.
 pqcrypto-dilithium = "0.5" # ML-DSA (Dilithium) - NIST post-quantum signatures
 pqcrypto-traits = "0.3"
 # Phase 3: API Server

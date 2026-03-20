@@ -399,9 +399,9 @@ impl AirgapValidator {
             path
         };
 
-        // Expand environment variables and tildes
-        let expanded =
-            shellexpand::full(path).map_err(|e| format!("Failed to expand path: {}", e))?;
+        // SECURITY: Only expand tilde (~), not arbitrary environment variables,
+        // to prevent injection via crafted paths containing e.g. ${MALICIOUS}
+        let expanded = shellexpand::tilde(path);
 
         Ok(expanded.to_string())
     }
@@ -555,7 +555,10 @@ mod tests {
 
     #[test]
     fn test_airgap_blocks_network_protocols() {
-        let config = AirgapConfig { enabled: true, ..Default::default() };
+        let config = AirgapConfig {
+            enabled: true,
+            ..Default::default()
+        };
         let validator = AirgapValidator { config };
 
         // Should block HTTP
@@ -572,7 +575,10 @@ mod tests {
 
     #[test]
     fn test_airgap_allows_local_filesystem() {
-        let config = AirgapConfig { enabled: true, ..Default::default() };
+        let config = AirgapConfig {
+            enabled: true,
+            ..Default::default()
+        };
         let validator = AirgapValidator { config };
 
         // Should allow local paths
@@ -583,7 +589,11 @@ mod tests {
 
     #[test]
     fn test_airgap_strict_mode_blocks_shares() {
-        let config = AirgapConfig { enabled: true, strict_mode: true, ..Default::default() };
+        let config = AirgapConfig {
+            enabled: true,
+            strict_mode: true,
+            ..Default::default()
+        };
         let validator = AirgapValidator { config };
 
         // Should block network shares in strict mode
