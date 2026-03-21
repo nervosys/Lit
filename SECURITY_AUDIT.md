@@ -177,7 +177,7 @@ Lit VCS v1.0.0 demonstrates a **strong security posture** for a v1 release. The 
 
 | Crate              | Version | Advisory          | Severity     | Impact                                                    |
 | ------------------ | ------- | ----------------- | ------------ | --------------------------------------------------------- |
-| pqcrypto-dilithium | 0.5.0   | RUSTSEC-2024-0380 | UNMAINTAINED | Replaced by `pqcrypto-mldsa` (migration planned for v1.1) |
+| ~~pqcrypto-dilithium~~ | ~~0.5.0~~ | ~~RUSTSEC-2024-0380~~ | ~~UNMAINTAINED~~ | ✅ RESOLVED — migrated to `pqcrypto-mldsa` 0.1.2 |
 | keccak             | 0.1.5   | RUSTSEC-2026-0012 | UNSOUND      | ARMv8 assembly backend issue (Windows x86_64 unaffected)  |
 | keccak             | 0.1.5   | —                 | YANKED       | Pinned by sha3 0.10.8; not applicable on x86_64           |
 
@@ -341,10 +341,10 @@ All 14 findings from this audit have been addressed. Summary:
 | **M-5** | Env var passphrase not cleared       | ✅ FIXED      | `src/main.rs` — added `PassphraseCleaner` drop guard that clears `LIT_PASSPHRASE`/`LIT_PASSPHRASE_FILE` on exit                         |
 | **L-1** | Unsanitized API refs/hashes          | ✅ FIXED      | `src/commands/serve.rs` — added `is_valid_ref()` and `is_valid_hex_hash()` validators on all API routes                                 |
 | **L-2** | MCP HTTP no auth                     | ✅ DOCUMENTED | `src/commands/mcp_serve.rs` — added security comment noting localhost binding as implicit auth per MCP spec                             |
-| **L-3** | No API rate limiting                 | ⚠️ ACCEPTED   | Risk accepted — localhost-only binding limits attack surface; rate limiting deferred to v1.1                                            |
-| **L-4** | Unmaintained PQ crate names          | ✅ MITIGATED  | `Cargo.toml` — removed unused `pqcrypto-kyber`; added deprecation note for `pqcrypto-dilithium` (migration to `pqcrypto-mldsa` planned) |
+| **L-3** | No API rate limiting                 | ✅ FIXED      | `src/commands/serve.rs`, `src/commands/mcp_serve.rs` — per-IP sliding window rate limiter (100 req/60s) on all HTTP and lit:// endpoints |
+| **L-4** | Unmaintained PQ crate names          | ✅ FIXED      | `Cargo.toml` — removed `pqcrypto-kyber`; migrated `pqcrypto-dilithium` → `pqcrypto-mldsa` 0.1.2 (RUSTSEC-2024-0380 resolved) |
 | **I-1** | No Windows ACL on audit files        | ✅ FIXED      | `src/network/audit.rs` — added `set_readonly(true)` on Windows for `audit.key`                                                          |
-| **I-2** | FIPS self-tests not auto-invoked     | ⚠️ ACCEPTED   | Self-tests available via `lit fips-self-test`; auto-invocation deferred to avoid startup latency                                        |
+| **I-2** | FIPS self-tests not auto-invoked     | ✅ FIXED      | `src/main.rs` — `FipsModule::power_on_self_test()` auto-invoked at startup (KATs for SHA-256, SHA-512, SHA3-512, HMAC-SHA-256, RNG) |
 | **I-3** | Error messages expose internal paths | ✅ FIXED      | `src/commands/serve.rs` — error responses now use `user_message()` with internal details logged server-side only                        |
 | **I-4** | Unused pqcrypto-kyber dependency     | ✅ FIXED      | `Cargo.toml` — removed `pqcrypto-kyber` entirely                                                                                        |
 | **I-5** | shellexpand on untrusted paths       | ✅ FIXED      | `src/network/airgap.rs` — changed `shellexpand::full()` to `shellexpand::tilde()`                                                       |
@@ -355,20 +355,19 @@ All 14 findings from this audit have been addressed. Summary:
 | -------------------- | ------- | -------- | --------------------------------- | ------------------------------------------------------- |
 | `rustls-webpki`      | 0.103.9 | 0.103.10 | RUSTSEC-2026-0049 (CRL matching)  | ✅ FIXED                                                 |
 | `keccak`             | 0.1.5   | 0.1.5    | RUSTSEC-2026-0012 (ARMv8 unsound) | ⚠️ NOT APPLICABLE — x86_64 only; pinned by `sha3 0.10.8` |
-| `pqcrypto-dilithium` | 0.5.0   | 0.5.0    | RUSTSEC-2024-0380 (unmaintained)  | ⚠️ PLANNED — migration to `pqcrypto-mldsa` in v1.1       |
+| `pqcrypto-mldsa`     | —       | 0.1.2    | —                                 | ✅ FIXED — migrated from `pqcrypto-dilithium` 0.5.0        |
 
 ### Post-Remediation Audit Results
 
 ```
-cargo audit: 0 vulnerabilities, 3 warnings (2 not applicable, 1 planned migration)
+cargo audit: 0 vulnerabilities, 2 warnings (keccak ARMv8 not applicable on x86_64, paste unmaintained transitive dep)
 cargo test --lib: 61 passed, 0 failed, 2 ignored
-cargo test --test command_tests: 223 passed, 16 failed (pre-existing SSH/lit:// Windows pipe issues)
+cargo test --test command_tests: 239 passed, 0 failed (stack overflow fixed with 16MB thread)
+cargo clippy --tests: 0 warnings
 cargo build --release: OK
 ```
 
 ### Residual Risk
 
-- **L-3 (Rate limiting):** Accepted risk — localhost binding limits DoS to local processes only
-- **I-2 (Auto self-test):** Accepted risk — available on-demand, startup latency concern
-- **keccak 0.1.5:** ARMv8 assembly unsoundness not applicable on x86_64 Windows target
-- **SSH/lit:// transport tests:** 16 test failures on Windows are pre-existing pipe handling issues unrelated to security changes
+- **keccak 0.1.5:** ARMv8 assembly unsoundness not applicable on x86_64 Windows target (transitive dep of `sha3 0.10.8`)
+- **paste:** Unmaintained transitive dependency of `pqcrypto-mldsa`; no actionable fix until upstream updates

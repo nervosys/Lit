@@ -15,7 +15,7 @@ Lit implements **quantum-resistant cryptography** following NIST post-quantum cr
 ### NIST FIPS 204 - Module-Lattice-Based Digital Signature Standard
 - **Approved**: August 2024
 - **Algorithm**: ML-DSA (formerly CRYSTALS-Dilithium)
-- **Security Level**: Level 5 (highest) using Dilithium5 variant
+- **Security Level**: Level 5 (highest) using ML-DSA-87 parameter set
 - **Use in Lit**: Optional commit signing for authenticity verification
 
 ## Hash Function Architecture
@@ -149,17 +149,17 @@ pub fn hash_object(data: &[u8]) -> String {
 ### Commit Signing
 
 ```rust
-use pqcrypto_dilithium::dilithium5;
+use pqcrypto_mldsa::mldsa87;
 
 // Generate keypair
-let (public_key, secret_key) = dilithium5::keypair();
+let (public_key, secret_key) = mldsa87::keypair();
 
 // Sign commit
 let commit_data = serialize_commit(&commit);
-let signature = dilithium5::detached_sign(&commit_data, &secret_key);
+let signature = mldsa87::detached_sign(&commit_data, &secret_key);
 
 // Verify signature
-dilithium5::verify_detached_signature(&signature, &commit_data, &public_key)
+mldsa87::verify_detached_signature(&signature, &commit_data, &public_key)
     .expect("Invalid signature");
 ```
 

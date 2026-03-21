@@ -78,7 +78,7 @@ All cryptographic algorithms implemented use CAVP (Cryptographic Algorithm Valid
 
 The following algorithms are available but **not used in FIPS mode**:
 - BLAKE3 (not FIPS approved)
-- Post-quantum signatures (ML-DSA/Dilithium - pending NIST standardization)
+- Post-quantum signatures (ML-DSA-87 — NIST FIPS 204, standardized August 2024)
 
 When `fips_mode = true`, only approved algorithms are permitted.
 
@@ -399,7 +399,7 @@ When FIPS mode is enabled in `.lit/encryption.toml`:
 
 Allows use of additional algorithms for research/development:
 - BLAKE3 (high-performance hashing)
-- ML-DSA/Dilithium (post-quantum signatures, NIST Round 3)
+- ML-DSA-87 (post-quantum signatures, NIST FIPS 204)
 - Hybrid classical+post-quantum schemes
 
 **Not recommended for federal compliance use cases.**

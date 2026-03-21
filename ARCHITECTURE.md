@@ -535,7 +535,7 @@ Some Git features are simplified or use different approaches:
 - `serde`/`serde_json`: Serialization
 - `chrono`: Timestamp handling
 - `aes-gcm`: AES-256-GCM encryption
-- `pqcrypto-dilithium`: ML-DSA post-quantum signatures
+- `pqcrypto-mldsa`: ML-DSA-87 post-quantum signatures (NIST FIPS 204)
 - `rmp-serde`: MsgPack serialization
 - `rayon`: Parallel I/O operations
 
