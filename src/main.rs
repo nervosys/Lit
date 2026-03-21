@@ -655,9 +655,7 @@ fn main() {
         .name("lit-main".to_string())
         .stack_size(STACK_SIZE);
 
-    let handler = builder
-        .spawn(run)
-        .expect("Failed to spawn main thread");
+    let handler = builder.spawn(run).expect("Failed to spawn main thread");
 
     if let Err(e) = handler.join() {
         // Re-panic on the main thread so the exit code is non-zero
