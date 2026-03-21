@@ -120,7 +120,8 @@ Write-Host "   Sandbox USERPROFILE: $sandboxHome" -ForegroundColor Red
 
 if ($realHome -ne $sandboxHome) {
     Write-Host "   --> Isolation confirmed: sandbox cannot see real home directory" -ForegroundColor Cyan
-} else {
+}
+else {
     Write-Host "   --> WARNING: HOME values match — isolation may not be working" -ForegroundColor Red
 }
 
@@ -128,7 +129,8 @@ if ($realHome -ne $sandboxHome) {
 $airgapped = ($runOut | Where-Object { $_ -match "LIT_AIRGAPPED=" } | Select-Object -First 1) -replace ".*LIT_AIRGAPPED=", ""
 if ($airgapped -eq "1") {
     Write-Host "   --> Network airgap confirmed: LIT_AIRGAPPED=1" -ForegroundColor Cyan
-} else {
+}
+else {
     Write-Host "   --> LIT_AIRGAPPED=$airgapped" -ForegroundColor DarkGray
 }
 

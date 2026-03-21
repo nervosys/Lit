@@ -653,12 +653,12 @@ sandbox 'demo' destroyed
 
 ### Sandbox Isolation Layers
 
-| Layer         | Protection                                              |
-|---------------|----------------------------------------------------------|
-| Filesystem    | Working tree copied into `.lit/sandboxes/<name>/`        |
-| Environment   | `env_clear()` — only minimal vars exposed                |
-| Home / Temp   | HOME, USERPROFILE, TEMP, TMP redirected to sandbox dir   |
-| PATH          | Restricted to system directories only                    |
-| Network       | `LIT_AIRGAPPED=1` — blocks all network protocols         |
-| Git config    | `GIT_CONFIG_NOSYSTEM=1` — prevents config file leaks     |
-| Credentials   | Cleared — no cloud tokens, SSH keys, or API keys present |
+| Layer       | Protection                                               |
+| ----------- | -------------------------------------------------------- |
+| Filesystem  | Working tree copied into `.lit/sandboxes/<name>/`        |
+| Environment | `env_clear()` — only minimal vars exposed                |
+| Home / Temp | HOME, USERPROFILE, TEMP, TMP redirected to sandbox dir   |
+| PATH        | Restricted to system directories only                    |
+| Network     | `LIT_AIRGAPPED=1` — blocks all network protocols         |
+| Git config  | `GIT_CONFIG_NOSYSTEM=1` — prevents config file leaks     |
+| Credentials | Cleared — no cloud tokens, SSH keys, or API keys present |
