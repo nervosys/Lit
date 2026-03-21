@@ -42,9 +42,7 @@ regex = "1.10"
 dirs = "5.0"
 shellexpand = "3.1"
 # Post-Quantum Cryptography (NIST standards)
-# NOTE: pqcrypto-dilithium is unmaintained (RUSTSEC-2024-0380).
-# Migrate to pqcrypto-mldsa when a stable release is available.
-pqcrypto-dilithium = "0.5" # ML-DSA (Dilithium) - NIST post-quantum signatures
+pqcrypto-mldsa = "0.1"  # ML-DSA (FIPS 204) - NIST post-quantum signatures
 pqcrypto-traits = "0.3"
 # Phase 3: API Server
 tiny_http = "0.12" # Lightweight sync HTTP server

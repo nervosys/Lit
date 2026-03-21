@@ -646,6 +646,37 @@ enum SandboxCommands {
 }
 
 fn main() {
+    // Use a thread with a larger stack to avoid stack overflow in debug builds.
+    // The Commands enum + route_request match arms produce large stack frames
+    // that exceed the default 8 MB stack in unoptimized debug builds on Windows.
+    const STACK_SIZE: usize = 16 * 1024 * 1024; // 16 MB
+
+    let builder = std::thread::Builder::new()
+        .name("lit-main".to_string())
+        .stack_size(STACK_SIZE);
+
+    let handler = builder
+        .spawn(run)
+        .expect("Failed to spawn main thread");
+
+    if let Err(e) = handler.join() {
+        // Re-panic on the main thread so the exit code is non-zero
+        std::panic::resume_unwind(e);
+    }
+}
+
+fn run() {
+    // FIPS 140-3 IG 9.6: Run power-on self-tests before any crypto operations
+    let crypto_config = crypto::CryptoConfig::load();
+    if crypto_config.enable_self_tests {
+        let mut fips = crypto::fips::FipsModule::new();
+        if let Err(e) = fips.power_on_self_test() {
+            eprintln!("FATAL: FIPS power-on self-test failed: {}", e);
+            eprintln!("Cryptographic module integrity cannot be verified. Aborting.");
+            process::exit(1);
+        }
+    }
+
     let cli = Cli::parse();
 
     // Enable airgap mode if flag is set

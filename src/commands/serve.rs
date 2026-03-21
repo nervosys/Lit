@@ -2,13 +2,53 @@ use crate::commands;
 use crate::core::{find_repo_root, Object, ObjectHash};
 use crate::response::{CommandResponse, ServeResponse};
 use crate::storage::ObjectStore;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, Write};
-use std::net::TcpListener;
+use std::net::{IpAddr, TcpListener};
+use std::sync::{Arc, Mutex};
+use std::time::Instant;
 use tiny_http::{Header, Method, Response, Server, StatusCode};
 
 /// Maximum request body size (1 MB)
 const MAX_BODY_SIZE: usize = 1_048_576;
+
+/// Maximum requests per IP per window
+const RATE_LIMIT_MAX_REQUESTS: u32 = 100;
+
+/// Rate limit window duration in seconds
+const RATE_LIMIT_WINDOW_SECS: u64 = 60;
+
+/// Per-IP rate limiter using a sliding window counter
+pub(crate) struct RateLimiter {
+    clients: HashMap<IpAddr, (Instant, u32)>,
+}
+
+impl RateLimiter {
+    pub(crate) fn new() -> Self {
+        RateLimiter {
+            clients: HashMap::new(),
+        }
+    }
+
+    /// Check whether a request from `ip` should be allowed.
+    /// Returns `true` if allowed, `false` if rate-limited.
+    pub(crate) fn check(&mut self, ip: IpAddr) -> bool {
+        let now = Instant::now();
+        let window = std::time::Duration::from_secs(RATE_LIMIT_WINDOW_SECS);
+
+        let entry = self.clients.entry(ip).or_insert((now, 0));
+        if now.duration_since(entry.0) >= window {
+            // Reset window
+            *entry = (now, 1);
+            true
+        } else if entry.1 < RATE_LIMIT_MAX_REQUESTS {
+            entry.1 += 1;
+            true
+        } else {
+            false
+        }
+    }
+}
 
 pub fn execute(port: u16, token: Option<String>) -> Result<ServeResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
@@ -33,7 +73,21 @@ pub fn execute_at(
     }
     eprintln!("Press Ctrl+C to stop");
 
+    let mut rate_limiter = RateLimiter::new();
+
     for mut request in server.incoming_requests() {
+        // Rate limiting
+        if let Some(ip) = request.remote_addr().map(|a| a.ip()) {
+            if !rate_limiter.check(ip) {
+                let body = r#"{"status":"error","error":{"message":"Rate limit exceeded"}}"#;
+                let resp = Response::from_string(body)
+                    .with_status_code(StatusCode(429))
+                    .with_header(json_content_type());
+                let _ = request.respond(resp);
+                continue;
+            }
+        }
+
         // Authenticate if token is set
         if let Some(ref expected_token) = token {
             let auth_header = request.headers().iter().find(|h| {
@@ -180,6 +234,8 @@ pub fn execute_daemon(port: u16) -> Result<ServeResponse, crate::errors::LitErro
     eprintln!("Repository: {}", repo_root.display());
     eprintln!("Press Ctrl+C to stop");
 
+    let rate_limiter = Arc::new(Mutex::new(RateLimiter::new()));
+
     for stream in listener.incoming() {
         let stream = match stream {
             Ok(s) => s,
@@ -188,6 +244,16 @@ pub fn execute_daemon(port: u16) -> Result<ServeResponse, crate::errors::LitErro
                 continue;
             }
         };
+
+        // Rate limit per peer IP
+        if let Ok(addr) = stream.peer_addr() {
+            if let Ok(mut rl) = rate_limiter.lock() {
+                if !rl.check(addr.ip()) {
+                    // Silently drop over-limit connections
+                    continue;
+                }
+            }
+        }
 
         let repo = repo_root.clone();
         std::thread::spawn(move || {

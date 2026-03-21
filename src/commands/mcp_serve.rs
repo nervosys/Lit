@@ -1,4 +1,5 @@
 use crate::commands;
+use crate::commands::serve::RateLimiter;
 use crate::ontology;
 use crate::response::McpServeResponse;
 use serde::{Deserialize, Serialize};
@@ -115,7 +116,19 @@ pub fn execute_http(port: u16) -> Result<McpServeResponse, crate::errors::LitErr
     eprintln!("Lit MCP server (HTTP) on http://{}", bind_addr);
     eprintln!("Press Ctrl+C to stop");
 
+    let mut rate_limiter = RateLimiter::new();
+
     for mut request in server.incoming_requests() {
+        // Rate limiting
+        if let Some(ip) = request.remote_addr().map(|a| a.ip()) {
+            if !rate_limiter.check(ip) {
+                let _ = request.respond(tiny_http::Response::from_string(
+                    r#"{"jsonrpc":"2.0","id":null,"error":{"code":-32000,"message":"Rate limit exceeded"}}"#,
+                ));
+                continue;
+            }
+        }
+
         let content_length = request.body_length().unwrap_or(0);
         if content_length > MAX_BODY_SIZE {
             let _ = request.respond(tiny_http::Response::from_string(

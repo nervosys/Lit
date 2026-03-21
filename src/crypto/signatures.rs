@@ -1,11 +1,11 @@
-/// Post-quantum digital signatures using NIST ML-DSA (Dilithium)
+/// Post-quantum digital signatures using NIST ML-DSA
 /// NIST FIPS 204 - Module-Lattice-Based Digital Signature Standard
-use pqcrypto_dilithium::dilithium5;
+use pqcrypto_mldsa::mldsa87;
 use pqcrypto_traits::sign::{DetachedSignature as _, PublicKey as _};
 use serde::{Deserialize, Serialize};
 
-/// Post-quantum signature using ML-DSA (Dilithium5)
-/// Dilithium5 provides NIST security level 5 (highest)
+/// Post-quantum signature using ML-DSA-87 (FIPS 204)
+/// ML-DSA-87 provides NIST security level 5 (highest)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PQSignature {
     /// The signature bytes
@@ -18,14 +18,14 @@ pub struct PQSignature {
 
 /// Post-quantum keypair
 pub struct PQKeyPair {
-    pub public_key: dilithium5::PublicKey,
-    pub secret_key: dilithium5::SecretKey,
+    pub public_key: mldsa87::PublicKey,
+    pub secret_key: mldsa87::SecretKey,
 }
 
 impl PQKeyPair {
     /// Generate a new quantum-resistant keypair
     pub fn generate() -> Self {
-        let (pk, sk) = dilithium5::keypair();
+        let (pk, sk) = mldsa87::keypair();
         PQKeyPair {
             public_key: pk,
             secret_key: sk,
@@ -34,12 +34,12 @@ impl PQKeyPair {
 
     /// Sign a message with post-quantum signature
     pub fn sign(&self, message: &[u8]) -> PQSignature {
-        let sig = dilithium5::detached_sign(message, &self.secret_key);
+        let sig = mldsa87::detached_sign(message, &self.secret_key);
 
         PQSignature {
             signature: sig.as_bytes().to_vec(),
             public_key: self.public_key.as_bytes().to_vec(),
-            algorithm: "ML-DSA-87 (Dilithium5)".to_string(),
+            algorithm: "ML-DSA-87".to_string(),
         }
     }
 }
@@ -48,15 +48,15 @@ impl PQSignature {
     /// Verify a post-quantum signature
     pub fn verify(&self, message: &[u8]) -> Result<(), String> {
         // Reconstruct public key
-        let pk = dilithium5::PublicKey::from_bytes(&self.public_key)
-            .map_err(|_| "Invalid public key")?;
+        let pk =
+            mldsa87::PublicKey::from_bytes(&self.public_key).map_err(|_| "Invalid public key")?;
 
         // Reconstruct signature
-        let sig = dilithium5::DetachedSignature::from_bytes(&self.signature)
+        let sig = mldsa87::DetachedSignature::from_bytes(&self.signature)
             .map_err(|_| "Invalid signature")?;
 
         // Verify
-        dilithium5::verify_detached_signature(&sig, message, &pk)
+        mldsa87::verify_detached_signature(&sig, message, &pk)
             .map_err(|_| "Signature verification failed".to_string())
     }
 }
