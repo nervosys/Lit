@@ -175,11 +175,11 @@ Lit VCS v1.0.0 demonstrates a **strong security posture** for a v1 release. The 
 
 ### `cargo audit` Results
 
-| Crate              | Version | Advisory          | Severity     | Impact                                                    |
-| ------------------ | ------- | ----------------- | ------------ | --------------------------------------------------------- |
-| ~~pqcrypto-dilithium~~ | ~~0.5.0~~ | ~~RUSTSEC-2024-0380~~ | ~~UNMAINTAINED~~ | ✅ RESOLVED — migrated to `pqcrypto-mldsa` 0.1.2 |
-| keccak             | 0.1.5   | RUSTSEC-2026-0012 | UNSOUND      | ARMv8 assembly backend issue (Windows x86_64 unaffected)  |
-| keccak             | 0.1.5   | —                 | YANKED       | Pinned by sha3 0.10.8; not applicable on x86_64           |
+| Crate                  | Version   | Advisory              | Severity         | Impact                                                   |
+| ---------------------- | --------- | --------------------- | ---------------- | -------------------------------------------------------- |
+| ~~pqcrypto-dilithium~~ | ~~0.5.0~~ | ~~RUSTSEC-2024-0380~~ | ~~UNMAINTAINED~~ | ✅ RESOLVED — migrated to `pqcrypto-mldsa` 0.1.2          |
+| keccak                 | 0.1.5     | RUSTSEC-2026-0012     | UNSOUND          | ARMv8 assembly backend issue (Windows x86_64 unaffected) |
+| keccak                 | 0.1.5     | —                     | YANKED           | Pinned by sha3 0.10.8; not applicable on x86_64          |
 
 **pqcrypto-kyber removed** (was unused, RUSTSEC-2024-0381). **rustls-webpki upgraded** to 0.103.10 (RUSTSEC-2026-0049 fixed).
 
@@ -332,30 +332,30 @@ All `unsafe` blocks have documented SAFETY comments. No undefined behavior patte
 
 All 14 findings from this audit have been addressed. Summary:
 
-| Finding | Description                          | Status       | Files Modified                                                                                                                          |
-| ------- | ------------------------------------ | ------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| **M-1** | Unzeroized passphrase clones         | ✅ FIXED      | `src/crypto/encryption.rs` — all passphrase retrieval paths now return `Zeroizing<String>`                                              |
-| **M-2** | RNG self-test stub                   | ✅ FIXED      | `src/crypto/fips.rs` — implemented continuous RNG health test (repetition count, stuck-at-fault detection) using OsRng                  |
-| **M-3** | Daemon binds 0.0.0.0                 | ✅ FIXED      | `src/commands/serve.rs` — daemon now binds `127.0.0.1`                                                                                  |
-| **M-4** | Sandbox name path traversal          | ✅ FIXED      | `src/commands/sandbox.rs` — added `validate_sandbox_name()` enforcing `^[a-zA-Z0-9_.-]+$`, max 128 chars, no leading dots               |
-| **M-5** | Env var passphrase not cleared       | ✅ FIXED      | `src/main.rs` — added `PassphraseCleaner` drop guard that clears `LIT_PASSPHRASE`/`LIT_PASSPHRASE_FILE` on exit                         |
-| **L-1** | Unsanitized API refs/hashes          | ✅ FIXED      | `src/commands/serve.rs` — added `is_valid_ref()` and `is_valid_hex_hash()` validators on all API routes                                 |
-| **L-2** | MCP HTTP no auth                     | ✅ DOCUMENTED | `src/commands/mcp_serve.rs` — added security comment noting localhost binding as implicit auth per MCP spec                             |
+| Finding | Description                          | Status       | Files Modified                                                                                                                           |
+| ------- | ------------------------------------ | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| **M-1** | Unzeroized passphrase clones         | ✅ FIXED      | `src/crypto/encryption.rs` — all passphrase retrieval paths now return `Zeroizing<String>`                                               |
+| **M-2** | RNG self-test stub                   | ✅ FIXED      | `src/crypto/fips.rs` — implemented continuous RNG health test (repetition count, stuck-at-fault detection) using OsRng                   |
+| **M-3** | Daemon binds 0.0.0.0                 | ✅ FIXED      | `src/commands/serve.rs` — daemon now binds `127.0.0.1`                                                                                   |
+| **M-4** | Sandbox name path traversal          | ✅ FIXED      | `src/commands/sandbox.rs` — added `validate_sandbox_name()` enforcing `^[a-zA-Z0-9_.-]+$`, max 128 chars, no leading dots                |
+| **M-5** | Env var passphrase not cleared       | ✅ FIXED      | `src/main.rs` — added `PassphraseCleaner` drop guard that clears `LIT_PASSPHRASE`/`LIT_PASSPHRASE_FILE` on exit                          |
+| **L-1** | Unsanitized API refs/hashes          | ✅ FIXED      | `src/commands/serve.rs` — added `is_valid_ref()` and `is_valid_hex_hash()` validators on all API routes                                  |
+| **L-2** | MCP HTTP no auth                     | ✅ DOCUMENTED | `src/commands/mcp_serve.rs` — added security comment noting localhost binding as implicit auth per MCP spec                              |
 | **L-3** | No API rate limiting                 | ✅ FIXED      | `src/commands/serve.rs`, `src/commands/mcp_serve.rs` — per-IP sliding window rate limiter (100 req/60s) on all HTTP and lit:// endpoints |
-| **L-4** | Unmaintained PQ crate names          | ✅ FIXED      | `Cargo.toml` — removed `pqcrypto-kyber`; migrated `pqcrypto-dilithium` → `pqcrypto-mldsa` 0.1.2 (RUSTSEC-2024-0380 resolved) |
-| **I-1** | No Windows ACL on audit files        | ✅ FIXED      | `src/network/audit.rs` — added `set_readonly(true)` on Windows for `audit.key`                                                          |
-| **I-2** | FIPS self-tests not auto-invoked     | ✅ FIXED      | `src/main.rs` — `FipsModule::power_on_self_test()` auto-invoked at startup (KATs for SHA-256, SHA-512, SHA3-512, HMAC-SHA-256, RNG) |
-| **I-3** | Error messages expose internal paths | ✅ FIXED      | `src/commands/serve.rs` — error responses now use `user_message()` with internal details logged server-side only                        |
-| **I-4** | Unused pqcrypto-kyber dependency     | ✅ FIXED      | `Cargo.toml` — removed `pqcrypto-kyber` entirely                                                                                        |
-| **I-5** | shellexpand on untrusted paths       | ✅ FIXED      | `src/network/airgap.rs` — changed `shellexpand::full()` to `shellexpand::tilde()`                                                       |
+| **L-4** | Unmaintained PQ crate names          | ✅ FIXED      | `Cargo.toml` — removed `pqcrypto-kyber`; migrated `pqcrypto-dilithium` → `pqcrypto-mldsa` 0.1.2 (RUSTSEC-2024-0380 resolved)             |
+| **I-1** | No Windows ACL on audit files        | ✅ FIXED      | `src/network/audit.rs` — added `set_readonly(true)` on Windows for `audit.key`                                                           |
+| **I-2** | FIPS self-tests not auto-invoked     | ✅ FIXED      | `src/main.rs` — `FipsModule::power_on_self_test()` auto-invoked at startup (KATs for SHA-256, SHA-512, SHA3-512, HMAC-SHA-256, RNG)      |
+| **I-3** | Error messages expose internal paths | ✅ FIXED      | `src/commands/serve.rs` — error responses now use `user_message()` with internal details logged server-side only                         |
+| **I-4** | Unused pqcrypto-kyber dependency     | ✅ FIXED      | `Cargo.toml` — removed `pqcrypto-kyber` entirely                                                                                         |
+| **I-5** | shellexpand on untrusted paths       | ✅ FIXED      | `src/network/airgap.rs` — changed `shellexpand::full()` to `shellexpand::tilde()`                                                        |
 
 ### Additional Dependency Updates (2025-07-17)
 
-| Crate                | From    | To       | Advisory                          | Status                                                  |
-| -------------------- | ------- | -------- | --------------------------------- | ------------------------------------------------------- |
-| `rustls-webpki`      | 0.103.9 | 0.103.10 | RUSTSEC-2026-0049 (CRL matching)  | ✅ FIXED                                                 |
-| `keccak`             | 0.1.5   | 0.1.5    | RUSTSEC-2026-0012 (ARMv8 unsound) | ⚠️ NOT APPLICABLE — x86_64 only; pinned by `sha3 0.10.8` |
-| `pqcrypto-mldsa`     | —       | 0.1.2    | —                                 | ✅ FIXED — migrated from `pqcrypto-dilithium` 0.5.0        |
+| Crate            | From    | To       | Advisory                          | Status                                                  |
+| ---------------- | ------- | -------- | --------------------------------- | ------------------------------------------------------- |
+| `rustls-webpki`  | 0.103.9 | 0.103.10 | RUSTSEC-2026-0049 (CRL matching)  | ✅ FIXED                                                 |
+| `keccak`         | 0.1.5   | 0.1.5    | RUSTSEC-2026-0012 (ARMv8 unsound) | ⚠️ NOT APPLICABLE — x86_64 only; pinned by `sha3 0.10.8` |
+| `pqcrypto-mldsa` | —       | 0.1.2    | —                                 | ✅ FIXED — migrated from `pqcrypto-dilithium` 0.5.0      |
 
 ### Post-Remediation Audit Results
 
