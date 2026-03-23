@@ -282,7 +282,12 @@ cargo test --test network_integration_test -- --test-threads=1 # 14 network test
 
 ## License
 
-MIT License
+This software is dual-licensed:
+
+- **AGPL-3.0**: Free for open source use under the [GNU Affero General Public License v3.0](LICENSE)
+- **Commercial**: Proprietary license available for organizations that cannot comply with AGPL requirements
+
+For commercial licensing inquiries, contact: licensing@nervosys.com
 
 ## Contributing
 
