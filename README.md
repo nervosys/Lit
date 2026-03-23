@@ -2,7 +2,7 @@
 
 **The world's first version control system designed for AI agents first and humans second.**
 
-Lit is a complete Git replacement written in Rust, offering local and remote distributed version control with post-quantum cryptographic security, structured machine-readable output, and native API server and MCP integration for autonomous agent workflows.
+Lit is a complete Git replacement written in Rust — 42 commands, 30 MCP tools, post-quantum cryptographic security, sandboxed execution, and structured machine-readable output. Every interface is designed for autonomous agent workflows, with human-friendly output available via a single flag.
 
 ## Why Lit?
 
@@ -10,19 +10,40 @@ Git was designed in 2005 for human developers using terminals. Every interface �
 
 **Lit inverts this.** Every command emits structured JSON by default. Errors include machine-actionable codes and remediation hints. Merge conflicts are structured objects, not text markers. Batch operations accept JSONL on stdin. Nothing ever prompts for input. Humans get the same power through a `--human` flag.
 
-|                         | Git                        | Lit                                     |
-| ----------------------- | -------------------------- | --------------------------------------- |
-| **Designed for**        | Human developers           | AI agents (humans supported)            |
-| **Default output**      | Freeform text              | Structured JSON                         |
-| **Error handling**      | Freeform strings           | Typed error codes + remediation         |
-| **Batch operations**    | Shell scripting            | Native JSONL batch mode                 |
-| **API access**          | Third-party wrappers       | Built-in HTTP + MCP server              |
-| **Merge conflicts**     | `<<<<<<<` markers          | Structured conflict objects             |
-| **Agent metadata**      | Commit message conventions | First-class metadata field              |
-| **Cryptography**        | SHA-1 / SHA-256            | SHA3-512 + BLAKE3 (quantum-resistant)   |
-| **Signatures**          | GPG / SSH                  | ML-DSA (post-quantum, NIST FIPS 204)    |
+|                         | Git                        | Lit                                      |
+| ----------------------- | -------------------------- | ---------------------------------------- |
+| **Designed for**        | Human developers           | AI agents (humans supported)             |
+| **Default output**      | Freeform text              | Structured JSON                          |
+| **Error handling**      | Freeform strings           | Typed error codes + remediation          |
+| **Batch operations**    | Shell scripting            | Native JSONL batch mode                  |
+| **API access**          | Third-party wrappers       | Built-in REST + MCP + `lit://` + stdio   |
+| **Merge conflicts**     | `<<<<<<<` markers          | Structured conflict objects              |
+| **Agent metadata**      | Commit message conventions | First-class metadata field               |
+| **Agent coordination**  | None                       | Swarm registration, file leasing         |
+| **Sandboxing**          | None                       | Process isolation with env/fs/net fences |
+| **Cryptography**        | SHA-1 / SHA-256            | SHA3-512 + BLAKE3 (quantum-resistant)    |
+| **Signatures**          | GPG / SSH                  | ML-DSA-87 (NIST FIPS 204)               |
 | **Encryption**          | None built-in              | AES-256-GCM at rest, TLS 1.3 in transit |
-| **Interactive prompts** | Frequent                   | Never (zero-prompt design)              |
+| **Compliance**          | None                       | FIPS 140-3, auto self-test at startup    |
+| **Interactive prompts** | Frequent                   | Never (zero-prompt design)               |
+
+## Features
+
+- **42 CLI commands** — full Git-equivalent workflow plus agent-native extensions
+- **30 MCP tools** — LLM agents interact via Model Context Protocol tool calls
+- **4 transport protocols** — HTTPS, SSH, `lit://` (custom TCP), stdio pipe
+- **Sandboxed execution** — run untrusted code in isolated environments with filesystem, environment, and network fences
+- **Swarm coordination** — multi-agent registration, file leasing, and conflict-free concurrent access
+- **Post-quantum signatures** — ML-DSA-87 (NIST FIPS 204, Security Level 5)
+- **FIPS 140-3 compliance** — AES-256-GCM, PBKDF2-HMAC-SHA512, automatic Known Answer Tests at startup
+- **Airgap mode** — complete network isolation for classified environments (USB, file shares only)
+- **Atomic transactions** — begin/commit/rollback multi-operation sequences
+- **Large File Storage** — LFS tracking and migration for binary assets
+- **Git interop** — bidirectional import/export with existing Git repositories
+- **Command ontology** — machine-readable type graph for agent discovery and SDK generation
+- **JSON Schema** — auto-generated draft 2020-12 schemas for all command inputs/outputs
+- **Per-IP rate limiting** — sliding window throttle (100 req/60s) on all server endpoints
+- **Tamper-evident audit logs** — HMAC-SHA256 signed, append-only operation logs
 
 ## Installation
 
@@ -30,6 +51,8 @@ Git was designed in 2005 for human developers using terminals. Every interface �
 cargo build --release
 cargo install --path .
 ```
+
+Pre-built binaries for Linux, macOS, and Windows are available on the [Releases](https://github.com/nervosys/Lit/releases) page.
 
 ## Quick Start
 
@@ -66,7 +89,7 @@ lit diff --human
 export LIT_OUTPUT=human
 ```
 
-## Core Commands
+## Commands (42)
 
 ### Version Control
 
@@ -82,8 +105,8 @@ lit branch [name] [--delete]       # Manage branches
 lit checkout <target> [-b]         # Switch branches
 lit merge <branch>                 # Merge branches (3-way)
 lit resolve <file> --strategy=X    # Programmatic conflict resolution
-lit tag <name> [--sign]            # Create tags
-lit stash [push|pop|list]          # Stash work-in-progress
+lit tag <name> [--sign]            # Create tags (with optional PQ signatures)
+lit stash [push|pop|apply|list|drop] # Stash work-in-progress
 lit reset [--soft|--mixed|--hard]  # Move HEAD
 lit revert <commit>                # Create inverse commit
 lit cherry-pick <commit>           # Apply specific commits
@@ -97,27 +120,71 @@ lit reflog                         # Reference update history
 
 ```bash
 lit remote add <name> <url>        # Add remote
-lit push <remote> <branch>         # Push to remote
+lit push <remote> <branch>         # Push to remote (--force available)
 lit pull <remote> <branch>         # Fetch and merge
 lit clone <url> [directory]        # Clone repository
-lit fetch <remote>                 # Download without merging
+lit fetch <remote> [branch]        # Download without merging
 ```
 
-Supported transports: HTTPS, SSH, `lit://`, `file://`, USB/removable media, network shares.
+Supported transports: HTTPS, SSH, `lit://` (custom TCP), `file://`, USB/removable media, network shares.
 
 ### Agentic Commands
 
 ```bash
 lit batch                          # Execute JSONL operations from stdin
-lit serve --port 3000              # Launch HTTP API server
-lit mcp-serve                      # Launch MCP tool server for LLM agents
-lit tx <operations...>             # Atomic transaction mode
+lit serve --port 3000              # Launch HTTP REST API server
+lit serve --stdio                  # Launch stdio JSON pipe server
+lit serve --daemon                 # Launch lit:// TCP daemon
+lit mcp-serve --stdio              # Launch MCP tool server (stdio)
+lit mcp-serve --port 8385          # Launch MCP tool server (HTTP)
+lit tx <begin|commit|rollback>     # Atomic transaction mode
 lit snapshot -m <msg>              # Add-all + commit in one step
 lit search <query>                 # Full-text search across history
-lit watch                          # Emit filesystem change events
-lit swarm <join|status|sync>       # Multi-agent swarm coordination
+lit watch                          # Emit filesystem change events as JSON
 lit ontology                       # Output command ontology for agent discovery
-lit schema [--command <id>]        # Generate JSON Schema (draft 2020-12) from ontology
+lit schema [--command <id>]        # JSON Schema (draft 2020-12) from ontology
+```
+
+### Swarm Coordination
+
+```bash
+lit swarm register <agent-id>      # Register an agent in the swarm
+lit swarm list                     # List registered agents
+lit swarm lease-acquire --agent <id> --path <file> --duration 300
+                                   # Acquire exclusive file lease (seconds)
+lit swarm lease-release --agent <id> --path <file>
+                                   # Release a file lease
+lit swarm lease-list               # List all active leases
+```
+
+### Sandbox
+
+Run untrusted code in process-isolated environments with filesystem, environment, and network fences:
+
+```bash
+lit sandbox init [name]            # Create sandbox from working tree
+lit sandbox run <name> -- <cmd>    # Run command inside sandbox
+lit sandbox list                   # List all sandboxes
+lit sandbox destroy <name>         # Remove a sandbox
+```
+
+Isolation layers:
+
+| Layer       | Protection                                               |
+| ----------- | -------------------------------------------------------- |
+| Filesystem  | Working tree copied into `.lit/sandboxes/<name>/`        |
+| Environment | `env_clear()` — only minimal vars exposed                |
+| Home / Temp | HOME, USERPROFILE, TEMP, TMP redirected to sandbox dir   |
+| PATH        | Restricted to system directories only                    |
+| Network     | `LIT_AIRGAPPED=1` — blocks all network protocols         |
+| Git config  | `GIT_CONFIG_NOSYSTEM=1` — prevents config file leaks     |
+| Credentials | Cleared — no cloud tokens, SSH keys, or API keys present |
+
+### Large File Storage
+
+```bash
+lit lfs track <patterns...>        # Track file patterns (e.g., "*.bin")
+lit lfs migrate [--threshold N]    # Migrate existing large files to LFS
 ```
 
 ### Maintenance & Migration
@@ -125,12 +192,10 @@ lit schema [--command <id>]        # Generate JSON Schema (draft 2020-12) from o
 ```bash
 lit verify                         # Full repository integrity check
 lit gc                             # Garbage collection — pack loose objects
-lit lfs track <pattern>            # Track large files via LFS
-lit lfs migrate                    # Migrate existing large files to LFS
 lit import-git <source>            # Import from Git repository
 lit export-git <destination>       # Export to Git format
 lit rotate-key                     # Rotate encryption passphrase
-lit config [get|set|list]          # Manage configuration settings
+lit config [get|set|show]          # Manage configuration settings
 ```
 
 ## Structured Errors
@@ -149,12 +214,15 @@ All commands return typed `LitError` values with machine-actionable codes, not f
 
 Error codes: `ENCRYPTION_ERROR`, `IO_ERROR`, `CONFIG_ERROR`, `NETWORK_ERROR`, `REPO_NOT_FOUND`, `OBJECT_NOT_FOUND`, `INDEX_ERROR`, `MERGE_CONFLICT`, `AUTH_FAILURE`, `INVALID_INPUT`, `PERMISSION_DENIED`, `TIMEOUT`, `PROTOCOL_ERROR`, `INTERNAL_ERROR`, `GENERAL_ERROR`.
 
-## JSON Schema
+## Ontology & JSON Schema
 
-Generate standard JSON Schema (draft 2020-12) from the ontology for agent SDK discovery and input validation:
+Lit ships a built-in ontology — a typed knowledge graph of every command, type, relationship, and classification in the system. Agents use this for self-discovery, SDK generation, and input validation.
 
 ```bash
-# Full schema — all types and command interfaces
+# Machine-readable ontology (JSON)
+lit ontology
+
+# Full JSON Schema (draft 2020-12) — all types and command interfaces
 lit schema
 
 # Single command schema
@@ -163,34 +231,44 @@ lit schema --command commit
 #    "input": {"properties": {"message": {"type": "string"}, ...}}}
 ```
 
-The schema is auto-generated from the ontology — types map to `$defs`, commands map to input/output schemas with metadata (idempotent, safe, side_effects, preconditions).
+The schema is auto-generated from the ontology — types map to `$defs`, commands map to input/output schemas with metadata (idempotent, safe, side_effects, preconditions). See [ONTOLOGY.md](ONTOLOGY.md) for the complete human-readable reference.
 
 ## API Server
 
+Four server modes for different integration patterns:
+
 ```bash
-# Launch for agent swarm access
+# HTTP REST API — for agent swarms and CI/CD
 lit serve --port 3000 --token $LIT_TOKEN
+
+# stdio JSON pipe — for direct process integration
+lit serve --stdio
+
+# lit:// TCP daemon — for custom protocol clients
+lit serve --daemon --port 9418
 ```
 
 ```bash
-# Agents interact via REST
-curl -X POST http://localhost:8384/api/v1/commit \
+# Example: agent commits via REST
+curl -X POST http://localhost:3000/api/v1/commit \
   -H "Authorization: Bearer $LIT_TOKEN" \
   -d '{"message":"implement feature X","author":"agent-7","sign":true}'
 ```
+
+All server endpoints enforce per-IP rate limiting (100 requests per 60-second sliding window). Body size is capped at 1 MB.
 
 ## MCP Server
 
 Lit exposes itself as an MCP (Model Context Protocol) tool server, enabling LLM agents to interact with repositories directly through tool calls:
 
 ```bash
-lit mcp-serve --stdio    # For stdio-based MCP clients
+lit mcp-serve --stdio      # For stdio-based MCP clients (VS Code, Claude Desktop)
 lit mcp-serve --port 8385  # For HTTP-based MCP clients
 ```
 
-Tools (30): `lit_status`, `lit_diff`, `lit_log`, `lit_show`, `lit_blame`, `lit_reflog`, `lit_add`, `lit_commit`, `lit_snapshot`, `lit_branch`, `lit_checkout`, `lit_merge`, `lit_resolve`, `lit_rebase`, `lit_cherry_pick`, `lit_revert`, `lit_reset`, `lit_stash`, `lit_tag`, `lit_push`, `lit_pull`, `lit_fetch`, `lit_clone`, `lit_search`, `lit_verify`, `lit_gc`, `lit_init`, `lit_config`, `lit_ontology`, `lit_schema`.
+**Tools (30):** `lit_status`, `lit_diff`, `lit_log`, `lit_show`, `lit_blame`, `lit_reflog`, `lit_add`, `lit_commit`, `lit_snapshot`, `lit_branch`, `lit_checkout`, `lit_merge`, `lit_resolve`, `lit_rebase`, `lit_cherry_pick`, `lit_revert`, `lit_reset`, `lit_stash`, `lit_tag`, `lit_push`, `lit_pull`, `lit_fetch`, `lit_clone`, `lit_search`, `lit_verify`, `lit_gc`, `lit_init`, `lit_config`, `lit_ontology`, `lit_schema`.
 
-Resources: `lit://status`, `lit://branches`, `lit://log`, `lit://ontology`, `lit://schema`.
+**Resources:** `lit://status`, `lit://branches`, `lit://log`, `lit://ontology`, `lit://schema`.
 
 ## Configuration
 
@@ -212,72 +290,102 @@ auto_resolve = true
 encryption = "aes-256-gcm"
 fips_mode = true
 audit_log = true
+
+[airgap]
+enabled = false               # block all network protocols
+strict_mode = false           # USB-only (no network shares)
 ```
 
 Configuration priority: CLI flags > environment variables (`LIT_*`) > repo-local > user global > system > defaults.
 
 ## Cryptographic Security
 
-- **Hashing**: SHA3-512 + BLAKE3 composite (192 hex chars, quantum-resistant)
-- **Signatures**: ML-DSA-87 (Dilithium5) — NIST FIPS 204, Security Level 5
-- **Encryption**: AES-256-GCM with PBKDF2-HMAC-SHA512 (600,000 iterations)
-- **Audit**: HMAC-SHA256 signed tamper-evident logs
-- **Compliance**: FIPS 140-3 Level 1, ISO/IEC 19790:2012
-- **Post-quantum**: Resistant to Shor's and Grover's algorithms
+| Layer          | Algorithm                                      | Standard           |
+| -------------- | ---------------------------------------------- | ------------------ |
+| **Hashing**    | SHA3-512 + BLAKE3 composite (192 hex chars)    | NIST FIPS 202      |
+| **Signatures** | ML-DSA-87 (Dilithium5), Security Level 5       | NIST FIPS 204      |
+| **Encryption** | AES-256-GCM                                    | NIST FIPS 197      |
+| **KDF**        | PBKDF2-HMAC-SHA512, 600,000 iterations         | NIST SP 800-132    |
+| **Audit logs** | HMAC-SHA256, tamper-evident                     | NIST FIPS 198-1    |
+| **Compliance** | FIPS 140-3 Level 1, auto self-test at startup  | NIST FIPS 140-3    |
+| **PQ safety**  | Resistant to Shor's and Grover's algorithms     | —                  |
+
+FIPS Known Answer Tests (SHA-256, SHA-512, SHA3-512, HMAC-SHA-256, RNG health) execute automatically on every startup when `fips_mode = true`.
 
 See [ENCRYPTION.md](ENCRYPTION.md), [FIPS_140-3_COMPLIANCE.md](FIPS_140-3_COMPLIANCE.md), and [CRYPTOGRAPHY.md](CRYPTOGRAPHY.md) for details.
 
 ## Operating Modes
 
 ### Standard Mode
+
 Full local and remote distributed VCS over HTTPS, SSH, or `lit://` protocol.
 
 ### Airgap Mode
+
 Complete network isolation for classified and air-gapped environments. Physical transports only (USB, file shares).
 
 ```bash
 lit --airgapped clone file:///media/usb/repo.lit
 lit config set airgap.enabled true
+lit config set airgap.strict_mode true   # USB-only, no network shares
 ```
 
 See [AIRGAP.md](AIRGAP.md) for complete documentation.
 
+### Sandbox Mode
+
+Run untrusted code pulled into a repo without exposing the host system:
+
+```bash
+lit sandbox init demo
+lit sandbox run demo -- python3 -m pytest tests/
+lit sandbox destroy demo
+```
+
+The sandbox clears all environment variables, redirects HOME/TEMP into the sandbox directory, restricts PATH to system binaries, and enforces `LIT_AIRGAPPED=1`. See [EXAMPLES.md § Sandboxed Execution](EXAMPLES.md) and the cross-platform demo scripts in `examples/`.
+
 ## Use Cases
 
-- **AI agent swarms**: Multiple agents collaborating on a codebase via structured API
-- **CI/CD pipelines**: Machine-readable output eliminates fragile text parsing
-- **MCP-enabled IDEs**: LLM agents operate on repos through tool calls
-- **Air-gapped environments**: Government, defense, critical infrastructure
-- **Post-quantum security**: Organizations preparing for quantum computing threats
-- **Git migration**: Import existing Git repos, export back when needed
+- **AI agent swarms** — multiple agents collaborating via structured API with file leasing
+- **CI/CD pipelines** — machine-readable output eliminates fragile text parsing
+- **MCP-enabled IDEs** — LLM agents operate on repos through tool calls (VS Code, Claude Desktop)
+- **Sandboxed builds** — run untrusted code in isolated process environments
+- **Air-gapped environments** — government, defense, critical infrastructure
+- **Post-quantum security** — organizations preparing for quantum computing threats
+- **Git migration** — import existing Git repos, export back when needed
 
 ## Testing
 
 428 tests across unit, integration, and performance suites:
 
-```powershell
-cargo test --lib -- --test-threads=1                   # 61 unit tests
-cargo test --test command_tests -- --test-threads=1    # 239 command tests
-cargo test --test feature_integration_test              # 30 integration tests
-cargo test --test performance_benchmarks --release      # 9 benchmarks
-cargo test --test adversarial_test -- --test-threads=1  # 5 security tests
-cargo test --test concurrency_test -- --test-threads=1  # 9 concurrency tests
-cargo test --test network_integration_test -- --test-threads=1 # 14 network tests
+```shell
+cargo test --lib -- --test-threads=1                             # 61 unit tests
+cargo test --test command_tests -- --test-threads=1              # 239 command tests
+cargo test --test feature_integration_test                       # 30 integration tests
+cargo test --test performance_benchmarks --release               # 9 benchmarks
+cargo test --test adversarial_test -- --test-threads=1           # 5 security tests
+cargo test --test concurrency_test -- --test-threads=1           # 9 concurrency tests
+cargo test --test network_integration_test -- --test-threads=1   # 14 network tests
 ```
 
 ## Documentation
 
-- [DESIGN.md](DESIGN.md) — Full agentic-first architecture and design rationale
-- [ROADMAP.md](ROADMAP.md) — Implementation roadmap and milestones
-- [ARCHITECTURE.md](ARCHITECTURE.md) — System architecture deep-dive
-- [TESTING.md](TESTING.md) — Testing guide
 - [QUICKSTART.md](QUICKSTART.md) — Getting started guide
-- [EXAMPLES.md](EXAMPLES.md) — Usage examples
+- [EXAMPLES.md](EXAMPLES.md) — Usage examples (19 scenarios including sandbox demos)
+- [DESIGN.md](DESIGN.md) — Agentic-first architecture and design rationale
+- [ARCHITECTURE.md](ARCHITECTURE.md) — System architecture deep-dive
+- [ONTOLOGY.md](ONTOLOGY.md) — Complete conceptual reference and type graph
+- [ROADMAP.md](ROADMAP.md) — Implementation roadmap and milestones
+- [TESTING.md](TESTING.md) — Testing guide
 - [ENCRYPTION.md](ENCRYPTION.md) — Encryption system documentation
+- [ENCRYPTION_ENHANCEMENTS.md](ENCRYPTION_ENHANCEMENTS.md) — Encryption hardening details
 - [CRYPTOGRAPHY.md](CRYPTOGRAPHY.md) — Cryptographic design documentation
+- [KEY_DISTRIBUTION.md](KEY_DISTRIBUTION.md) — Key distribution and management
+- [FIPS_140-3_COMPLIANCE.md](FIPS_140-3_COMPLIANCE.md) — FIPS 140-3 compliance documentation
 - [SECURITY.md](SECURITY.md) — Security model and threat mitigation
-- [DEPLOYMENT.md](DEPLOYMENT.md) — Deployment and operations guide
+- [SECURITY_AUDIT.md](SECURITY_AUDIT.md) — DoD-standard security audit (14 findings, all remediated)
 - [AIRGAP.md](AIRGAP.md) — Airgap mode documentation
+- [DEPLOYMENT.md](DEPLOYMENT.md) — Deployment and operations guide
 - [PROJECT_SUMMARY.md](PROJECT_SUMMARY.md) — High-level project overview
 
 ## License
@@ -287,11 +395,12 @@ This software is dual-licensed:
 - **AGPL-3.0**: Free for open source use under the [GNU Affero General Public License v3.0](LICENSE)
 - **Commercial**: Proprietary license available for organizations that cannot comply with AGPL requirements
 
-For commercial licensing inquiries, contact: licensing@nervosys.ai
+For commercial licensing inquiries, contact: <licensing@nervosys.ai>
 
 ## Contributing
 
 This is a security-focused tool. Contributions should:
+
 - Maintain strict network restrictions
 - Include security review considerations
 - Add appropriate audit logging
