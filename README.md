@@ -22,8 +22,8 @@ Git was designed in 2005 for human developers using terminals. Every interface �
 | **Agent coordination**  | None                       | Swarm registration, file leasing         |
 | **Sandboxing**          | None                       | Process isolation with env/fs/net fences |
 | **Cryptography**        | SHA-1 / SHA-256            | SHA3-512 + BLAKE3 (quantum-resistant)    |
-| **Signatures**          | GPG / SSH                  | ML-DSA-87 (NIST FIPS 204)               |
-| **Encryption**          | None built-in              | AES-256-GCM at rest, TLS 1.3 in transit |
+| **Signatures**          | GPG / SSH                  | ML-DSA-87 (NIST FIPS 204)                |
+| **Encryption**          | None built-in              | AES-256-GCM at rest, TLS 1.3 in transit  |
 | **Compliance**          | None                       | FIPS 140-3, auto self-test at startup    |
 | **Interactive prompts** | Frequent                   | Never (zero-prompt design)               |
 
@@ -300,15 +300,15 @@ Configuration priority: CLI flags > environment variables (`LIT_*`) > repo-local
 
 ## Cryptographic Security
 
-| Layer          | Algorithm                                      | Standard           |
-| -------------- | ---------------------------------------------- | ------------------ |
-| **Hashing**    | SHA3-512 + BLAKE3 composite (192 hex chars)    | NIST FIPS 202      |
-| **Signatures** | ML-DSA-87 (Dilithium5), Security Level 5       | NIST FIPS 204      |
-| **Encryption** | AES-256-GCM                                    | NIST FIPS 197      |
-| **KDF**        | PBKDF2-HMAC-SHA512, 600,000 iterations         | NIST SP 800-132    |
-| **Audit logs** | HMAC-SHA256, tamper-evident                     | NIST FIPS 198-1    |
-| **Compliance** | FIPS 140-3 Level 1, auto self-test at startup  | NIST FIPS 140-3    |
-| **PQ safety**  | Resistant to Shor's and Grover's algorithms     | —                  |
+| Layer          | Algorithm                                     | Standard        |
+| -------------- | --------------------------------------------- | --------------- |
+| **Hashing**    | SHA3-512 + BLAKE3 composite (192 hex chars)   | NIST FIPS 202   |
+| **Signatures** | ML-DSA-87 (Dilithium5), Security Level 5      | NIST FIPS 204   |
+| **Encryption** | AES-256-GCM                                   | NIST FIPS 197   |
+| **KDF**        | PBKDF2-HMAC-SHA512, 600,000 iterations        | NIST SP 800-132 |
+| **Audit logs** | HMAC-SHA256, tamper-evident                   | NIST FIPS 198-1 |
+| **Compliance** | FIPS 140-3 Level 1, auto self-test at startup | NIST FIPS 140-3 |
+| **PQ safety**  | Resistant to Shor's and Grover's algorithms   | —               |
 
 FIPS Known Answer Tests (SHA-256, SHA-512, SHA3-512, HMAC-SHA-256, RNG health) execute automatically on every startup when `fips_mode = true`.
 
