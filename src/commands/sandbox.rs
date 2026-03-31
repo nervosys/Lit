@@ -234,6 +234,10 @@ fn copy_tree(src: &Path, dst: &Path, repo_root: &Path) -> Result<(), LitError> {
         if e.path() == sandbox_base(repo_root) {
             return false;
         }
+        // SECURITY: skip symlinks to prevent sandbox escape via symlink traversal
+        if e.path_is_symlink() {
+            return false;
+        }
         if e.file_type().is_dir() && skip_dirs.contains(name.as_ref()) {
             return false;
         }
