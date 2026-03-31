@@ -314,15 +314,60 @@ FIPS Known Answer Tests (SHA-256, SHA-512, SHA3-512, HMAC-SHA-256, RNG health) e
 
 See [ENCRYPTION.md](ENCRYPTION.md), [FIPS_140-3_COMPLIANCE.md](FIPS_140-3_COMPLIANCE.md), and [CRYPTOGRAPHY.md](CRYPTOGRAPHY.md) for details.
 
+## Transport Protocols
+
+Lit auto-detects the transport from the URL and dispatches to the appropriate backend:
+
+| Protocol     | URL Format                          | Use Case                              |
+| ------------ | ----------------------------------- | ------------------------------------- |
+| **HTTPS**    | `https://host/repo`                 | Public and private remotes over TLS   |
+| **SSH**      | `ssh://host/repo` or `host:repo`    | Authenticated access over SSH tunnels |
+| **lit://**   | `lit://host:9418/repo`              | Custom binary TCP for LAN deployments |
+| **file://**  | `file:///path/to/repo`              | Local filesystem URL                  |
+| **Local**    | `/path/to/repo` or `C:\repos\proj`  | Bare path — no protocol prefix needed |
+| **UNC**      | `\\server\share\repo`              | Windows network shares (SMB/CIFS)     |
+| **USB**      | `E:\repos\proj` or `/media/usb/..` | Removable media (auto-detected)       |
+| **stdio**    | `lit serve --stdio`                 | JSON pipe for direct process control  |
+
 ## Operating Modes
+
+Lit supports four operating modes that can be combined (e.g., sandbox + airgap):
 
 ### Standard Mode
 
-Full local and remote distributed VCS over HTTPS, SSH, or `lit://` protocol.
+Full distributed VCS with all network and local transports enabled. Push, pull, fetch, and clone work over HTTPS, SSH, `lit://`, and local paths.
+
+```bash
+lit clone https://github.com/org/repo       # HTTPS
+lit clone ssh://server/repo                  # SSH
+lit clone lit://192.168.1.10:9418/repo       # Custom TCP
+lit clone /opt/repos/project                 # Local path
+```
+
+### Local-Only Mode
+
+Operate without any remote configuration — purely local version control. All commands that don't involve a remote work identically. Useful for solo development, offline work, or repositories that never need to synchronize.
+
+```bash
+lit init myproject && cd myproject
+lit add . && lit commit -m "initial commit"
+lit branch feature && lit checkout feature
+lit log --human
+```
+
+Local-only repos can add remotes later via `lit remote add` with any supported transport.
 
 ### Airgap Mode
 
-Complete network isolation for classified and air-gapped environments. Physical transports only (USB, file shares).
+Complete network isolation for classified and air-gapped environments. All TCP-based protocols (HTTPS, SSH, `lit://`, FTP) are blocked at the transport layer. Only physical and filesystem transports are allowed:
+
+| Transport          | Airgap | Airgap Strict |
+| ------------------ | ------ | ------------- |
+| Local filesystem   | Allowed | Allowed       |
+| `file://` URL      | Allowed | Allowed       |
+| USB / removable    | Allowed | Allowed       |
+| Network shares     | Allowed | **Blocked**   |
+| HTTPS / SSH / lit  | Blocked | Blocked       |
 
 ```bash
 lit --airgapped clone file:///media/usb/repo.lit
@@ -330,11 +375,13 @@ lit config set airgap.enabled true
 lit config set airgap.strict_mode true   # USB-only, no network shares
 ```
 
+Removable media is auto-detected via `GetDriveTypeW` on Windows and mount-point heuristics (`/media/`, `/mnt/`, `/Volumes/`) on Linux/macOS.
+
 See [AIRGAP.md](AIRGAP.md) for complete documentation.
 
 ### Sandbox Mode
 
-Run untrusted code pulled into a repo without exposing the host system:
+Run untrusted code in process-isolated environments with filesystem, environment, and network fences:
 
 ```bash
 lit sandbox init demo
@@ -342,7 +389,16 @@ lit sandbox run demo -- python3 -m pytest tests/
 lit sandbox destroy demo
 ```
 
-The sandbox clears all environment variables, redirects HOME/TEMP into the sandbox directory, restricts PATH to system binaries, and enforces `LIT_AIRGAPPED=1`. See [EXAMPLES.md § Sandboxed Execution](EXAMPLES.md) and the cross-platform demo scripts in `examples/`.
+Every sandboxed process gets:
+
+- **Cleared environment** — `env_clear()` strips all host variables
+- **Redirected HOME/TEMP** — point into the sandbox directory
+- **Restricted PATH** — system binaries only, no user-installed tools
+- **Forced airgap** — `LIT_AIRGAPPED=1` blocks all network protocols
+- **No credentials** — no cloud tokens, SSH keys, or API keys present
+- **Symlink protection** — symlinks are skipped during sandbox copy to prevent escape
+
+Sandboxes combine with airgap mode automatically. See [EXAMPLES.md § Sandboxed Execution](EXAMPLES.md) and the cross-platform demo scripts in `examples/`.
 
 ## Use Cases
 
