@@ -799,7 +799,7 @@ impl EncryptionManager {
 
 ## See Also
 
-- [FIPS_140-2.md](FIPS_140-2.md) - Federal cryptographic compliance
+- [FIPS_140-3_COMPLIANCE.md](FIPS_140-3_COMPLIANCE.md) - Federal cryptographic compliance
 - [CRYPTOGRAPHY.md](CRYPTOGRAPHY.md) - Quantum-resistant cryptography
 - [AIRGAP.md](AIRGAP.md) - Air-gapped network operations
 - [SECURITY.md](SECURITY.md) - General security practices (future)

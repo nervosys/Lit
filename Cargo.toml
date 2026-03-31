@@ -14,11 +14,12 @@ keywords = [
     "post-quantum",
     "version-control",
 ]
+readme = "README.md"
 categories = ["command-line-utilities", "development-tools"]
 
 [dependencies]
 clap = { version = "4.5", features = ["derive", "env"] }
-# FIPS 140-2 Approved Algorithms
+# FIPS 140-3 Approved Algorithms
 sha2 = "0.10" # SHA-256/384/512 (FIPS 180-4)
 sha3 = "0.10" # SHA-3 (NIST FIPS 202) - primary hash
 blake3 = "1.5" # BLAKE3 for additional security
@@ -50,7 +51,7 @@ tiny_http = "0.12" # Lightweight sync HTTP server
 ureq = { version = "2.12", features = [
     "json",
 ] } # Blocking HTTP client for transport layer
-# FIPS 140-2 compliance
+# FIPS 140-3 compliance
 zeroize = { version = "1.8", features = ["derive"] } # Secure memory clearing
 subtle = "2.6"                                       # Constant-time comparisons for cryptographic operations
 sha1 = "0.10"

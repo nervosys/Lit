@@ -318,16 +318,16 @@ See [ENCRYPTION.md](ENCRYPTION.md), [FIPS_140-3_COMPLIANCE.md](FIPS_140-3_COMPLI
 
 Lit auto-detects the transport from the URL and dispatches to the appropriate backend:
 
-| Protocol     | URL Format                          | Use Case                              |
-| ------------ | ----------------------------------- | ------------------------------------- |
-| **HTTPS**    | `https://host/repo`                 | Public and private remotes over TLS   |
-| **SSH**      | `ssh://host/repo` or `host:repo`    | Authenticated access over SSH tunnels |
-| **lit://**   | `lit://host:9418/repo`              | Custom binary TCP for LAN deployments |
-| **file://**  | `file:///path/to/repo`              | Local filesystem URL                  |
-| **Local**    | `/path/to/repo` or `C:\repos\proj`  | Bare path — no protocol prefix needed |
-| **UNC**      | `\\server\share\repo`              | Windows network shares (SMB/CIFS)     |
-| **USB**      | `E:\repos\proj` or `/media/usb/..` | Removable media (auto-detected)       |
-| **stdio**    | `lit serve --stdio`                 | JSON pipe for direct process control  |
+| Protocol    | URL Format                         | Use Case                              |
+| ----------- | ---------------------------------- | ------------------------------------- |
+| **HTTPS**   | `https://host/repo`                | Public and private remotes over TLS   |
+| **SSH**     | `ssh://host/repo` or `host:repo`   | Authenticated access over SSH tunnels |
+| **lit://**  | `lit://host:9418/repo`             | Custom binary TCP for LAN deployments |
+| **file://** | `file:///path/to/repo`             | Local filesystem URL                  |
+| **Local**   | `/path/to/repo` or `C:\repos\proj` | Bare path — no protocol prefix needed |
+| **UNC**     | `\\server\share\repo`              | Windows network shares (SMB/CIFS)     |
+| **USB**     | `E:\repos\proj` or `/media/usb/..` | Removable media (auto-detected)       |
+| **stdio**   | `lit serve --stdio`                | JSON pipe for direct process control  |
 
 ## Operating Modes
 
@@ -361,13 +361,13 @@ Local-only repos can add remotes later via `lit remote add` with any supported t
 
 Complete network isolation for classified and air-gapped environments. All TCP-based protocols (HTTPS, SSH, `lit://`, FTP) are blocked at the transport layer. Only physical and filesystem transports are allowed:
 
-| Transport          | Airgap | Airgap Strict |
-| ------------------ | ------ | ------------- |
-| Local filesystem   | Allowed | Allowed       |
-| `file://` URL      | Allowed | Allowed       |
-| USB / removable    | Allowed | Allowed       |
-| Network shares     | Allowed | **Blocked**   |
-| HTTPS / SSH / lit  | Blocked | Blocked       |
+| Transport         | Airgap  | Airgap Strict |
+| ----------------- | ------- | ------------- |
+| Local filesystem  | Allowed | Allowed       |
+| `file://` URL     | Allowed | Allowed       |
+| USB / removable   | Allowed | Allowed       |
+| Network shares    | Allowed | **Blocked**   |
+| HTTPS / SSH / lit | Blocked | Blocked       |
 
 ```bash
 lit --airgapped clone file:///media/usb/repo.lit

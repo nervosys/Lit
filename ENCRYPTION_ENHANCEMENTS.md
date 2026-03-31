@@ -4,7 +4,7 @@ This document describes the enhancements made to the Lit encryption system beyon
 
 ## Overview
 
-The encryption enhancements improve usability, extend coverage, and add key management features while maintaining FIPS 140-2 compliance.
+The encryption enhancements improve usability, extend coverage, and add key management features while maintaining FIPS 140-3 compliance.
 
 **Status**: Completed Features
 - ✅ Passphrase caching with timeout
@@ -330,7 +330,7 @@ cache_timeout_secs = 300  # NEW: Passphrase cache timeout
 1. **Confidentiality**: Repository metadata (branches, tags) now encrypted
 2. **Usability**: Caching reduces security-fatigue from repeated prompts
 3. **Integrity**: Tamper detection extended to refs and HEAD
-4. **Compliance**: Maintains FIPS 140-2 approved algorithms
+4. **Compliance**: Maintains FIPS 140-3 approved algorithms
 
 #### New Attack Surfaces
 1. **Memory exposure**: Cached passphrases in process memory
@@ -344,7 +344,7 @@ cache_timeout_secs = 300  # NEW: Passphrase cache timeout
 - ✅ Random nonces (96-bit, OS CSPRNG)
 - ✅ Authentication tags prevent tampering
 - ✅ Zeroization of keys on drop
-- ✅ FIPS 140-2 compliance
+- ✅ FIPS 140-3 compliance
 
 ## Usage Examples
 
@@ -449,13 +449,13 @@ kdf_preset = "paranoid"
 
 ## Compliance
 
-### FIPS 140-2 Status
-All enhancements maintain FIPS 140-2 compliance:
+### FIPS 140-3 Status
+All enhancements maintain FIPS 140-3 compliance:
 
 - ✅ **Encryption**: AES-256-GCM (FIPS 197, NIST SP 800-38D)
 - ✅ **Key Derivation**: PBKDF2-HMAC-SHA512 (NIST SP 800-132)
 - ✅ **Random Generation**: OS CSPRNG (NIST SP 800-90A)
-- ✅ **Key Management**: Secure zeroization (FIPS 140-2 Level 1)
+- ✅ **Key Management**: Secure zeroization (FIPS 140-3 Level 1)
 
 ### NIST Recommendations
 - ✅ **Iteration Count**: 600,000 (60x NIST SP 800-132 minimum)
@@ -517,6 +517,6 @@ The encryption enhancements significantly improve usability while maintaining th
 - 🔒 Extended encryption coverage to refs and HEAD
 - ✅ 127% increase in test coverage (30 → 38 tests)
 - 📦 Minimal dependencies (rpassword, lazy_static)
-- 🛡️ FIPS 140-2 compliance maintained
+- 🛡️ FIPS 140-3 compliance maintained
 
 The implementation is production-ready pending documentation updates and passphrase rotation support.

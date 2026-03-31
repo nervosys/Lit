@@ -419,7 +419,7 @@ allowed_media = ["/media/approved_usb_001"]
 allowed_shares = ["\\\\secure-server\\classified-repos"]
 ```
 
-### 4. **Combine with FIPS 140-2 Mode**
+### 4. **Combine with FIPS 140-3 Mode**
 
 For federal/military compliance:
 
@@ -558,7 +558,7 @@ For controlled technical data:
 
 - Compatible with **SIPRNET** air-gapped networks
 - Supports **Classified Information Handling**
-- Integrates with **FIPS 140-2 cryptography**
+- Integrates with **FIPS 140-3 cryptography**
 
 ---
 
@@ -578,7 +578,7 @@ For controlled technical data:
 ## See Also
 
 - [CRYPTOGRAPHY.md](CRYPTOGRAPHY.md) - Quantum-resistant cryptography
-- [FIPS_140-2.md](FIPS_140-2.md) - Federal cryptographic compliance
+- [FIPS_140-3_COMPLIANCE.md](FIPS_140-3_COMPLIANCE.md) - Federal cryptographic compliance
 - [DEPLOYMENT.md](DEPLOYMENT.md) - Deployment strategies
 - [EXAMPLES.md](EXAMPLES.md) - Usage examples
 
