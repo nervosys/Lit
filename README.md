@@ -231,7 +231,7 @@ lit schema --command commit
 #    "input": {"properties": {"message": {"type": "string"}, ...}}}
 ```
 
-The schema is auto-generated from the ontology — types map to `$defs`, commands map to input/output schemas with metadata (idempotent, safe, side_effects, preconditions). See [ONTOLOGY.md](ONTOLOGY.md) for the complete human-readable reference.
+The schema is auto-generated from the ontology — types map to `$defs`, commands map to input/output schemas with metadata (idempotent, safe, side_effects, preconditions). See [ONTOLOGY.md](docs/ONTOLOGY.md) for the complete human-readable reference.
 
 ## API Server
 
@@ -312,7 +312,7 @@ Configuration priority: CLI flags > environment variables (`LIT_*`) > repo-local
 
 FIPS Known Answer Tests (SHA-256, SHA-512, SHA3-512, HMAC-SHA-256, RNG health) execute automatically on every startup when `fips_mode = true`.
 
-See [ENCRYPTION.md](ENCRYPTION.md), [FIPS_140-3_COMPLIANCE.md](FIPS_140-3_COMPLIANCE.md), and [CRYPTOGRAPHY.md](CRYPTOGRAPHY.md) for details.
+See [ENCRYPTION.md](docs/ENCRYPTION.md), [FIPS_140-3_COMPLIANCE.md](docs/FIPS_140-3_COMPLIANCE.md), and [CRYPTOGRAPHY.md](docs/CRYPTOGRAPHY.md) for details.
 
 ## Transport Protocols
 
@@ -377,7 +377,7 @@ lit config set airgap.strict_mode true   # USB-only, no network shares
 
 Removable media is auto-detected via `GetDriveTypeW` on Windows and mount-point heuristics (`/media/`, `/mnt/`, `/Volumes/`) on Linux/macOS.
 
-See [AIRGAP.md](AIRGAP.md) for complete documentation.
+See [AIRGAP.md](docs/AIRGAP.md) for complete documentation.
 
 ### Sandbox Mode
 
@@ -398,7 +398,7 @@ Every sandboxed process gets:
 - **No credentials** — no cloud tokens, SSH keys, or API keys present
 - **Symlink protection** — symlinks are skipped during sandbox copy to prevent escape
 
-Sandboxes combine with airgap mode automatically. See [EXAMPLES.md § Sandboxed Execution](EXAMPLES.md) and the cross-platform demo scripts in `examples/`.
+Sandboxes combine with airgap mode automatically. See [EXAMPLES.md § Sandboxed Execution](docs/EXAMPLES.md) and the cross-platform demo scripts in `examples/`.
 
 ## Use Cases
 
@@ -426,23 +426,23 @@ cargo test --test network_integration_test -- --test-threads=1   # 14 network te
 
 ## Documentation
 
-- [QUICKSTART.md](QUICKSTART.md) — Getting started guide
-- [EXAMPLES.md](EXAMPLES.md) — Usage examples (19 scenarios including sandbox demos)
-- [DESIGN.md](DESIGN.md) — Agentic-first architecture and design rationale
-- [ARCHITECTURE.md](ARCHITECTURE.md) — System architecture deep-dive
-- [ONTOLOGY.md](ONTOLOGY.md) — Complete conceptual reference and type graph
-- [ROADMAP.md](ROADMAP.md) — Implementation roadmap and milestones
-- [TESTING.md](TESTING.md) — Testing guide
-- [ENCRYPTION.md](ENCRYPTION.md) — Encryption system documentation
-- [ENCRYPTION_ENHANCEMENTS.md](ENCRYPTION_ENHANCEMENTS.md) — Encryption hardening details
-- [CRYPTOGRAPHY.md](CRYPTOGRAPHY.md) — Cryptographic design documentation
-- [KEY_DISTRIBUTION.md](KEY_DISTRIBUTION.md) — Key distribution and management
-- [FIPS_140-3_COMPLIANCE.md](FIPS_140-3_COMPLIANCE.md) — FIPS 140-3 compliance documentation
-- [SECURITY.md](SECURITY.md) — Security model and threat mitigation
-- [SECURITY_AUDIT.md](SECURITY_AUDIT.md) — DoD-standard security audit (14 findings, all remediated)
-- [AIRGAP.md](AIRGAP.md) — Airgap mode documentation
-- [DEPLOYMENT.md](DEPLOYMENT.md) — Deployment and operations guide
-- [PROJECT_SUMMARY.md](PROJECT_SUMMARY.md) — High-level project overview
+- [QUICKSTART.md](docs/QUICKSTART.md) — Getting started guide
+- [EXAMPLES.md](docs/EXAMPLES.md) — Usage examples (19 scenarios including sandbox demos)
+- [DESIGN.md](docs/DESIGN.md) — Agentic-first architecture and design rationale
+- [ARCHITECTURE.md](docs/ARCHITECTURE.md) — System architecture deep-dive
+- [ONTOLOGY.md](docs/ONTOLOGY.md) — Complete conceptual reference and type graph
+- [ROADMAP.md](docs/ROADMAP.md) — Implementation roadmap and milestones
+- [TESTING.md](docs/TESTING.md) — Testing guide
+- [ENCRYPTION.md](docs/ENCRYPTION.md) — Encryption system documentation
+- [ENCRYPTION_ENHANCEMENTS.md](docs/ENCRYPTION_ENHANCEMENTS.md) — Encryption hardening details
+- [CRYPTOGRAPHY.md](docs/CRYPTOGRAPHY.md) — Cryptographic design documentation
+- [KEY_DISTRIBUTION.md](docs/KEY_DISTRIBUTION.md) — Key distribution and management
+- [FIPS_140-3_COMPLIANCE.md](docs/FIPS_140-3_COMPLIANCE.md) — FIPS 140-3 compliance documentation
+- [SECURITY.md](docs/SECURITY.md) — Security model and threat mitigation
+- [SECURITY_AUDIT.md](docs/SECURITY_AUDIT.md) — DoD-standard security audit (14 findings, all remediated)
+- [AIRGAP.md](docs/AIRGAP.md) — Airgap mode documentation
+- [DEPLOYMENT.md](docs/DEPLOYMENT.md) — Deployment and operations guide
+- [PROJECT_SUMMARY.md](docs/PROJECT_SUMMARY.md) — High-level project overview
 
 ## License
 
