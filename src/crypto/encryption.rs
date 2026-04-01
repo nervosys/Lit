@@ -215,7 +215,10 @@ pub struct EncryptionKey {
 impl EncryptionKey {
     /// Derive key from passphrase using PBKDF2-HMAC-SHA512
     pub fn from_passphrase(passphrase: &str, salt: &[u8]) -> Result<Self, String> {
-        // Validate passphrase strength (unless test passphrase)
+        // SECURITY: Test bypass only available in test builds (FINDING-001)
+        #[cfg(not(test))]
+        validate_passphrase_strength(passphrase)?;
+        #[cfg(test)]
         if !passphrase.starts_with("test-") {
             validate_passphrase_strength(passphrase)?;
         }
@@ -257,8 +260,11 @@ impl EncryptionKey {
     /// SECURITY: Verifies passphrase using stored hash (constant-time comparison)
     /// SECURITY: Rate limiting prevents brute force attacks
     pub fn load(key_file: &Path, passphrase: &str) -> Result<Self, String> {
-        // Check rate limit before attempting to load (skip for test passphrases)
+        // SECURITY: Rate limit check — test bypass only in test builds (FINDING-001)
         let key_file_str = key_file.to_string_lossy().to_string();
+        #[cfg(not(test))]
+        check_rate_limit(&key_file_str)?;
+        #[cfg(test)]
         if !passphrase.starts_with("test-") {
             check_rate_limit(&key_file_str)?;
         }
@@ -313,7 +319,10 @@ impl EncryptionKey {
         // Constant-time comparison to prevent timing attacks
         use subtle::ConstantTimeEq;
         if verification_hash.ct_eq(stored_verification).unwrap_u8() != 1 {
-            // Record failed attempt for rate limiting (skip for test passphrases)
+            // SECURITY: Record failed attempt — test bypass only in test builds (FINDING-001)
+            #[cfg(not(test))]
+            record_failed_attempt(&key_file_str);
+            #[cfg(test)]
             if !passphrase.starts_with("test-") {
                 record_failed_attempt(&key_file_str);
             }
@@ -585,7 +594,8 @@ const MIN_PASSPHRASE_LENGTH: usize = 16;
 /// - Minimum 16 characters (NIST SP 800-63B)
 /// - At least 3 of: uppercase, lowercase, digits, special characters
 fn validate_passphrase_strength(passphrase: &str) -> Result<(), String> {
-    // Skip validation for test passphrases (starting with "test-")
+    // SECURITY: Test bypass only available in test builds (FINDING-001)
+    #[cfg(test)]
     if passphrase.starts_with("test-") {
         return Ok(());
     }

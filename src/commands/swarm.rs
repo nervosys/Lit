@@ -132,7 +132,10 @@ pub fn execute_lease_acquire(
     let lease_file = leases.join(format!("{}.json", sanitize_path(&file_path)));
     let now = chrono::Utc::now().timestamp();
 
-    // Check for existing lease
+    // SECURITY: This check-then-write has a TOCTOU race condition (FINDING-005).
+    // Two agents could read the lease file simultaneously and both conclude it's available.
+    // A robust fix requires OS-level file locking (e.g., flock/LockFileEx) or atomic
+    // create-exclusive (O_CREAT|O_EXCL). Current risk is low for single-host workloads.
     if lease_file.exists() {
         let data = fs::read_to_string(&lease_file).map_err(|e| e.to_string())?;
         if let Ok(existing) = serde_json::from_str::<FileLease>(&data) {

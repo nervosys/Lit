@@ -253,18 +253,22 @@ fn handle_mcp_method(req: &JsonRpcRequest) -> JsonRpcResponse {
                     })),
                     error: None,
                 },
-                Err(e) => JsonRpcResponse {
-                    jsonrpc: "2.0",
-                    id: req.id.clone(),
-                    result: Some(serde_json::json!({
-                        "content": [{
-                            "type": "text",
-                            "text": e.internal_message().to_string()
-                        }],
-                        "isError": true
-                    })),
-                    error: None,
-                },
+                Err(e) => {
+                    // SECURITY: Log internal details server-side, return sanitized message to client (FINDING-002)
+                    eprintln!("MCP tools/call error: {}", e.internal_message());
+                    JsonRpcResponse {
+                        jsonrpc: "2.0",
+                        id: req.id.clone(),
+                        result: Some(serde_json::json!({
+                            "content": [{
+                                "type": "text",
+                                "text": e.user_message().to_string()
+                            }],
+                            "isError": true
+                        })),
+                        error: None,
+                    }
+                }
             }
         }
 
@@ -325,16 +329,20 @@ fn handle_mcp_method(req: &JsonRpcRequest) -> JsonRpcResponse {
                     })),
                     error: None,
                 },
-                Err(e) => JsonRpcResponse {
-                    jsonrpc: "2.0",
-                    id: req.id.clone(),
-                    result: None,
-                    error: Some(JsonRpcError {
-                        code: -32602,
-                        message: e.internal_message().to_string(),
-                        data: None,
-                    }),
-                },
+                Err(e) => {
+                    // SECURITY: Log internal details server-side, return sanitized message to client (FINDING-002)
+                    eprintln!("MCP resources/read error: {}", e.internal_message());
+                    JsonRpcResponse {
+                        jsonrpc: "2.0",
+                        id: req.id.clone(),
+                        result: None,
+                        error: Some(JsonRpcError {
+                            code: -32602,
+                            message: e.user_message().to_string(),
+                            data: None,
+                        }),
+                    }
+                }
             }
         }
 

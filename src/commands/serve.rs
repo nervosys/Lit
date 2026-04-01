@@ -311,9 +311,11 @@ fn handle_daemon_connection(stream: std::net::TcpStream, repo_root: &std::path::
         let (status, response_body) = match route_request(method, path, body, repo_root) {
             Ok((s, b)) => (s, b),
             Err(e) => {
+                // SECURITY: Log internal message server-side, return sanitized message to client (FINDING-002)
+                eprintln!("Daemon API error: {}", e.internal_message());
                 let err_body = serde_json::json!({
                     "status": "error",
-                    "error": {"message": e.internal_message()}
+                    "error": {"message": e.user_message()}
                 })
                 .to_string();
                 (500, err_body)

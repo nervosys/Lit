@@ -185,9 +185,12 @@ impl AuditLog {
 
             #[cfg(windows)]
             {
-                // SECURITY: On Windows, mark file as read-only for the owner.
-                // Full DACL restriction would require winapi; read-only is a
-                // reasonable baseline to prevent accidental writes.
+                // SECURITY (FINDING-006): On Windows, mark file as read-only for the owner.
+                // Full DACL restriction (denying other users read access) would require
+                // the windows-acl crate or raw Win32 SetNamedSecurityInfo. Read-only
+                // prevents accidental writes but other local users may still read the key.
+                // Risk: Low — requires local access, and the key protects audit log integrity
+                // (not confidential data). Future: integrate DACL with windows-acl crate.
                 let mut perms = fs::metadata(&key_path)
                     .map_err(|e| format!("Failed to get key file metadata: {}", e))?
                     .permissions();

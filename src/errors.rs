@@ -160,9 +160,40 @@ impl LitError {
         }
     }
 
-    /// User-facing error message (safe to display)
+    /// User-facing error message (safe to display — strips internal details)
+    /// SECURITY: Returns category-based messages to prevent information disclosure (FINDING-003)
     pub fn user_message(&self) -> &str {
-        self.internal_message()
+        match self {
+            LitError::Encryption(_) => "Encryption operation failed",
+            LitError::IO(_) => "I/O operation failed",
+            LitError::Config(_) => "Configuration error",
+            LitError::Network(_) => "Network operation failed",
+            LitError::Repository(msg) => {
+                if msg.contains("not found") || msg.contains("No .lit directory") {
+                    "Not in a Lit repository"
+                } else {
+                    "Repository error"
+                }
+            }
+            LitError::Object(msg) => {
+                if msg.contains("not found") || msg.contains("No such") {
+                    "Object not found"
+                } else {
+                    "Object error"
+                }
+            }
+            LitError::Index(_) => "Index error",
+            LitError::General(msg) => {
+                if msg.contains("not yet implemented") || msg.contains("not yet fully implemented")
+                {
+                    "Feature not yet implemented"
+                } else if msg.contains("not found") {
+                    "Resource not found"
+                } else {
+                    "Operation failed"
+                }
+            }
+        }
     }
 
     /// Actionable suggestions for agents to resolve the error
