@@ -1414,10 +1414,7 @@ fn ontology_type_to_schema(type_name: &str) -> serde_json::Value {
             // Make nullable by allowing null
             if let Some(obj) = schema.as_object_mut() {
                 if let Some(serde_json::Value::String(ty)) = obj.get("type").cloned() {
-                    obj.insert(
-                        "type".to_string(),
-                        serde_json::json!([ty, "null"]),
-                    );
+                    obj.insert("type".to_string(), serde_json::json!([ty, "null"]));
                 }
             }
             schema

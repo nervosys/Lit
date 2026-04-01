@@ -137,7 +137,10 @@ fn load_tree_files(
     Ok(files)
 }
 
-fn resolve_rev(repo_root: &std::path::Path, target: &str) -> Result<String, crate::errors::LitError> {
+fn resolve_rev(
+    repo_root: &std::path::Path,
+    target: &str,
+) -> Result<String, crate::errors::LitError> {
     if target.starts_with("HEAD~") || target.starts_with("HEAD^") {
         let count: usize = target[5..].parse().unwrap_or(1);
         let mut current = read_head(repo_root)?;

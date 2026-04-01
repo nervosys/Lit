@@ -61,7 +61,7 @@ fn test_rebase_abort_no_session() {
         "main".to_string(),
         false,
         None,
-        true,  // abort
+        true, // abort
         false,
     );
     assert!(result.is_err(), "Abort without active rebase should fail");
@@ -81,5 +81,8 @@ fn test_rebase_continue_no_session() {
         false,
         true, // continue
     );
-    assert!(result.is_err(), "Continue without active rebase should fail");
+    assert!(
+        result.is_err(),
+        "Continue without active rebase should fail"
+    );
 }

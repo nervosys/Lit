@@ -13,7 +13,9 @@ struct BisectState {
     steps: usize,
 }
 
-pub fn execute(command: Option<crate::BisectCommands>) -> Result<BisectResponse, crate::errors::LitError> {
+pub fn execute(
+    command: Option<crate::BisectCommands>,
+) -> Result<BisectResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
 
     match command {
@@ -193,7 +195,10 @@ fn load_bisect_state(repo_root: &std::path::Path) -> Result<BisectState, crate::
     serde_json::from_str(&data).map_err(|e| format!("Failed to parse bisect state: {}", e).into())
 }
 
-fn save_bisect_state(repo_root: &std::path::Path, state: &BisectState) -> Result<(), crate::errors::LitError> {
+fn save_bisect_state(
+    repo_root: &std::path::Path,
+    state: &BisectState,
+) -> Result<(), crate::errors::LitError> {
     let path = repo_root.join(".lit").join("bisect.json");
     let data = serde_json::to_string_pretty(state)
         .map_err(|e| format!("Failed to serialize bisect state: {}", e))?;

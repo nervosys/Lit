@@ -39,7 +39,12 @@ fn test_merge_fast_forward() {
     // Create a branch and add a commit on it
     lit::commands::branch::execute(Some("feature".to_string()), false, false).unwrap();
     lit::commands::checkout::execute("feature".to_string(), false).unwrap();
-    create_commit(temp.path(), "feature.txt", "feature content", "Feature commit");
+    create_commit(
+        temp.path(),
+        "feature.txt",
+        "feature content",
+        "Feature commit",
+    );
 
     // Switch back to main and merge feature (should fast-forward)
     lit::commands::checkout::execute("main".to_string(), false).unwrap();
@@ -61,7 +66,11 @@ fn test_merge_already_up_to_date() {
 
     // Merge current branch into itself
     let result = lit::commands::merge::execute("main".to_string(), None);
-    assert!(result.is_ok(), "Self-merge should succeed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Self-merge should succeed: {:?}",
+        result.err()
+    );
     let resp = result.unwrap();
     assert!(resp.message.contains("up to date"));
 }

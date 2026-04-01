@@ -3,7 +3,11 @@ use crate::core::{
 };
 use crate::response::{BranchEntry, BranchResponse};
 
-pub fn execute(name: Option<String>, delete: bool, _all: bool) -> Result<BranchResponse, crate::errors::LitError> {
+pub fn execute(
+    name: Option<String>,
+    delete: bool,
+    _all: bool,
+) -> Result<BranchResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
 
     if delete {

@@ -240,7 +240,10 @@ fn import_loose_object(
 }
 
 /// Parse a Git tree object's binary content
-fn parse_git_tree(content: &[u8], hash_map: &HashMap<String, ObjectHash>) -> Result<Tree, crate::errors::LitError> {
+fn parse_git_tree(
+    content: &[u8],
+    hash_map: &HashMap<String, ObjectHash>,
+) -> Result<Tree, crate::errors::LitError> {
     let mut tree = Tree::new();
     let mut pos = 0;
 

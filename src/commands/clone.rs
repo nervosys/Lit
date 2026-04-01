@@ -6,7 +6,10 @@ use crate::storage::ObjectStore;
 use std::fs;
 use std::path::Path;
 
-pub fn execute(url: String, directory: Option<String>) -> Result<CloneResponse, crate::errors::LitError> {
+pub fn execute(
+    url: String,
+    directory: Option<String>,
+) -> Result<CloneResponse, crate::errors::LitError> {
     let validator = AirgapValidator::new()?;
     validator.validate_transport(&url)?;
 

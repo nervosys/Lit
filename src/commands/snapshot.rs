@@ -110,7 +110,10 @@ fn add_all_files(
     Ok(count)
 }
 
-fn build_tree_from_index(index: &Index, store: &ObjectStore) -> Result<ObjectHash, crate::errors::LitError> {
+fn build_tree_from_index(
+    index: &Index,
+    store: &ObjectStore,
+) -> Result<ObjectHash, crate::errors::LitError> {
     let mut tree_map: HashMap<String, Vec<(String, String, String)>> = HashMap::new();
 
     for entry in index.sorted_entries() {

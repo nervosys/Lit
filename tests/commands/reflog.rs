@@ -67,7 +67,6 @@ fn test_reflog_specific_ref() {
     assert!(result.is_ok(), "Reflog for 'main' should succeed");
 }
 
-
 #[test]
 fn test_reflog_empty_repo() {
     let temp = init_test_repo();
@@ -75,9 +74,16 @@ fn test_reflog_empty_repo() {
 
     // No commits — reflog should succeed with empty entries
     let result = lit::commands::reflog::execute(None, 10);
-    assert!(result.is_ok(), "Reflog on empty repo should succeed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Reflog on empty repo should succeed: {:?}",
+        result.err()
+    );
     let resp = result.unwrap();
-    assert!(resp.entries.is_empty(), "Empty repo should have no reflog entries");
+    assert!(
+        resp.entries.is_empty(),
+        "Empty repo should have no reflog entries"
+    );
 }
 
 #[test]
@@ -93,7 +99,10 @@ fn test_reflog_nonexistent_ref() {
     let result = lit::commands::reflog::execute(Some("nonexistent-branch".to_string()), 10);
     assert!(result.is_ok(), "Reflog for nonexistent ref should succeed");
     let resp = result.unwrap();
-    assert!(resp.entries.is_empty(), "Nonexistent ref should have empty reflog");
+    assert!(
+        resp.entries.is_empty(),
+        "Nonexistent ref should have empty reflog"
+    );
 }
 
 #[test]
@@ -105,8 +114,24 @@ fn test_reflog_entry_ordering() {
     let hash_a = "a".repeat(192);
     let hash_b = "b".repeat(192);
     let hash_c = "c".repeat(192);
-    lit::commands::reflog::append_reflog(temp.path(), "main", &hash_a, &hash_b, "commit", "first commit").unwrap();
-    lit::commands::reflog::append_reflog(temp.path(), "main", &hash_b, &hash_c, "commit", "second commit").unwrap();
+    lit::commands::reflog::append_reflog(
+        temp.path(),
+        "main",
+        &hash_a,
+        &hash_b,
+        "commit",
+        "first commit",
+    )
+    .unwrap();
+    lit::commands::reflog::append_reflog(
+        temp.path(),
+        "main",
+        &hash_b,
+        &hash_c,
+        "commit",
+        "second commit",
+    )
+    .unwrap();
 
     let result = lit::commands::reflog::execute(Some("main".to_string()), 10).unwrap();
     assert_eq!(result.entries.len(), 2, "Should have 2 reflog entries");
@@ -114,10 +139,12 @@ fn test_reflog_entry_ordering() {
     // Entries should be in reverse chronological order (most recent first)
     assert!(
         result.entries[0].message.contains("second"),
-        "First entry should be 'second commit' but got: {}", result.entries[0].message
+        "First entry should be 'second commit' but got: {}",
+        result.entries[0].message
     );
     assert!(
         result.entries[1].message.contains("first"),
-        "Second entry should be 'first commit' but got: {}", result.entries[1].message
+        "Second entry should be 'first commit' but got: {}",
+        result.entries[1].message
     );
 }

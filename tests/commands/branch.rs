@@ -113,7 +113,10 @@ fn test_branch_delete_current_fails() {
     let result = lit::commands::branch::execute(Some("main".to_string()), true, false);
     assert!(result.is_err(), "Deleting current branch should fail");
     assert!(
-        result.unwrap_err().internal_message().contains("currently checked out"),
+        result
+            .unwrap_err()
+            .internal_message()
+            .contains("currently checked out"),
         "Error should mention current branch"
     );
 }

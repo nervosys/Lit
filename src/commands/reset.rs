@@ -1,12 +1,15 @@
 use crate::core::{
-    find_repo_root, get_current_branch, read_head, set_head_detached, write_ref, Object,
-    ObjectHash,
+    find_repo_root, get_current_branch, read_head, set_head_detached, write_ref, Object, ObjectHash,
 };
 use crate::response::ResetResponse;
 use crate::storage::{Index, ObjectStore};
 use std::fs;
 
-pub fn execute(target: String, soft: bool, hard: bool) -> Result<ResetResponse, crate::errors::LitError> {
+pub fn execute(
+    target: String,
+    soft: bool,
+    hard: bool,
+) -> Result<ResetResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
     let store = ObjectStore::new(&repo_root);
 
@@ -52,7 +55,10 @@ pub fn execute(target: String, soft: bool, hard: bool) -> Result<ResetResponse, 
     })
 }
 
-pub fn execute_resolve(repo_root: &std::path::Path, target: &str) -> Result<String, crate::errors::LitError> {
+pub fn execute_resolve(
+    repo_root: &std::path::Path,
+    target: &str,
+) -> Result<String, crate::errors::LitError> {
     // Try HEAD~N syntax
     if target.starts_with("HEAD~") || target.starts_with("HEAD^") {
         let count: usize = target[5..].parse().unwrap_or(1);
@@ -97,9 +103,16 @@ pub fn execute_resolve(repo_root: &std::path::Path, target: &str) -> Result<Stri
     Err(format!("Cannot resolve '{}' to a commit", target).into())
 }
 
-fn move_head(repo_root: &std::path::Path, commit_hash: &str) -> Result<(), crate::errors::LitError> {
+fn move_head(
+    repo_root: &std::path::Path,
+    commit_hash: &str,
+) -> Result<(), crate::errors::LitError> {
     match get_current_branch(repo_root) {
-        Ok(branch) => Ok(write_ref(repo_root, &format!("heads/{}", branch), commit_hash)?),
+        Ok(branch) => Ok(write_ref(
+            repo_root,
+            &format!("heads/{}", branch),
+            commit_hash,
+        )?),
         Err(_) => Ok(set_head_detached(repo_root, commit_hash)?),
     }
 }

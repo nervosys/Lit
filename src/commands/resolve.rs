@@ -81,8 +81,7 @@ pub fn execute(
             MergeStrategy::Theirs => theirs_map.get(&conflict.path),
             MergeStrategy::Recursive => {
                 return Err(
-                    "Cannot use 'recursive' strategy for resolve. Use 'ours' or 'theirs'."
-                        .into(),
+                    "Cannot use 'recursive' strategy for resolve. Use 'ours' or 'theirs'.".into(),
                 );
             }
         };
@@ -178,7 +177,8 @@ fn finalize_merge(
             return Err(format!(
                 "{} unresolved conflict(s) remain. Resolve them first.",
                 conflict_count
-            ).into());
+            )
+            .into());
         }
     }
 
@@ -245,7 +245,10 @@ fn get_commit_tree(
 }
 
 /// Build tree from index (same logic as commit command)
-fn build_tree_from_index(index: &Index, store: &ObjectStore) -> Result<ObjectHash, crate::errors::LitError> {
+fn build_tree_from_index(
+    index: &Index,
+    store: &ObjectStore,
+) -> Result<ObjectHash, crate::errors::LitError> {
     use crate::core::Tree;
     use std::collections::HashMap;
 

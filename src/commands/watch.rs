@@ -6,7 +6,10 @@ use std::path::Path;
 use std::time::SystemTime;
 use walkdir::WalkDir;
 
-pub fn execute(debounce_ms: u64, filter: Option<String>) -> Result<WatchResponse, crate::errors::LitError> {
+pub fn execute(
+    debounce_ms: u64,
+    filter: Option<String>,
+) -> Result<WatchResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
 
     // Build initial file state snapshot
@@ -70,10 +73,7 @@ pub fn execute(debounce_ms: u64, filter: Option<String>) -> Result<WatchResponse
 
         // Emit events as JSONL
         for event in &events {
-            println!(
-                "{}",
-                serde_json::to_string(event).unwrap_or_default()
-            );
+            println!("{}", serde_json::to_string(event).unwrap_or_default());
         }
 
         last_state = current_state;
@@ -81,19 +81,13 @@ pub fn execute(debounce_ms: u64, filter: Option<String>) -> Result<WatchResponse
 }
 
 /// Scan files and return map of relative_path -> last_modified_timestamp
-fn scan_files(
-    repo_root: &Path,
-    filter: Option<&str>,
-) -> Result<HashMap<String, u64>, String> {
+fn scan_files(repo_root: &Path, filter: Option<&str>) -> Result<HashMap<String, u64>, String> {
     let mut files = HashMap::new();
 
-    for entry in WalkDir::new(repo_root)
-        .into_iter()
-        .filter_entry(|e| {
-            let name = e.file_name().to_string_lossy();
-            !name.starts_with('.') && name != "target" && name != "node_modules"
-        })
-    {
+    for entry in WalkDir::new(repo_root).into_iter().filter_entry(|e| {
+        let name = e.file_name().to_string_lossy();
+        !name.starts_with('.') && name != "target" && name != "node_modules"
+    }) {
         let entry = entry.map_err(|e| format!("Walk error: {}", e))?;
         if !entry.file_type().is_file() {
             continue;

@@ -154,7 +154,11 @@ pub fn execute_rollback() -> Result<TransactionResponse, crate::errors::LitError
 }
 
 /// Record a WAL entry for the current transaction (called from other commands)
-pub fn record_wal(repo_root: &std::path::Path, op: &str, path: &str) -> Result<(), crate::errors::LitError> {
+pub fn record_wal(
+    repo_root: &std::path::Path,
+    op: &str,
+    path: &str,
+) -> Result<(), crate::errors::LitError> {
     let state_path = tx_state_path(repo_root);
     if !state_path.exists() {
         return Ok(()); // No active transaction

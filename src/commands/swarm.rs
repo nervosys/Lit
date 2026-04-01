@@ -140,7 +140,8 @@ pub fn execute_lease_acquire(
                 return Err(format!(
                     "File '{}' is leased by agent '{}' until timestamp {}",
                     file_path, existing.agent_id, existing.expires_at
-                ).into());
+                )
+                .into());
             }
         }
     }
@@ -171,7 +172,10 @@ pub fn execute_lease_acquire(
 }
 
 /// Release a file lease
-pub fn execute_lease_release(agent_id: String, file_path: String) -> Result<SwarmResponse, crate::errors::LitError> {
+pub fn execute_lease_release(
+    agent_id: String,
+    file_path: String,
+) -> Result<SwarmResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
     let lease_file = leases_dir(&repo_root).join(format!("{}.json", sanitize_path(&file_path)));
 
@@ -187,7 +191,8 @@ pub fn execute_lease_release(agent_id: String, file_path: String) -> Result<Swar
         return Err(format!(
             "Lease on '{}' is held by agent '{}', not '{}'",
             file_path, existing.agent_id, agent_id
-        ).into());
+        )
+        .into());
     }
 
     fs::remove_file(&lease_file).map_err(|e| format!("Failed to remove lease: {}", e))?;

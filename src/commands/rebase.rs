@@ -116,7 +116,10 @@ fn rebase_noninteractive(
     })
 }
 
-fn rebase_interactive(repo_root: &std::path::Path, base: &str) -> Result<RebaseResponse, crate::errors::LitError> {
+fn rebase_interactive(
+    repo_root: &std::path::Path,
+    base: &str,
+) -> Result<RebaseResponse, crate::errors::LitError> {
     let store = ObjectStore::new(repo_root);
 
     let base_hash = resolve_rev(repo_root, base)?;
@@ -437,7 +440,10 @@ fn cleanup_rebase_state(repo_root: &std::path::Path) -> Result<(), crate::errors
     Ok(())
 }
 
-fn resolve_rev(repo_root: &std::path::Path, target: &str) -> Result<String, crate::errors::LitError> {
+fn resolve_rev(
+    repo_root: &std::path::Path,
+    target: &str,
+) -> Result<String, crate::errors::LitError> {
     if target.starts_with("HEAD~") || target.starts_with("HEAD^") {
         let count: usize = target[5..].parse().unwrap_or(1);
         let mut current = read_head(repo_root)?;

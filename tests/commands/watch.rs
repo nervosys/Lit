@@ -23,11 +23,12 @@ fn test_watch_starts_polling() {
     // Create a file so the watcher has something to scan
     fs::write(temp.path().join("watched.txt"), "content").unwrap();
 
-    let handle = std::thread::spawn(|| {
-        lit::commands::watch::execute(500, None)
-    });
+    let handle = std::thread::spawn(|| lit::commands::watch::execute(500, None));
 
     std::thread::sleep(std::time::Duration::from_millis(300));
 
-    assert!(!handle.is_finished(), "Watch should still be running (infinite loop)");
+    assert!(
+        !handle.is_finished(),
+        "Watch should still be running (infinite loop)"
+    );
 }

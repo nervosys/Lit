@@ -103,7 +103,10 @@ fn diff_working(
 }
 
 /// Diff index (staged changes) against HEAD
-fn diff_staged(repo_root: &std::path::Path, store: &ObjectStore) -> Result<Vec<FileDiff>, crate::errors::LitError> {
+fn diff_staged(
+    repo_root: &std::path::Path,
+    store: &ObjectStore,
+) -> Result<Vec<FileDiff>, crate::errors::LitError> {
     let index = Index::load(repo_root)?;
 
     // Get HEAD tree files
@@ -164,7 +167,10 @@ fn diff_refs(
 }
 
 /// Resolve a ref string to an ObjectHash — supports branch names, HEAD, and raw hashes
-fn resolve_ref(repo_root: &std::path::Path, reference: &str) -> Result<ObjectHash, crate::errors::LitError> {
+fn resolve_ref(
+    repo_root: &std::path::Path,
+    reference: &str,
+) -> Result<ObjectHash, crate::errors::LitError> {
     if reference == "HEAD" {
         let head = crate::core::read_head(repo_root)?;
         return Ok(ObjectHash::from_hex(head));
@@ -208,12 +214,16 @@ fn get_head_tree_files(
     let head_hash = crate::core::read_head(repo_root)?;
     let commit_hash = ObjectHash::from_hex(head_hash);
     let tree = get_commit_tree(store, &commit_hash)?;
-    let files = collect_tree_files(&tree, store, "").map_err(|e: String| -> crate::errors::LitError { e.into() })?;
+    let files = collect_tree_files(&tree, store, "")
+        .map_err(|e: String| -> crate::errors::LitError { e.into() })?;
     Ok(files.into_iter().collect())
 }
 
 /// Read a blob by its hash string
-fn read_blob_by_hash_str(store: &ObjectStore, hash: &str) -> Result<Vec<u8>, crate::errors::LitError> {
+fn read_blob_by_hash_str(
+    store: &ObjectStore,
+    hash: &str,
+) -> Result<Vec<u8>, crate::errors::LitError> {
     let obj_hash = ObjectHash::from_hex(hash.to_string());
     match store.read(&obj_hash)? {
         Object::Blob(b) => Ok(b.content),

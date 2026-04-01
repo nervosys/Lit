@@ -6,7 +6,10 @@ use crate::response::MergeResponse;
 use crate::storage::ObjectStore;
 use std::str::FromStr;
 
-pub fn execute(branch: String, strategy: Option<String>) -> Result<MergeResponse, crate::errors::LitError> {
+pub fn execute(
+    branch: String,
+    strategy: Option<String>,
+) -> Result<MergeResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
     let store = ObjectStore::new(&repo_root);
 

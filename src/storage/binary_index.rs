@@ -42,14 +42,7 @@ impl BinaryIndex {
     }
 
     /// Add or update an entry
-    pub fn add(
-        &mut self,
-        path: String,
-        hash: String,
-        mode: String,
-        size: u64,
-        mtime: i64,
-    ) {
+    pub fn add(&mut self, path: String, hash: String, mode: String, size: u64, mtime: i64) {
         self.entries.insert(
             path.clone(),
             BinaryIndexEntry {
@@ -162,8 +155,8 @@ impl BinaryIndex {
             cursor
                 .read_exact(&mut path_buf)
                 .map_err(|e| format!("Read error: {}", e))?;
-            let path_str = String::from_utf8(path_buf)
-                .map_err(|e| format!("Invalid path UTF-8: {}", e))?;
+            let path_str =
+                String::from_utf8(path_buf).map_err(|e| format!("Invalid path UTF-8: {}", e))?;
 
             // hash
             let hash_len = cursor
@@ -173,8 +166,8 @@ impl BinaryIndex {
             cursor
                 .read_exact(&mut hash_buf)
                 .map_err(|e| format!("Read error: {}", e))?;
-            let hash_str = String::from_utf8(hash_buf)
-                .map_err(|e| format!("Invalid hash UTF-8: {}", e))?;
+            let hash_str =
+                String::from_utf8(hash_buf).map_err(|e| format!("Invalid hash UTF-8: {}", e))?;
 
             // mode
             let mode_len = cursor
@@ -184,8 +177,8 @@ impl BinaryIndex {
             cursor
                 .read_exact(&mut mode_buf)
                 .map_err(|e| format!("Read error: {}", e))?;
-            let mode_str = String::from_utf8(mode_buf)
-                .map_err(|e| format!("Invalid mode UTF-8: {}", e))?;
+            let mode_str =
+                String::from_utf8(mode_buf).map_err(|e| format!("Invalid mode UTF-8: {}", e))?;
 
             // size + mtime
             let size = cursor

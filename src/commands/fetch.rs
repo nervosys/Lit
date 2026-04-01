@@ -4,7 +4,10 @@ use crate::network::AirgapValidator;
 use crate::response::FetchResponse;
 use crate::storage::ObjectStore;
 
-pub fn execute(remote: String, branch: Option<String>) -> Result<FetchResponse, crate::errors::LitError> {
+pub fn execute(
+    remote: String,
+    branch: Option<String>,
+) -> Result<FetchResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
     let remote_url = get_remote_url(&repo_root, &remote)?;
 
@@ -72,7 +75,10 @@ pub fn execute(remote: String, branch: Option<String>) -> Result<FetchResponse, 
     })
 }
 
-fn get_remote_url(repo_root: &std::path::Path, remote_name: &str) -> Result<String, crate::errors::LitError> {
+fn get_remote_url(
+    repo_root: &std::path::Path,
+    remote_name: &str,
+) -> Result<String, crate::errors::LitError> {
     use serde::{Deserialize, Serialize};
     use std::collections::HashMap;
     use std::fs;
@@ -93,7 +99,8 @@ fn get_remote_url(repo_root: &std::path::Path, remote_name: &str) -> Result<Stri
         return Err(format!(
             "No remotes configured. Use 'lit remote add {} <url>'",
             remote_name
-        ).into());
+        )
+        .into());
     }
 
     let content = fs::read_to_string(&config_path)

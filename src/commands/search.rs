@@ -34,13 +34,10 @@ fn search_file_contents(
     let query_lower = query.to_lowercase();
     let mut matches = Vec::new();
 
-    for entry in WalkDir::new(repo_root)
-        .into_iter()
-        .filter_entry(|e| {
-            let name = e.file_name().to_string_lossy();
-            !name.starts_with('.') && name != "target" && name != "node_modules"
-        })
-    {
+    for entry in WalkDir::new(repo_root).into_iter().filter_entry(|e| {
+        let name = e.file_name().to_string_lossy();
+        !name.starts_with('.') && name != "target" && name != "node_modules"
+    }) {
         let entry = entry.map_err(|e| format!("Walk error: {}", e))?;
         if !entry.file_type().is_file() {
             continue;

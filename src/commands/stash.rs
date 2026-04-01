@@ -45,7 +45,9 @@ impl StashList {
     }
 }
 
-pub fn execute(command: Option<crate::StashCommands>) -> Result<StashResponse, crate::errors::LitError> {
+pub fn execute(
+    command: Option<crate::StashCommands>,
+) -> Result<StashResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
 
     match command {
@@ -189,7 +191,10 @@ fn stash_pop(repo_root: &std::path::Path) -> Result<StashResponse, crate::errors
     })
 }
 
-fn stash_apply(repo_root: &std::path::Path, idx: Option<usize>) -> Result<StashResponse, crate::errors::LitError> {
+fn stash_apply(
+    repo_root: &std::path::Path,
+    idx: Option<usize>,
+) -> Result<StashResponse, crate::errors::LitError> {
     let stash_list = StashList::load(repo_root)?;
 
     if stash_list.entries.is_empty() {
@@ -229,7 +234,10 @@ fn stash_list(repo_root: &std::path::Path) -> Result<StashResponse, crate::error
     Ok(StashResponse::List { entries })
 }
 
-fn stash_drop(repo_root: &std::path::Path, idx: Option<usize>) -> Result<StashResponse, crate::errors::LitError> {
+fn stash_drop(
+    repo_root: &std::path::Path,
+    idx: Option<usize>,
+) -> Result<StashResponse, crate::errors::LitError> {
     let mut stash_list = StashList::load(repo_root)?;
 
     if stash_list.entries.is_empty() {
@@ -251,7 +259,10 @@ fn stash_drop(repo_root: &std::path::Path, idx: Option<usize>) -> Result<StashRe
     })
 }
 
-fn apply_stash_entry(repo_root: &std::path::Path, entry: &StashEntry) -> Result<(), crate::errors::LitError> {
+fn apply_stash_entry(
+    repo_root: &std::path::Path,
+    entry: &StashEntry,
+) -> Result<(), crate::errors::LitError> {
     let store = ObjectStore::new(repo_root);
     let worktree_hash = ObjectHash::from_hex(entry.worktree_tree.clone());
 
@@ -295,7 +306,10 @@ fn apply_stash_entry(repo_root: &std::path::Path, entry: &StashEntry) -> Result<
     Ok(())
 }
 
-fn restore_to_commit(repo_root: &std::path::Path, commit_hash: &str) -> Result<(), crate::errors::LitError> {
+fn restore_to_commit(
+    repo_root: &std::path::Path,
+    commit_hash: &str,
+) -> Result<(), crate::errors::LitError> {
     let store = ObjectStore::new(repo_root);
     let hash = ObjectHash::from_hex(commit_hash.to_string());
 

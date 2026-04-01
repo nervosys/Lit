@@ -105,7 +105,10 @@ pub fn write_pack(
 }
 
 /// Write a pack index file
-pub fn write_pack_index(entries: &[PackIndexEntry], index_path: &Path) -> Result<(), crate::errors::LitError> {
+pub fn write_pack_index(
+    entries: &[PackIndexEntry],
+    index_path: &Path,
+) -> Result<(), crate::errors::LitError> {
     let mut buf: Vec<u8> = Vec::new();
 
     // Header
@@ -141,9 +144,7 @@ pub fn read_pack_object(pack_path: &Path, offset: u64) -> Result<Object, crate::
     cursor.set_position(offset);
 
     // Read type
-    let _type_byte = cursor
-        .read_u8()
-        .map_err(|e| format!("Read error: {}", e))?;
+    let _type_byte = cursor.read_u8().map_err(|e| format!("Read error: {}", e))?;
 
     // Read sizes
     let _uncompressed_size = cursor
@@ -172,9 +173,7 @@ pub fn read_pack_object(pack_path: &Path, offset: u64) -> Result<Object, crate::
 }
 
 /// Load a pack index and build a hash→(pack_path, offset) map
-pub fn load_pack_index(
-    index_path: &Path,
-) -> Result<HashMap<String, (PathBuf, u64)>, String> {
+pub fn load_pack_index(index_path: &Path) -> Result<HashMap<String, (PathBuf, u64)>, String> {
     let data = fs::read(index_path).map_err(|e| format!("Failed to read index: {}", e))?;
     let mut cursor = Cursor::new(&data);
 
@@ -206,9 +205,8 @@ pub fn load_pack_index(
         if pos + hash_len > data.len() {
             return Err("Index data truncated".into());
         }
-        let hash_str =
-            String::from_utf8(data[pos..pos + hash_len].to_vec())
-                .map_err(|e| format!("Invalid hash UTF-8: {}", e))?;
+        let hash_str = String::from_utf8(data[pos..pos + hash_len].to_vec())
+            .map_err(|e| format!("Invalid hash UTF-8: {}", e))?;
         cursor.set_position((pos + hash_len) as u64);
 
         let offset = cursor
@@ -275,12 +273,8 @@ pub fn execute() -> Result<GcResponse, crate::errors::LitError> {
     let index_entries = write_pack(&objects, &pack_path)?;
     write_pack_index(&index_entries, &index_path)?;
 
-    let pack_bytes = fs::metadata(&pack_path)
-        .map(|m| m.len())
-        .unwrap_or(0);
-    let index_bytes = fs::metadata(&index_path)
-        .map(|m| m.len())
-        .unwrap_or(0);
+    let pack_bytes = fs::metadata(&pack_path).map(|m| m.len()).unwrap_or(0);
+    let index_bytes = fs::metadata(&index_path).map(|m| m.len()).unwrap_or(0);
 
     // Remove loose objects
     let mut loose_removed = 0u64;

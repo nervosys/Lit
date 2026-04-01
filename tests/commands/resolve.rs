@@ -49,30 +49,43 @@ fn test_resolve_finish_no_merge() {
     assert!(result.is_err(), "Finish without active merge should fail");
 }
 
-
 /// Helper to create a merge conflict scenario:
 /// Creates main branch commit, feature branch with conflicting change, then merges
 fn setup_merge_conflict(temp: &TempDir) {
     // Initial commit on main
-    add_and_commit(temp, "conflict.txt", "original content\nline two\nline three\n", "initial on main");
+    add_and_commit(
+        temp,
+        "conflict.txt",
+        "original content\nline two\nline three\n",
+        "initial on main",
+    );
 
     // Create and switch to feature branch
     lit::commands::branch::execute(Some("feature".to_string()), false, false).unwrap();
     lit::commands::checkout::execute("feature".to_string(), false).unwrap();
 
     // Modify on feature
-    create_file(temp.path(), "conflict.txt", "feature content\nline two\nline three\n");
+    create_file(
+        temp.path(),
+        "conflict.txt",
+        "feature content\nline two\nline three\n",
+    );
     lit::commands::add::execute(vec!["conflict.txt".to_string()]).unwrap();
     lit::commands::commit::execute("feature change".to_string(), None).unwrap();
 
     // Switch back to main and make conflicting change
     lit::commands::checkout::execute("main".to_string(), false).unwrap();
-    create_file(temp.path(), "conflict.txt", "main content\nline two\nline three\n");
+    create_file(
+        temp.path(),
+        "conflict.txt",
+        "main content\nline two\nline three\n",
+    );
     lit::commands::add::execute(vec!["conflict.txt".to_string()]).unwrap();
     lit::commands::commit::execute("main change".to_string(), None).unwrap();
 
     // Merge feature into main — should produce conflict with recursive strategy
-    let _result = lit::commands::merge::execute("feature".to_string(), Some("recursive".to_string()));
+    let _result =
+        lit::commands::merge::execute("feature".to_string(), Some("recursive".to_string()));
 }
 
 #[test]
@@ -95,7 +108,11 @@ fn test_resolve_ours_strategy() {
         false,
         false,
     );
-    assert!(result.is_ok(), "Resolve with ours should succeed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Resolve with ours should succeed: {:?}",
+        result.err()
+    );
     let resp = result.unwrap();
     assert!(
         resp.resolved_files.contains(&"conflict.txt".to_string()),
@@ -121,7 +138,11 @@ fn test_resolve_theirs_strategy() {
         false,
         false,
     );
-    assert!(result.is_ok(), "Resolve with theirs should succeed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Resolve with theirs should succeed: {:?}",
+        result.err()
+    );
     let resp = result.unwrap();
     assert!(
         resp.resolved_files.contains(&"conflict.txt".to_string()),
@@ -152,7 +173,8 @@ fn test_resolve_recursive_rejected() {
     let err = err.internal_message();
     assert!(
         err.contains("recursive"),
-        "Error should mention recursive strategy: {}", err
+        "Error should mention recursive strategy: {}",
+        err
     );
 }
 
@@ -168,17 +190,14 @@ fn test_resolve_missing_strategy() {
         return;
     }
 
-    let result = lit::commands::resolve::execute(
-        Some("conflict.txt".to_string()),
-        None,
-        false,
-        false,
-    );
+    let result =
+        lit::commands::resolve::execute(Some("conflict.txt".to_string()), None, false, false);
     assert!(result.is_err(), "Resolve without strategy should fail");
     let err = result.unwrap_err();
     let err = err.internal_message();
     assert!(
         err.contains("strategy"),
-        "Error should mention --strategy: {}", err
+        "Error should mention --strategy: {}",
+        err
     );
 }

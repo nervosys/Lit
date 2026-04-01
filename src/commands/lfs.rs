@@ -89,7 +89,10 @@ fn load_track_patterns(repo_root: &Path) -> Vec<String> {
 }
 
 /// Save LFS tracking patterns to .litattributes
-fn save_track_patterns(repo_root: &Path, patterns: &[String]) -> Result<(), crate::errors::LitError> {
+fn save_track_patterns(
+    repo_root: &Path,
+    patterns: &[String],
+) -> Result<(), crate::errors::LitError> {
     let attrs_path = repo_root.join(".litattributes");
 
     // Read existing non-LFS lines
@@ -130,7 +133,10 @@ fn matches_lfs_pattern(file_path: &str, patterns: &[String]) -> bool {
 }
 
 /// Store a large file in LFS storage
-fn store_lfs_object(repo_root: &Path, content: &[u8]) -> Result<LfsPointer, crate::errors::LitError> {
+fn store_lfs_object(
+    repo_root: &Path,
+    content: &[u8],
+) -> Result<LfsPointer, crate::errors::LitError> {
     let pointer = LfsPointer::from_content(content);
 
     // Store in .lit/lfs/objects/{oid[..4]}/{oid[4..]}
@@ -139,8 +145,7 @@ fn store_lfs_object(repo_root: &Path, content: &[u8]) -> Result<LfsPointer, crat
         .join("lfs")
         .join("objects")
         .join(&pointer.oid[..4.min(pointer.oid.len())]);
-    fs::create_dir_all(&lfs_dir)
-        .map_err(|e| format!("Failed to create LFS dir: {}", e))?;
+    fs::create_dir_all(&lfs_dir).map_err(|e| format!("Failed to create LFS dir: {}", e))?;
 
     let oid_rest = if pointer.oid.len() > 4 {
         &pointer.oid[4..]
@@ -150,14 +155,16 @@ fn store_lfs_object(repo_root: &Path, content: &[u8]) -> Result<LfsPointer, crat
     let obj_path = lfs_dir.join(oid_rest);
 
     // Write raw (uncompressed) for direct streaming access
-    fs::write(&obj_path, content)
-        .map_err(|e| format!("Failed to write LFS object: {}", e))?;
+    fs::write(&obj_path, content).map_err(|e| format!("Failed to write LFS object: {}", e))?;
 
     Ok(pointer)
 }
 
 /// Retrieve a large file from LFS storage
-pub fn read_lfs_object(repo_root: &Path, pointer: &LfsPointer) -> Result<Vec<u8>, crate::errors::LitError> {
+pub fn read_lfs_object(
+    repo_root: &Path,
+    pointer: &LfsPointer,
+) -> Result<Vec<u8>, crate::errors::LitError> {
     let oid_prefix = &pointer.oid[..4.min(pointer.oid.len())];
     let oid_rest = if pointer.oid.len() > 4 {
         &pointer.oid[4..]
@@ -201,7 +208,9 @@ pub fn execute_track(patterns: Vec<String>) -> Result<LfsTrackResponse, crate::e
 }
 
 /// Execute `lfs migrate` — convert existing large files to LFS pointers
-pub fn execute_migrate(threshold: Option<u64>) -> Result<LfsMigrateResponse, crate::errors::LitError> {
+pub fn execute_migrate(
+    threshold: Option<u64>,
+) -> Result<LfsMigrateResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
     let threshold = threshold.unwrap_or(10 * 1024 * 1024); // 10MB default
 

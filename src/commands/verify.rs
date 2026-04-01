@@ -114,16 +114,19 @@ fn verify_objects(
     let mut corrupt = 0usize;
 
     if !objects_dir.exists() {
-        return Ok((0, vec![VerifyResult {
-            check: "object_store".to_string(),
-            status: "ok".to_string(),
-            details: Some("No objects directory (empty repository)".to_string()),
-        }]));
+        return Ok((
+            0,
+            vec![VerifyResult {
+                check: "object_store".to_string(),
+                status: "ok".to_string(),
+                details: Some("No objects directory (empty repository)".to_string()),
+            }],
+        ));
     }
 
     // Walk the objects directory
-    for dir_entry in std::fs::read_dir(&objects_dir)
-        .map_err(|e| format!("Failed to read objects dir: {}", e))?
+    for dir_entry in
+        std::fs::read_dir(&objects_dir).map_err(|e| format!("Failed to read objects dir: {}", e))?
     {
         let dir_entry = dir_entry.map_err(|e| format!("Dir entry error: {}", e))?;
         if !dir_entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
@@ -176,9 +179,9 @@ fn verify_refs(
     let mut dangling = 0usize;
 
     // Check heads
-    let heads = list_refs(repo_root, "heads")
-        .unwrap_or_default();
-    for r in &heads { let (name, hash) = (&r.name, &r.hash);
+    let heads = list_refs(repo_root, "heads").unwrap_or_default();
+    for r in &heads {
+        let (name, hash) = (&r.name, &r.hash);
         count += 1;
         let hash_obj = ObjectHash::from_hex(hash.clone());
         match store.read(&hash_obj) {
@@ -196,16 +199,19 @@ fn verify_refs(
                 results.push(VerifyResult {
                     check: format!("ref:heads/{}", name),
                     status: "error".to_string(),
-                    details: Some(format!("Dangling reference: {}", &hash[..16.min(hash.len())])),
+                    details: Some(format!(
+                        "Dangling reference: {}",
+                        &hash[..16.min(hash.len())]
+                    )),
                 });
             }
         }
     }
 
     // Check tags
-    let tags = list_refs(repo_root, "tags")
-        .unwrap_or_default();
-    for r in &tags { let (name, hash) = (&r.name, &r.hash);
+    let tags = list_refs(repo_root, "tags").unwrap_or_default();
+    for r in &tags {
+        let (name, hash) = (&r.name, &r.hash);
         count += 1;
         let hash_obj = ObjectHash::from_hex(hash.clone());
         if store.read(&hash_obj).is_err() {
@@ -213,7 +219,10 @@ fn verify_refs(
             results.push(VerifyResult {
                 check: format!("ref:tags/{}", name),
                 status: "error".to_string(),
-                details: Some(format!("Dangling reference: {}", &hash[..16.min(hash.len())])),
+                details: Some(format!(
+                    "Dangling reference: {}",
+                    &hash[..16.min(hash.len())]
+                )),
             });
         }
     }
@@ -233,13 +242,13 @@ fn verify_dag(
     repo_root: &std::path::Path,
     store: &ObjectStore,
 ) -> Result<VerifyResult, crate::errors::LitError> {
-    let heads = list_refs(repo_root, "heads")
-        .unwrap_or_default();
+    let heads = list_refs(repo_root, "heads").unwrap_or_default();
 
     let mut visited = std::collections::HashSet::new();
     let mut missing_parents = Vec::new();
 
-    for r in &heads { let hash = &r.hash;
+    for r in &heads {
+        let hash = &r.hash;
         walk_commit_dag(store, hash, &mut visited, &mut missing_parents);
     }
 
@@ -247,13 +256,19 @@ fn verify_dag(
         Ok(VerifyResult {
             check: "dag_connectivity".to_string(),
             status: "ok".to_string(),
-            details: Some(format!("DAG is connected ({} commits reachable)", visited.len())),
+            details: Some(format!(
+                "DAG is connected ({} commits reachable)",
+                visited.len()
+            )),
         })
     } else {
         Ok(VerifyResult {
             check: "dag_connectivity".to_string(),
             status: "error".to_string(),
-            details: Some(format!("{} missing parent commit(s)", missing_parents.len())),
+            details: Some(format!(
+                "{} missing parent commit(s)",
+                missing_parents.len()
+            )),
         })
     }
 }
@@ -309,7 +324,10 @@ fn verify_index(
         Ok(VerifyResult {
             check: "index".to_string(),
             status: "error".to_string(),
-            details: Some(format!("{} index entries reference missing objects", missing)),
+            details: Some(format!(
+                "{} index entries reference missing objects",
+                missing
+            )),
         })
     }
 }

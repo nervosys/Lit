@@ -99,7 +99,9 @@ pub fn execute(atomic: bool, dry_run: bool) -> Result<BatchResponse, crate::erro
     })
 }
 
-fn execute_single_operation(op: &BatchOperation) -> Result<serde_json::Value, crate::errors::LitError> {
+fn execute_single_operation(
+    op: &BatchOperation,
+) -> Result<serde_json::Value, crate::errors::LitError> {
     match op.command.as_str() {
         "add" => {
             let files: Vec<String> = op

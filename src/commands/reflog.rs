@@ -58,7 +58,10 @@ pub fn append_reflog(
     fs::write(&path, data).map_err(|e| format!("Failed to write reflog: {}", e).into())
 }
 
-pub fn execute(ref_name: Option<String>, count: usize) -> Result<ReflogResponse, crate::errors::LitError> {
+pub fn execute(
+    ref_name: Option<String>,
+    count: usize,
+) -> Result<ReflogResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
 
     let target_ref = match ref_name {

@@ -40,7 +40,10 @@ pub fn execute(
     }
 }
 
-fn resolve_target(repo_root: &std::path::Path, commit: Option<String>) -> Result<String, crate::errors::LitError> {
+fn resolve_target(
+    repo_root: &std::path::Path,
+    commit: Option<String>,
+) -> Result<String, crate::errors::LitError> {
     match commit {
         Some(rev) => {
             // Try as branch ref first, then as raw hash
@@ -136,7 +139,10 @@ fn list_tags(repo_root: &std::path::Path) -> Result<TagResponse, crate::errors::
     Ok(TagResponse::List { tags })
 }
 
-fn delete_tag(repo_root: &std::path::Path, tag_name: &str) -> Result<TagResponse, crate::errors::LitError> {
+fn delete_tag(
+    repo_root: &std::path::Path,
+    tag_name: &str,
+) -> Result<TagResponse, crate::errors::LitError> {
     crate::core::refs::delete_ref(repo_root, &format!("tags/{}", tag_name))?;
     Ok(TagResponse::Delete {
         name: tag_name.to_string(),
@@ -144,9 +150,11 @@ fn delete_tag(repo_root: &std::path::Path, tag_name: &str) -> Result<TagResponse
     })
 }
 
-fn verify_tag(repo_root: &std::path::Path, tag_name: &str) -> Result<TagResponse, crate::errors::LitError> {
-    let hash_str =
-        crate::core::refs::read_ref(repo_root, &format!("tags/{}", tag_name))?;
+fn verify_tag(
+    repo_root: &std::path::Path,
+    tag_name: &str,
+) -> Result<TagResponse, crate::errors::LitError> {
+    let hash_str = crate::core::refs::read_ref(repo_root, &format!("tags/{}", tag_name))?;
     let hash = ObjectHash::from_hex(hash_str);
     let store = ObjectStore::new(repo_root);
     let obj = store.read(&hash)?;
@@ -173,9 +181,6 @@ fn verify_tag(repo_root: &std::path::Path, tag_name: &str) -> Result<TagResponse
                 }),
             }
         }
-        _ => Err(format!(
-            "Tag '{}' is a lightweight tag (not signed)",
-            tag_name
-        ).into()),
+        _ => Err(format!("Tag '{}' is a lightweight tag (not signed)", tag_name).into()),
     }
 }

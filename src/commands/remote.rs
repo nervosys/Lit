@@ -28,7 +28,8 @@ impl RemoteConfig {
         let content = fs::read_to_string(&config_path)
             .map_err(|e| format!("Failed to read remotes config: {}", e))?;
 
-        serde_json::from_str(&content).map_err(|e| format!("Failed to parse remotes config: {}", e).into())
+        serde_json::from_str(&content)
+            .map_err(|e| format!("Failed to parse remotes config: {}", e).into())
     }
 
     fn save(&self, repo_path: &std::path::Path) -> Result<(), crate::errors::LitError> {
@@ -42,7 +43,9 @@ impl RemoteConfig {
     }
 }
 
-pub fn execute(command: Option<crate::RemoteCommands>) -> Result<RemoteResponse, crate::errors::LitError> {
+pub fn execute(
+    command: Option<crate::RemoteCommands>,
+) -> Result<RemoteResponse, crate::errors::LitError> {
     let repo_root = find_repo_root()?;
 
     match command {
@@ -60,10 +63,9 @@ pub fn execute(command: Option<crate::RemoteCommands>) -> Result<RemoteResponse,
             if config.remotes.contains_key(&name) {
                 return Err(format!("Remote '{}' already exists", name).into());
             }
-            config.remotes.insert(
-                name.clone(),
-                Remote { url: url.clone() },
-            );
+            config
+                .remotes
+                .insert(name.clone(), Remote { url: url.clone() });
             config.save(&repo_root)?;
             Ok(RemoteResponse::Add { name, url })
         }

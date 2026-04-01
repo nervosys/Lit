@@ -1,6 +1,5 @@
 use crate::core::{
-    find_repo_root, get_current_branch, read_head, write_ref, Commit, Object, ObjectHash,
-    Tree,
+    find_repo_root, get_current_branch, read_head, write_ref, Commit, Object, ObjectHash, Tree,
 };
 use crate::response::RevertResponse;
 use crate::storage::ObjectStore;
