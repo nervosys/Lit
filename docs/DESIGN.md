@@ -109,19 +109,19 @@ Carried forward from the existing architecture — all cryptographic primitives 
 
 ### Key Architectural Shifts from Current Codebase
 
-| Aspect               | Current State                | Agentic-First Design                                                          |
-| -------------------- | ---------------------------- | ----------------------------------------------------------------------------- |
-| **Output**           | `println!()` in commands     | Commands return typed `Response` structs; rendering is separate               |
-| **Error handling**   | `Result<(), String>`         | `Result<CommandResponse, LitError>` with structured error codes               |
-| **API surface**      | CLI only                     | CLI + HTTP/gRPC + MCP + Rust library crate                                    |
-| **Merge**            | Not implemented              | Full 3-way merge with auto-resolution strategies                              |
-| **Diff**             | Not implemented              | Line-level, word-level, and AST-aware diff                                    |
-| **Push/Pull/Clone**  | Stubs                        | Full implementation over HTTPS, SSH, Lit://, file://, USB                     |
-| **Config**           | Home-dir only (`~/.lit/`)    | Repo-local `.lit/config.toml` + global `~/.litconfig.toml`, env var overrides |
-| **Concurrency**      | Single-threaded command exec | File-level locking, lock-free reads, parallel object I/O                      |
-| **Object storage**   | Loose objects only           | Loose + packfiles with delta compression                                      |
-| **Batch operations** | One file/command at a time   | JSONL stdin batch mode for all mutating operations                            |
-| **Events**           | None                         | Hook system (pre/post commit, push, merge, etc.) + event bus                  |
+| Aspect               | v0.1 (Initial)               | v1.0 (Agentic-First)                                                            |
+| -------------------- | ---------------------------- | ------------------------------------------------------------------------------- |
+| **Output**           | `println!()` in commands     | Commands return typed `Response` structs; rendering is separate                 |
+| **Error handling**   | `Result<(), String>`         | `Result<CommandResponse, LitError>` with structured error codes                 |
+| **API surface**      | CLI only                     | CLI + HTTP + MCP + stdio                                                        |
+| **Merge**            | Not implemented              | ✅ Full 3-way merge with auto-resolution strategies                              |
+| **Diff**             | Not implemented              | ✅ Line-level diff                                                               |
+| **Push/Pull/Clone**  | Stubs                        | ✅ Full implementation over HTTPS, SSH, Lit://, stdio                            |
+| **Config**           | Home-dir only (`~/.lit/`)    | ✅ Repo-local `.lit/config.toml` + global `~/.litconfig.toml`, env var overrides |
+| **Concurrency**      | Single-threaded command exec | ✅ File-level locking, lock-free reads, parallel object I/O                      |
+| **Object storage**   | Loose objects only           | Loose objects (packfiles planned)                                               |
+| **Batch operations** | One file/command at a time   | ✅ JSONL stdin batch mode for all mutating operations                            |
+| **Events**           | None                         | ✅ Watch mode + filesystem event stream                                          |
 
 ---
 

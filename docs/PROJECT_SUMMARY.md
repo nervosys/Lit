@@ -224,23 +224,14 @@ cargo test -- --test-threads=1
 
 ## Known Limitations
 
-### Not Implemented
-- ❌ Network operations (push/pull/clone) - requires server
-- ❌ Merge functionality
-- ❌ Interactive staging
-- ❌ Diff viewer
-- ❌ Tags
-- ❌ Stash
-- ❌ Submodules
-- ❌ Pack files
-- ❌ Delta compression
-
 ### Design Constraints
 - Simplified object storage (no pack files)
-- Linear history traversal only
-- Limited directory nesting in trees
-- No hooks or extensions
 - Single working tree only
+
+### Not Yet Implemented
+- ❌ Interactive staging
+- ❌ Submodules
+- ❌ Pack files / delta compression
 
 ## Performance Characteristics
 
@@ -387,7 +378,7 @@ lit is ready for deployment in environments where:
 ---
 
 **Project**: Lit - The Agentic-First Distributed VCS  
-**Version**: 0.1.0  
+**Version**: 1.0.0  
 **Language**: Rust  
 **License**: AGPL-3.0-or-later  
-**Status**: Production Ready (Core Features)
+**Status**: Production Ready

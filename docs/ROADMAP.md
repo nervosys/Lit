@@ -282,5 +282,3 @@ Performance: pack files, parallel I/O, LFS support, binary index format.
 - **Hosting platform**: Lit is not GitHub/GitLab. It is the VCS engine. Hosting is a separate concern.
 - **Backward compatibility with Git wire protocol**: Lit uses its own sync protocol. Git interop is via import/export conversion, not protocol compatibility.
 - **Plugin system**: Hooks and the event bus cover extensibility. A plugin API adds complexity without clear agentic benefit.
-
-

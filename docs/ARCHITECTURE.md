@@ -575,7 +575,7 @@ Some Git features are simplified or use different approaches:
 | Quantum Resistant | ❌ No               | ✅ Yes (NIST standards)                |
 | Network Protocols | Many               | lit:// only                           |
 | Network Scope     | Internet           | Intranet only                         |
-| Merge             | Advanced           | Not implemented                       |
+| Merge             | Advanced           | 3-way merge with conflict resolution  |
 | Complexity        | High               | Simplified                            |
 | Security Focus    | General            | High-security + quantum-safe          |
 | Audit Logging     | Optional           | Built-in                              |
