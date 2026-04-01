@@ -23,7 +23,7 @@ formal knowledge graph. For the machine-readable (JSON) equivalent, run `lit ont
 | **Type**       | `schema:SoftwareApplication` / `vcs:VersionControlSystem`      |
 | **Version**    | 1.0.0                                                          |
 | **Language**   | Rust (edition 2021)                                            |
-| **License**    | MIT                                                            |
+| **License**    | AGPL-3.0-or-later                                              |
 | **Repository** | `github.com/nervosys/Lit`                                      |
 | **Design**     | Agentic-first — all interfaces emit structured JSON by default |
 

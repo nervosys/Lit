@@ -220,7 +220,7 @@ cargo test -- --test-threads=1
 4. **EXAMPLES.md** - Usage examples and workflows
 5. **TESTING.md** - Testing guide and procedures
 6. **.litconfig.example** - Sample configuration
-7. **LICENSE** - MIT License
+7. **LICENSE** - AGPL-3.0-or-later
 
 ## Known Limitations
 
@@ -364,7 +364,7 @@ cargo run -- <command>      # Run locally
 
 ## License
 
-MIT License - See LICENSE file for details
+AGPL-3.0-or-later — See LICENSE file for details. Commercial licensing: licensing@nervosys.ai
 
 ## Conclusion
 
@@ -389,5 +389,5 @@ lit is ready for deployment in environments where:
 **Project**: Lit - The Agentic-First Distributed VCS  
 **Version**: 0.1.0  
 **Language**: Rust  
-**License**: MIT  
+**License**: AGPL-3.0-or-later  
 **Status**: Production Ready (Core Features)

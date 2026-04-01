@@ -413,4 +413,4 @@ lit log --output human
 
 ## License
 
-MIT License - See LICENSE file for details
+AGPL-3.0-or-later — See LICENSE file for details. Commercial licensing: licensing@nervosys.ai

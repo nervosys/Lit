@@ -583,4 +583,4 @@ Some Git features are simplified or use different approaches:
 
 ## License
 
-MIT License - See LICENSE file
+AGPL-3.0-or-later — See LICENSE file. Commercial licensing: licensing@nervosys.ai
