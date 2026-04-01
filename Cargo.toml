@@ -2,11 +2,12 @@
 name = "lit"
 version = "1.0.0"
 edition = "2021"
+rust-version = "1.82"
 authors = ["Nervosys"]
 description = "Lit - The agentic-first distributed version control system. A complete Git replacement designed for AI agents first and humans second."
 license = "AGPL-3.0-or-later"
-repository = "https://github.com/nervosys/lit"
-homepage = "https://github.com/nervosys/lit"
+repository = "https://github.com/nervosys/Lit"
+homepage = "https://github.com/nervosys/Lit"
 keywords = [
     "vcs",
     "git",
@@ -16,6 +17,7 @@ keywords = [
 ]
 readme = "README.md"
 categories = ["command-line-utilities", "development-tools"]
+exclude = ["target/", "website/", "tests/", "examples/", "docs/", ".github/"]
 
 [dependencies]
 clap = { version = "4.5", features = ["derive", "env"] }

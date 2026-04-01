@@ -16,3 +16,13 @@ clippy_output.txt
 # Dev scripts
 fix_*.ps1
 append_responses.ps1
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

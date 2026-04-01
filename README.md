@@ -443,6 +443,8 @@ cargo test --test network_integration_test -- --test-threads=1   # 14 network te
 - [AIRGAP.md](docs/AIRGAP.md) — Airgap mode documentation
 - [DEPLOYMENT.md](docs/DEPLOYMENT.md) — Deployment and operations guide
 - [PROJECT_SUMMARY.md](docs/PROJECT_SUMMARY.md) — High-level project overview
+- [CHANGELOG.md](CHANGELOG.md) — Release history
+- [CONTRIBUTING.md](CONTRIBUTING.md) — Contribution guidelines
 
 ## License
 
@@ -453,12 +455,14 @@ This software is dual-licensed:
 
 For commercial licensing inquiries, contact: <licensing@nervosys.ai>
 
+## Security
+
+If you discover a security vulnerability, **do not** open a public issue. See [SECURITY.md](SECURITY.md) for responsible disclosure instructions.
+
+For detailed security architecture: [docs/SECURITY.md](docs/SECURITY.md) | [docs/SECURITY_AUDIT.md](docs/SECURITY_AUDIT.md)
+
 ## Contributing
 
-This is a security-focused tool. Contributions should:
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, coding standards, and submission guidelines.
 
-- Maintain strict network restrictions
-- Include security review considerations
-- Add appropriate audit logging
-- Follow Rust security best practices
-- **Include comprehensive tests** (see testing documentation above)
+This is a security-focused tool — all contributions must pass CI, include tests, and preserve structured output.
