@@ -5,7 +5,15 @@ All notable changes to Lit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.0] - 2026-03-31
+## [1.0.0] - 2026-04-01
+
+### Security
+
+- **Security audit** — comprehensive multi-framework audit (CVE, MITRE ATT&CK, NIST FIPS 140-3, CMMC 2.0 Level 2) with 9 findings, all remediated
+- Gate test-passphrase bypass with `#[cfg(test)]` — compiled out of release builds
+- Sanitize error messages in daemon, MCP, and HTTP error handlers (`user_message()` vs `internal_message()`)
+- Add 1 MB line length limit to `lit://` daemon and stdio readers to prevent memory exhaustion
+- Document lease TOCTOU race condition and Windows DACL limitation with security advisories
 
 ### Added
 
