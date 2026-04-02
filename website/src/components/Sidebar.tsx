@@ -64,10 +64,11 @@ export function Sidebar() {
       <nav className="p-4 text-sm">
         {DOC_NAV.map((section) => (
           <div key={section.category} className="mb-5">
-            <h3 className="font-semibold text-xs uppercase tracking-wider text-[var(--muted)] mb-2">
+            <h3 className="font-mono text-[10px] uppercase tracking-[0.15em] text-[var(--muted)] mb-2 flex items-center gap-2">
+              <span className="w-1 h-1 rounded-full bg-[var(--accent)] opacity-50" />
               {section.category}
             </h3>
-            <ul className="space-y-1">
+            <ul className="space-y-0.5">
               {section.items.map((item) => {
                 const href = `/docs/${item.slug}/`;
                 const active = pathname === href || pathname === `/docs/${item.slug}`;
@@ -75,10 +76,10 @@ export function Sidebar() {
                   <li key={item.slug}>
                     <Link
                       href={href}
-                      className={`block rounded-md px-2 py-1.5 transition-colors ${
+                      className={`block rounded px-2 py-1.5 text-[13px] transition-all ${
                         active
-                          ? "bg-brand-50 dark:bg-brand-950 text-brand-700 dark:text-brand-300 font-medium"
-                          : "text-[var(--fg)] hover:bg-[var(--border)]/50"
+                          ? "bg-[var(--accent)]/10 text-[var(--accent)] font-medium border-l-2 border-[var(--accent)]"
+                          : "text-[var(--muted)] hover:text-[var(--fg)] hover:bg-[var(--border)]/30"
                       }`}
                     >
                       {item.title}
@@ -98,14 +99,14 @@ export function MobileSidebar() {
   const pathname = usePathname();
 
   return (
-    <details className="lg:hidden mb-4 border rounded-lg" style={{ borderColor: "var(--border)" }}>
-      <summary className="cursor-pointer px-4 py-2 text-sm font-medium">
-        Navigation
+    <details className="lg:hidden mb-4 rounded border cyber-border" style={{ background: "var(--sidebar-bg)" }}>
+      <summary className="cursor-pointer px-4 py-2 font-mono text-xs uppercase tracking-wider text-[var(--muted)]">
+        ▸ Navigation
       </summary>
       <nav className="px-4 pb-3 text-sm">
         {DOC_NAV.map((section) => (
           <div key={section.category} className="mb-3">
-            <h3 className="font-semibold text-xs uppercase tracking-wider text-[var(--muted)] mb-1">
+            <h3 className="font-mono text-[10px] uppercase tracking-[0.15em] text-[var(--muted)] mb-1">
               {section.category}
             </h3>
             <ul className="space-y-0.5">
@@ -116,10 +117,10 @@ export function MobileSidebar() {
                   <li key={item.slug}>
                     <Link
                       href={href}
-                      className={`block rounded px-2 py-1 ${
+                      className={`block rounded px-2 py-1 text-[13px] ${
                         active
-                          ? "text-brand-600 dark:text-brand-400 font-medium"
-                          : "text-[var(--fg)]"
+                          ? "text-[var(--accent)] font-medium"
+                          : "text-[var(--muted)] hover:text-[var(--fg)]"
                       }`}
                     >
                       {item.title}

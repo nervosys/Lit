@@ -562,7 +562,7 @@ For formal FIPS 140-3 validation:
 **Project**: Lit Version Control System  
 **Repository**: https://github.com/nervosys/lit  
 **Documentation**: See `ENCRYPTION.md`, `ENCRYPTION_ENHANCEMENTS.md`  
-**Security Contact**: security@nervosys.dev  
+**Security Contact**: security@nervosys.ai  
 
 **For FIPS validation inquiries**: Contact NIST CMVP or accredited testing laboratory
 
