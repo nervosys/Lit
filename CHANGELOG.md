@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **42 CLI commands** — full Git-equivalent workflow plus agent-native extensions (init, add, commit, status, log, diff, show, branch, checkout, merge, resolve, tag, stash, reset, revert, cherry-pick, rebase, blame, bisect, reflog, remote, push, pull, clone, fetch, batch, serve, mcp-serve, tx, snapshot, search, watch, ontology, schema, lfs, verify, gc, import-git, export-git, rotate-key, config, sandbox, swarm)
+- **50 CLI commands** — full Git-equivalent workflow plus agent-native extensions (init, add, commit, status, log, diff, show, branch, checkout, merge, resolve, tag, stash, reset, revert, cherry-pick, rebase, blame, bisect, reflog, remote, push, pull, clone, fetch, batch, serve, mcp-serve, tx, snapshot, search, watch, ontology, schema, lfs, verify, gc, import-git, export-git, rotate-key, config, sandbox, swarm, did, ucan, trust, issue, pr, subscribe, delegate, peer)
 - **30 MCP tools** — LLM agents interact via Model Context Protocol tool calls
 - **4 transport protocols** — HTTPS, SSH, `lit://` (custom TCP), stdio pipe
 - **Structured JSON output** — all commands emit machine-readable JSON by default
@@ -37,7 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **REST API server** with bearer token authentication
 - **MCP server** with stdio and HTTP transports
 - **`lit://` TCP daemon** for LAN deployments
-- **428 tests** — unit, command, integration, performance, adversarial, concurrency, and network suites
+- **382 tests** — unit, command, integration, performance, adversarial, concurrency, and network suites
 - **CI/CD** — GitHub Actions for testing (Linux/macOS/Windows), nightly security, and release builds (5 targets)
 - **Cross-platform** — Linux (x86_64, aarch64), macOS (x86_64, aarch64), Windows (x86_64)
 - **Documentation website** — Next.js 14 static site with 18 documentation pages, dark mode

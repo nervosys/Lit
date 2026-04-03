@@ -69,7 +69,7 @@ mod adversarial_tests {
 
         use std::collections::HashSet;
 
-        let passphrase = "test-nonce-attack-secure";
+        let passphrase = "Test-N0nce-Attack!Secure";
         let salt = EncryptionKey::generate_salt();
         let key = EncryptionKey::from_passphrase(passphrase, &salt).unwrap();
         let engine = EncryptionEngine::new(&key).unwrap();

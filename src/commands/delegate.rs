@@ -241,9 +241,13 @@ fn save_task(repo_root: &Path, task: &DelegatedTask) -> Result<(), LitError> {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    static COUNTER: AtomicU32 = AtomicU32::new(0);
 
     fn tmp_dir() -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("lit_delegate_test_{}", std::process::id()));
+        let n = COUNTER.fetch_add(1, Ordering::SeqCst);
+        let dir = std::env::temp_dir().join(format!("lit_delegate_test_{}_{}", std::process::id(), n));
         fs::create_dir_all(&dir).unwrap();
         dir
     }

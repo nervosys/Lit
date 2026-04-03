@@ -27,6 +27,12 @@ const DOC_NAV: { category: string; items: { slug: string; title: string }[] }[] 
     ],
   },
   {
+    category: "Decentralized",
+    items: [
+      { slug: "FEDERATION", title: "Identity, Issues & Federation" },
+    ],
+  },
+  {
     category: "Security",
     items: [
       { slug: "SECURITY", title: "Security Policy" },

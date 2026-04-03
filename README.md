@@ -2,7 +2,7 @@
 
 **The world's first version control system designed for AI agents first and humans second.**
 
-Lit is a complete Git replacement written in Rust — 42 commands, 30 MCP tools, post-quantum cryptographic security, sandboxed execution, and structured machine-readable output. Every interface is designed for autonomous agent workflows, with human-friendly output available via a single flag.
+Lit is a complete Git replacement written in Rust — 50 commands, 30 MCP tools, post-quantum cryptographic security, sandboxed execution, and structured machine-readable output. Every interface is designed for autonomous agent workflows, with human-friendly output available via a single flag.
 
 ## Why Lit?
 
@@ -20,6 +20,10 @@ Git was designed in 2005 for human developers using terminals. Every interface �
 | **Merge conflicts**     | `<<<<<<<` markers          | Structured conflict objects              |
 | **Agent metadata**      | Commit message conventions | First-class metadata field               |
 | **Agent coordination**  | None                       | Swarm registration, file leasing         |
+| **Identity**            | None                       | DID-based identity, UCAN delegation      |
+| **Trust scoring**       | None                       | Reputation tracking per agent            |
+| **Issues & PRs**        | None built-in              | Local-first, stored as git refs          |
+| **Federation**          | Centralized (GitHub/GitLab)| Content-addressed peer-to-peer           |
 | **Sandboxing**          | None                       | Process isolation with env/fs/net fences |
 | **Cryptography**        | SHA-1 / SHA-256            | SHA3-512 + BLAKE3 (quantum-resistant)    |
 | **Signatures**          | GPG / SSH                  | ML-DSA-87 (NIST FIPS 204)                |
@@ -29,8 +33,15 @@ Git was designed in 2005 for human developers using terminals. Every interface �
 
 ## Features
 
-- **42 CLI commands** — full Git-equivalent workflow plus agent-native extensions
+- **50 CLI commands** — full Git-equivalent workflow plus agent-native extensions
 - **30 MCP tools** — LLM agents interact via Model Context Protocol tool calls
+- **Decentralized identity** -- DID-based identity with Ed25519 and ML-DSA-87 post-quantum keys
+- **UCAN capability delegation** -- fine-grained, cryptographically signed permission tokens
+- **Agent trust scoring** -- reputation tracking with event-driven trust levels
+- **Local-first issues & PRs** -- issue tracker and pull requests stored as git refs
+- **Event subscriptions** -- subscribe to repository events (commits, branches, merges)
+- **Agent task delegation** -- structured protocol for delegating work between agents
+- **Content-addressed federation** -- peer-to-peer repository sync with want-list negotiation
 - **4 transport protocols** — HTTPS, SSH, `lit://` (custom TCP), stdio pipe
 - **Sandboxed execution** — run untrusted code in isolated environments with filesystem, environment, and network fences
 - **Swarm coordination** — multi-agent registration, file leasing, and conflict-free concurrent access
@@ -89,7 +100,7 @@ lit diff --human
 export LIT_OUTPUT=human
 ```
 
-## Commands (42)
+## Commands (50)
 
 ### Version Control
 
@@ -179,6 +190,60 @@ Isolation layers:
 | Network     | `LIT_AIRGAPPED=1` — blocks all network protocols         |
 | Git config  | `GIT_CONFIG_NOSYSTEM=1` — prevents config file leaks     |
 | Credentials | Cleared — no cloud tokens, SSH keys, or API keys present |
+
+### Identity & Trust
+
+```bash
+lit did generate [--method ed25519|ml-dsa-87]  # Generate DID identity
+lit did show                                   # Show current identity
+lit did resolve <did>                          # Resolve a DID to its document
+lit ucan issue <audience> --resource <r> --action <a>  # Issue UCAN token
+lit ucan list [audience]                       # List UCAN tokens
+lit ucan revoke <cid>                          # Revoke a UCAN token
+lit trust show <did>                           # Show agent trust score
+lit trust list                                 # List all tracked agents
+lit trust history <did>                        # Show trust event history
+```
+
+### Issues & Pull Requests
+
+```bash
+lit issue create <title> [--body <b>] [--label <l>]    # Create issue
+lit issue list [--state open|closed|all]                # List issues
+lit issue show <id>                                     # Show issue
+lit issue close <id>                                    # Close issue
+lit issue comment <id> <body>                           # Comment on issue
+lit pr create <title> --head <branch> [--base main]     # Create PR
+lit pr list [--state open|merged|closed|all]             # List PRs
+lit pr show <id>                                         # Show PR
+lit pr merge <id>                                        # Merge PR
+lit pr close <id>                                        # Close PR
+lit pr comment <id> <body>                               # Comment on PR
+```
+
+### Events & Delegation
+
+```bash
+lit subscribe add <event-types...> [--branch <b>]  # Subscribe to events
+lit subscribe list                                  # List subscriptions
+lit subscribe remove <id>                           # Remove subscription
+lit subscribe events [--event-type <t>] [--limit N] # Read recent events
+lit delegate create <to> <title> [--priority high]  # Delegate task to agent
+lit delegate accept <task-id>                        # Accept delegated task
+lit delegate complete <task-id> <result>              # Complete task
+lit delegate list [--agent <did>] [--status <s>]      # List tasks
+lit delegate show <task-id>                            # Show task details
+```
+
+### Federation
+
+```bash
+lit peer add <did> --endpoint <url> --public-key <hex>  # Add peer
+lit peer remove <did>                                    # Remove peer
+lit peer list                                            # List all peers
+lit peer show <did>                                      # Show peer details
+lit peer sync <did>                                      # Sync with peer
+```
 
 ### Large File Storage
 
@@ -412,12 +477,12 @@ Sandboxes combine with airgap mode automatically. See [EXAMPLES.md § Sandboxed 
 
 ## Testing
 
-428 tests across unit, integration, and performance suites:
+382 tests across unit, integration, and performance suites:
 
 ```shell
-cargo test --lib -- --test-threads=1                             # 61 unit tests
+cargo test --lib -- --test-threads=1                             # 68 unit tests
 cargo test --test command_tests -- --test-threads=1              # 239 command tests
-cargo test --test feature_integration_test                       # 30 integration tests
+cargo test --test feature_integration_test                       # 38 integration tests
 cargo test --test performance_benchmarks --release               # 9 benchmarks
 cargo test --test adversarial_test -- --test-threads=1           # 5 security tests
 cargo test --test concurrency_test -- --test-threads=1           # 9 concurrency tests

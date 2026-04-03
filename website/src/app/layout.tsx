@@ -24,7 +24,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Lit — Agentic-First Distributed Version Control",
     description:
-      "Built in Rust with ML-DSA-87 post-quantum signatures, AES-256-GCM encryption, 42 CLI commands, and 30 MCP tools for AI agent integration.",
+      "Built in Rust with ML-DSA-87 post-quantum signatures, AES-256-GCM encryption, 50 CLI commands, and 30 MCP tools for AI agent integration.",
     url: "https://github.com/nervosys/Lit",
     siteName: "Lit VCS",
     type: "website",

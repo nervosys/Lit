@@ -233,7 +233,7 @@ vcs:Reference (abstract)
 
 ---
 
-## 4. Command Taxonomy (42 Commands)
+## 4. Command Taxonomy (50 Commands)
 
 Commands are classified by category with explicit preconditions, side effects, idempotency, and
 sequencing relationships (preceded_by / follows).

@@ -31,7 +31,7 @@ Lit is an agentic-first distributed version control system written in Rust, desi
 │ • tag, stash │    │              │    │              │
 │ • batch, tx  │    │              │    │              │
 │ • serve, mcp │    │              │    │              │
-│ • +28 more   │    │              │    │              │
+│ • +36 more   │    │              │    │              │
 └──────────────┘    └──────────────┘    └──────────────┘
                             │
                             ▼
@@ -269,6 +269,22 @@ Each command is a separate module:
 - **gc**: Garbage collection and pack file optimization
 - **lfs**: Large file storage with pointer files
 - **rotate-key**: Encryption key rotation
+
+#### Identity & Trust
+- **did**: DID-based identity — generate, show, resolve decentralized identifiers with Ed25519/ML-DSA-87 keys
+- **ucan**: UCAN capability delegation — issue, list, revoke fine-grained cryptographic permission tokens
+- **trust**: Agent trust scoring — track reputation per DID with event-driven trust levels and history
+
+#### Issues & Pull Requests
+- **issue**: Local-first issue tracker — create, list, show, close, comment; stored as git refs
+- **pr**: Local-first pull requests — create, list, show, merge, close, comment; stored as git refs
+
+#### Events & Delegation
+- **subscribe**: Event subscriptions — subscribe to commits, branches, merges; read from event log
+- **delegate**: Agent task delegation — create, accept, complete tasks with priority and status tracking
+
+#### Federation
+- **peer**: Content-addressed peer-to-peer federation — add, remove, list, show, sync with want-list negotiation
 
 ## Data Flow
 

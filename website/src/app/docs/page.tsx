@@ -20,6 +20,13 @@ const SECTIONS = [
     ],
   },
   {
+    title: "Decentralized",
+    description: "DID identity, UCAN delegation, local-first issues & PRs, and peer-to-peer federation.",
+    docs: [
+      { slug: "FEDERATION", label: "Identity, Issues & Federation", desc: "DID, UCAN, trust, issues, PRs, events, delegation, and peer sync" },
+    ],
+  },
+  {
     title: "Security",
     description: "Cryptographic primitives, encryption, key management, and audit reports.",
     docs: [

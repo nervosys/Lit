@@ -2,7 +2,7 @@
 
 ## Current State (v1.0.0)
 
-All 5 phases complete. 42 CLI commands implemented with structured JSON/human/MsgPack output.
+All 6 phases complete. 50 CLI commands implemented with structured JSON/human/MsgPack output.
 Full VCS feature parity with Git (diff, merge, push/pull/clone/fetch, stash, rebase, cherry-pick, blame, bisect, reflog).
 Agentic features: batch mode, transactions, snapshots, agent metadata, search, watch, verify.
 API server and MCP tool server for LLM agent integration. Swarm coordination with branch namespacing and file leases.
