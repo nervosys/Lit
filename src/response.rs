@@ -1478,3 +1478,211 @@ impl CommandResponse for SandboxResponse {
         out
     }
 }
+
+// ============================================================================
+// Phase 6 Response Types (Decentralized Features)
+// ============================================================================
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DidResponse {
+    pub action: String,
+    pub did: Option<String>,
+    pub message: String,
+    pub details: Option<serde_json::Value>,
+}
+
+impl CommandResponse for DidResponse {
+    fn command_name(&self) -> &'static str {
+        "did"
+    }
+    fn human_readable(&self) -> String {
+        let mut out = format!("{}\n", self.message);
+        if let Some(ref did) = self.did {
+            out.push_str(&format!("  DID: {}\n", did));
+        }
+        if let Some(ref d) = self.details {
+            out.push_str(&serde_json::to_string_pretty(d).unwrap_or_default());
+            out.push('\n');
+        }
+        out
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TrustResponse {
+    pub action: String,
+    pub did: Option<String>,
+    pub score: Option<f64>,
+    pub level: Option<String>,
+    pub message: String,
+    pub details: Option<serde_json::Value>,
+}
+
+impl CommandResponse for TrustResponse {
+    fn command_name(&self) -> &'static str {
+        "trust"
+    }
+    fn human_readable(&self) -> String {
+        let mut out = format!("{}\n", self.message);
+        if let Some(ref did) = self.did {
+            out.push_str(&format!("  Agent: {}\n", did));
+        }
+        if let Some(score) = self.score {
+            out.push_str(&format!("  Score: {:.1}\n", score));
+        }
+        if let Some(ref level) = self.level {
+            out.push_str(&format!("  Level: {}\n", level));
+        }
+        if let Some(ref d) = self.details {
+            out.push_str(&serde_json::to_string_pretty(d).unwrap_or_default());
+            out.push('\n');
+        }
+        out
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct IssueResponse {
+    pub action: String,
+    pub id: Option<u64>,
+    pub message: String,
+    pub details: Option<serde_json::Value>,
+}
+
+impl CommandResponse for IssueResponse {
+    fn command_name(&self) -> &'static str {
+        "issue"
+    }
+    fn human_readable(&self) -> String {
+        let mut out = format!("{}\n", self.message);
+        if let Some(id) = self.id {
+            out.push_str(&format!("  Issue #{}\n", id));
+        }
+        if let Some(ref d) = self.details {
+            out.push_str(&serde_json::to_string_pretty(d).unwrap_or_default());
+            out.push('\n');
+        }
+        out
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PrResponse {
+    pub action: String,
+    pub id: Option<u64>,
+    pub message: String,
+    pub details: Option<serde_json::Value>,
+}
+
+impl CommandResponse for PrResponse {
+    fn command_name(&self) -> &'static str {
+        "pr"
+    }
+    fn human_readable(&self) -> String {
+        let mut out = format!("{}\n", self.message);
+        if let Some(id) = self.id {
+            out.push_str(&format!("  PR #{}\n", id));
+        }
+        if let Some(ref d) = self.details {
+            out.push_str(&serde_json::to_string_pretty(d).unwrap_or_default());
+            out.push('\n');
+        }
+        out
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SubscribeResponse {
+    pub action: String,
+    pub subscription_id: Option<String>,
+    pub message: String,
+    pub details: Option<serde_json::Value>,
+}
+
+impl CommandResponse for SubscribeResponse {
+    fn command_name(&self) -> &'static str {
+        "subscribe"
+    }
+    fn human_readable(&self) -> String {
+        let mut out = format!("{}\n", self.message);
+        if let Some(ref id) = self.subscription_id {
+            out.push_str(&format!("  Subscription: {}\n", id));
+        }
+        if let Some(ref d) = self.details {
+            out.push_str(&serde_json::to_string_pretty(d).unwrap_or_default());
+            out.push('\n');
+        }
+        out
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DelegateResponse {
+    pub action: String,
+    pub task_id: Option<String>,
+    pub message: String,
+    pub details: Option<serde_json::Value>,
+}
+
+impl CommandResponse for DelegateResponse {
+    fn command_name(&self) -> &'static str {
+        "delegate"
+    }
+    fn human_readable(&self) -> String {
+        let mut out = format!("{}\n", self.message);
+        if let Some(ref id) = self.task_id {
+            out.push_str(&format!("  Task: {}\n", id));
+        }
+        if let Some(ref d) = self.details {
+            out.push_str(&serde_json::to_string_pretty(d).unwrap_or_default());
+            out.push('\n');
+        }
+        out
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FederationResponse {
+    pub action: String,
+    pub message: String,
+    pub details: Option<serde_json::Value>,
+}
+
+impl CommandResponse for FederationResponse {
+    fn command_name(&self) -> &'static str {
+        "federation"
+    }
+    fn human_readable(&self) -> String {
+        let mut out = format!("{}\n", self.message);
+        if let Some(ref d) = self.details {
+            out.push_str(&serde_json::to_string_pretty(d).unwrap_or_default());
+            out.push('\n');
+        }
+        out
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UcanResponse {
+    pub action: String,
+    pub token_cid: Option<String>,
+    pub message: String,
+    pub details: Option<serde_json::Value>,
+}
+
+impl CommandResponse for UcanResponse {
+    fn command_name(&self) -> &'static str {
+        "ucan"
+    }
+    fn human_readable(&self) -> String {
+        let mut out = format!("{}\n", self.message);
+        if let Some(ref cid) = self.token_cid {
+            out.push_str(&format!("  Token CID: {}\n", cid));
+        }
+        if let Some(ref d) = self.details {
+            out.push_str(&serde_json::to_string_pretty(d).unwrap_or_default());
+            out.push('\n');
+        }
+        out
+    }
+}
