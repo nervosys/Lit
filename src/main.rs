@@ -554,6 +554,29 @@ enum Commands {
         target: Option<String>,
     },
 
+    // --- Generic Versioning & Datacenter ---
+
+    /// Content type registry — register, detect, and manage content types
+    /// for CAD, EDA, manuscripts, databases, scientific data, media, and more
+    ContentType {
+        #[command(subcommand)]
+        command: ContentTypeCommands,
+    },
+
+    /// Datacenter deployment — cluster management, sharding, replication,
+    /// health monitoring, and Prometheus-style metrics
+    Datacenter {
+        #[command(subcommand)]
+        command: DatacenterCommands,
+    },
+
+    /// Agent profiles — domain-specific agent types with capabilities,
+    /// trust levels, content type affinity, and resource limits
+    AgentProfile {
+        #[command(subcommand)]
+        command: AgentProfileCommands,
+    },
+
     /// Content-addressed federation and peer management
     Peer {
         #[command(subcommand)]
@@ -992,6 +1015,160 @@ enum IntentCommands {
     Close {
         /// Intent ID
         intent_id: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum ContentTypeCommands {
+    /// List all registered content types
+    List {
+        /// Filter by domain (e.g. cad, eda, manuscript, database, scientific, media)
+        #[arg(long)]
+        domain: Option<String>,
+    },
+    /// Show details of a content type
+    Show {
+        /// Content type ID (e.g. cad/step, eda/kicad-pcb, db/sqlite)
+        type_id: String,
+    },
+    /// Register a custom content type
+    Register {
+        /// Unique type ID (e.g. custom/my-format)
+        id: String,
+        /// Human-readable name
+        #[arg(long)]
+        name: String,
+        /// Domain: software, cad, eda, manuscript, database, scientific, media, geospatial, legal, financial, config, documentation
+        #[arg(long)]
+        domain: String,
+        /// File extensions (comma-separated, without dot)
+        #[arg(long, value_delimiter = ',')]
+        extensions: Vec<String>,
+        /// Diff strategy: text, binary, structural, semantic, opaque
+        #[arg(long)]
+        diff_strategy: Option<String>,
+        /// Merge strategy: text-three-way, manual-resolve, schema-aware, component-level, append-only, last-writer-wins
+        #[arg(long)]
+        merge_strategy: Option<String>,
+        /// Storage tier: standard, lfs, chunked, external
+        #[arg(long)]
+        storage_tier: Option<String>,
+    },
+    /// Detect content type of file(s)
+    Detect {
+        /// File path(s) to examine
+        paths: Vec<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum DatacenterCommands {
+    /// Show cluster status — nodes, shards, config summary
+    Status,
+    /// Register a new cluster node
+    RegisterNode {
+        /// Unique node ID
+        node_id: String,
+        /// Human-readable name
+        #[arg(long)]
+        name: String,
+        /// Network endpoint (host:port or URL)
+        #[arg(long)]
+        endpoint: String,
+        /// Region / availability zone
+        #[arg(long)]
+        region: String,
+        /// Role: primary, replica, relay, observer
+        #[arg(long)]
+        role: Option<String>,
+    },
+    /// Remove a node from the cluster
+    RemoveNode {
+        /// Node ID to remove
+        node_id: String,
+    },
+    /// Configure cluster settings
+    Configure {
+        /// Object replication factor (e.g. 3)
+        #[arg(long)]
+        replication_factor: Option<u32>,
+        /// Number of virtual shards (e.g. 256)
+        #[arg(long)]
+        shard_count: Option<u32>,
+        /// Shard strategy: consistent-hash, range-prefix, round-robin, domain-affinity
+        #[arg(long)]
+        shard_strategy: Option<String>,
+        /// Replication mode: sync, async, semi-sync
+        #[arg(long)]
+        replication_mode: Option<String>,
+        /// Connection pool size per node
+        #[arg(long)]
+        connection_pool_size: Option<u32>,
+        /// Enable or disable Prometheus metrics endpoint
+        #[arg(long)]
+        metrics_enabled: Option<bool>,
+        /// Metrics endpoint port
+        #[arg(long)]
+        metrics_port: Option<u16>,
+        /// Write concern — nodes that must confirm a write
+        #[arg(long)]
+        write_concern: Option<u32>,
+    },
+    /// Run health checks on all registered nodes
+    Health,
+    /// Collect Prometheus-style metrics
+    Metrics,
+}
+
+#[derive(Subcommand)]
+enum AgentProfileCommands {
+    /// List all agent profiles
+    List {
+        /// Filter by domain (e.g. software, cad, eda, writer, dba, reviewer)
+        #[arg(long)]
+        domain: Option<String>,
+    },
+    /// Show details of an agent profile
+    Show {
+        /// Profile ID (e.g. swe-default, cad-designer, dba)
+        profile_id: String,
+    },
+    /// Register a custom agent profile
+    Register {
+        /// Unique profile ID
+        profile_id: String,
+        /// Human-readable name
+        #[arg(long)]
+        name: String,
+        /// Domain: software, cad, eda, writer, dba, reviewer, ci, security, data-science, devops, qa, general
+        #[arg(long)]
+        domain: String,
+        /// Capabilities (comma-separated): read, write, branch, merge, review, deploy, test, diff, lfs, intent, converge, orchestrate, etc.
+        #[arg(long, value_delimiter = ',')]
+        capabilities: Vec<String>,
+        /// Trust level: untrusted, limited, standard, elevated, admin
+        #[arg(long)]
+        trust_level: Option<String>,
+        /// Supported content type IDs (comma-separated)
+        #[arg(long, value_delimiter = ',')]
+        content_types: Vec<String>,
+        /// Allowed path patterns (comma-separated globs)
+        #[arg(long, value_delimiter = ',')]
+        allowed_paths: Vec<String>,
+        /// Denied path patterns (comma-separated globs)
+        #[arg(long, value_delimiter = ',')]
+        denied_paths: Vec<String>,
+    },
+    /// List capabilities across domains
+    Capabilities {
+        /// Filter by domain
+        #[arg(long)]
+        domain: Option<String>,
+    },
+    /// Remove a custom agent profile
+    Remove {
+        /// Profile ID to remove
+        profile_id: String,
     },
 }
 
@@ -2422,6 +2599,120 @@ fn run() {
                 intent_id, strategy, verify, dry_run, target
             ))
         }
+
+        Commands::ContentType { command } => match command {
+            ContentTypeCommands::List { domain } => {
+                run!(commands::content_type::execute_list(domain))
+            }
+            ContentTypeCommands::Show { type_id } => {
+                run!(commands::content_type::execute_show(type_id))
+            }
+            ContentTypeCommands::Register {
+                id,
+                name,
+                domain,
+                extensions,
+                diff_strategy,
+                merge_strategy,
+                storage_tier,
+            } => {
+                run!(commands::content_type::execute_register(
+                    id,
+                    name,
+                    domain,
+                    extensions,
+                    diff_strategy,
+                    merge_strategy,
+                    storage_tier,
+                ))
+            }
+            ContentTypeCommands::Detect { paths } => {
+                run!(commands::content_type::execute_detect(paths))
+            }
+        },
+
+        Commands::Datacenter { command } => match command {
+            DatacenterCommands::Status => {
+                run!(commands::datacenter::execute_status())
+            }
+            DatacenterCommands::RegisterNode {
+                node_id,
+                name,
+                endpoint,
+                region,
+                role,
+            } => {
+                run!(commands::datacenter::execute_register_node(
+                    node_id, name, endpoint, region, role
+                ))
+            }
+            DatacenterCommands::RemoveNode { node_id } => {
+                run!(commands::datacenter::execute_remove_node(node_id))
+            }
+            DatacenterCommands::Configure {
+                replication_factor,
+                shard_count,
+                shard_strategy,
+                replication_mode,
+                connection_pool_size,
+                metrics_enabled,
+                metrics_port,
+                write_concern,
+            } => {
+                run!(commands::datacenter::execute_configure(
+                    replication_factor,
+                    shard_count,
+                    shard_strategy,
+                    replication_mode,
+                    connection_pool_size,
+                    metrics_enabled,
+                    metrics_port,
+                    write_concern,
+                ))
+            }
+            DatacenterCommands::Health => {
+                run!(commands::datacenter::execute_health())
+            }
+            DatacenterCommands::Metrics => {
+                run!(commands::datacenter::execute_metrics())
+            }
+        },
+
+        Commands::AgentProfile { command } => match command {
+            AgentProfileCommands::List { domain } => {
+                run!(commands::agent_profile::execute_list(domain))
+            }
+            AgentProfileCommands::Show { profile_id } => {
+                run!(commands::agent_profile::execute_show(profile_id))
+            }
+            AgentProfileCommands::Register {
+                profile_id,
+                name,
+                domain,
+                capabilities,
+                trust_level,
+                content_types,
+                allowed_paths,
+                denied_paths,
+            } => {
+                run!(commands::agent_profile::execute_register(
+                    profile_id,
+                    name,
+                    domain,
+                    capabilities,
+                    trust_level,
+                    content_types,
+                    allowed_paths,
+                    denied_paths,
+                ))
+            }
+            AgentProfileCommands::Capabilities { domain } => {
+                run!(commands::agent_profile::execute_capabilities(domain))
+            }
+            AgentProfileCommands::Remove { profile_id } => {
+                run!(commands::agent_profile::execute_remove(profile_id))
+            }
+        },
 
     }
 }

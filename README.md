@@ -1,8 +1,10 @@
 # Lit — The Agentic-First Distributed Version Control System
 
-**The world's first version control system designed for AI agents first and humans second.**
+**The world's first universal version control system designed for AI agents first and humans second.**
 
-Lit is a complete Git replacement written in Rust — 50 commands, 30 MCP tools, post-quantum cryptographic security, sandboxed execution, and structured machine-readable output. Every interface is designed for autonomous agent workflows, with human-friendly output available via a single flag.
+Lit is a complete Git replacement written in Rust — 65+ commands, 30 MCP tools, post-quantum cryptographic security, sandboxed execution, and structured machine-readable output. Every interface is designed for autonomous agent workflows, with human-friendly output available via a single flag.
+
+Unlike Git, Lit is not limited to source code. Its pluggable content type system versions **CAD models, EDA schematics, manuscripts, databases, scientific datasets, media assets, geospatial data**, and any other domain content — with domain-appropriate diff, merge, and storage strategies. Arbitrary agent profiles let CAD designers, EDA engineers, technical writers, DBAs, and data scientists work alongside software agents in a unified versioned workspace. Datacenter deployment features enable cluster sharding, replication, health monitoring, and Prometheus-style metrics for production-scale operation.
 
 ## Why Lit?
 
@@ -26,6 +28,9 @@ Git was designed in 2005 for human developers using terminals. Every interface �
 | **Issues & PRs**        | None built-in               | Local-first, stored as git refs          |
 | **Federation**          | Centralized (GitHub/GitLab) | Content-addressed peer-to-peer           |
 | **Sandboxing**          | None                        | Process isolation with env/fs/net fences |
+| **Content types**       | Source code only             | CAD, EDA, manuscripts, DBs, media, etc.  |
+| **Agent types**         | N/A                         | SWE, CAD, EDA, writer, DBA, reviewer, CI |
+| **Datacenter**          | N/A                         | Sharding, replication, metrics, health   |
 | **Cryptography**        | SHA-1 / SHA-256             | SHA3-512 + BLAKE3 (quantum-resistant)    |
 | **Signatures**          | GPG / SSH                   | ML-DSA-87 (NIST FIPS 204)                |
 | **Encryption**          | None built-in               | AES-256-GCM at rest, TLS 1.3 in transit  |
@@ -34,7 +39,7 @@ Git was designed in 2005 for human developers using terminals. Every interface �
 
 ## Features
 
-- **52 CLI commands** — full Git-equivalent workflow plus agent-native extensions
+- **65+ CLI commands** — full Git-equivalent workflow plus agent-native extensions
 - **30 MCP tools** — LLM agents interact via Model Context Protocol tool calls
 - **Decentralized identity** -- DID-based identity with Ed25519 and ML-DSA-87 post-quantum keys
 - **UCAN capability delegation** -- fine-grained, cryptographically signed permission tokens
@@ -46,6 +51,9 @@ Git was designed in 2005 for human developers using terminals. Every interface �
 - **4 transport protocols** — HTTPS, SSH, `lit://` (custom TCP), stdio pipe
 - **Sandboxed execution** — run untrusted code in isolated environments with filesystem, environment, and network fences
 - **Intent → Commit → Converge** — agentic workflow replacing branch/PR with scoped intents, commit attachment, and trust-gated convergence
+- **Universal content types** — 30+ built-in types for CAD (STEP, STL, IGES, 3MF), EDA (KiCad, Gerber, SPICE), manuscripts (LaTeX, DOCX, Typst), databases (SQLite, Parquet, CSV), scientific data (HDF5, FITS, Jupyter), media, geospatial, legal, and financial formats — each with domain-appropriate diff, merge, and storage strategies
+- **Datacenter deployment** — cluster node management, consistent-hash sharding, configurable replication (sync/async/semi-sync), health monitoring, Prometheus-style metrics, connection pooling, and chunked large-object transfer
+- **Generic agent profiles** — 10 built-in profiles (SWE, CAD designer, EDA engineer, writer, DBA, reviewer, CI bot, security auditor, data scientist, orchestrator) with capabilities, trust levels, content type affinity, resource limits, and path-based access control
 - **Swarm coordination** — multi-agent registration, file leasing, and conflict-free concurrent access
 - **Post-quantum signatures** — ML-DSA-87 (NIST FIPS 204, Security Level 5)
 - **FIPS 140-3 compliance** — AES-256-GCM, PBKDF2-HMAC-SHA512, automatic Known Answer Tests at startup
@@ -102,7 +110,7 @@ lit diff --human
 export LIT_OUTPUT=human
 ```
 
-## Commands (52)
+## Commands (65+)
 
 ### Version Control
 
@@ -240,6 +248,98 @@ lit converge <intent-id> --verify                          # Verify commit objec
 ```
 
 Intents auto-acquire swarm leases for their scope, detect scope conflicts with other active intents, and support hierarchical decomposition (parent/child intents). The `accumulate` strategy waits for all child intents to converge before merging the parent.
+
+### Content Type Registry
+
+Register, detect, and manage content types for domain-specific versioning. 30+ built-in types cover CAD, EDA, manuscripts, databases, scientific data, media, geospatial, and more — each with appropriate diff, merge, and storage strategies:
+
+```bash
+lit content-type list                            # List all registered content types
+lit content-type list --domain cad               # Filter by domain
+lit content-type show cad/step                   # Show STEP CAD type details
+lit content-type show db/sqlite                  # Show SQLite database type
+lit content-type detect model.step circuit.kicad_pcb  # Auto-detect file types
+lit content-type register custom/my-format \     # Register custom type
+    --name "My Format" --domain scientific \
+    --extensions h5x,hdf --diff-strategy structural \
+    --merge-strategy schema-aware --storage-tier chunked
+```
+
+Built-in domains: **software**, **cad** (STEP, STL, IGES, 3MF), **eda** (KiCad PCB/schematic, Gerber, SPICE), **manuscript** (LaTeX, DOCX, Typst, AsciiDoc), **database** (SQLite, CSV, Parquet, SQL migrations), **scientific** (HDF5, FITS, Jupyter), **media** (image, video, audio), **geospatial** (GeoJSON, Shapefile), **legal** (PDF), **financial** (Excel), **config** (Terraform, Kubernetes).
+
+Each content type specifies:
+- **Diff strategy** — text, binary, structural, semantic, or opaque
+- **Merge strategy** — 3-way text, manual-resolve, schema-aware, component-level, append-only, or last-writer-wins
+- **Storage tier** — standard, LFS, chunked, or external
+- **Metadata schema** — JSON Schema fragment for domain-specific fields (triangle count, PCB layers, table schemas, etc.)
+
+### Datacenter Deployment
+
+Cluster management, sharding, replication, health monitoring, and Prometheus-style metrics for production datacenter deployments:
+
+```bash
+lit datacenter status                             # Show cluster overview
+lit datacenter register-node node-1 \             # Register a cluster node
+    --name "us-east-primary" --endpoint 10.0.1.1:9418 \
+    --region us-east-1 --role primary
+lit datacenter configure \                        # Configure cluster settings
+    --replication-factor 3 --shard-strategy consistent-hash \
+    --replication-mode semi-sync --write-concern 2 \
+    --metrics-enabled true --metrics-port 9090
+lit datacenter health                             # Run health checks on all nodes
+lit datacenter metrics                            # Collect Prometheus-style metrics
+lit datacenter remove-node node-1                 # Drain and remove a node
+```
+
+**Features:**
+- **Consistent-hash sharding** — distribute objects across nodes with virtual shard rings
+- **Configurable replication** — synchronous, asynchronous, or semi-sync with tunable write concern
+- **Node roles** — primary, replica, relay (edge cache), observer (monitoring only)
+- **Health monitoring** — heartbeat-based liveness detection with configurable timeout
+- **Prometheus metrics** — `lit_objects_total`, `lit_objects_size_bytes`, `lit_cluster_nodes_healthy`, etc.
+- **Connection pooling** — configurable per-node connection pool size
+- **Chunked transfer** — large objects split into configurable chunks for inter-node transfer
+- **Domain-affinity sharding** — keep a content domain's objects co-located for locality
+
+### Agent Profiles
+
+Domain-specific agent profiles with capabilities, trust levels, content type affinity, and resource limits — enabling arbitrary agents beyond software engineering:
+
+```bash
+lit agent-profile list                            # List all profiles
+lit agent-profile list --domain cad               # Filter by domain
+lit agent-profile show cad-designer               # Show CAD designer profile
+lit agent-profile capabilities                    # List all capabilities across domains
+lit agent-profile capabilities --domain eda       # EDA-specific capabilities
+lit agent-profile register my-bot \               # Register custom profile
+    --name "My Custom Agent" --domain devops \
+    --capabilities read,write,deploy,test \
+    --trust-level elevated \
+    --content-types config/terraform,config/kubernetes \
+    --allowed-paths 'infra/**,deploy/**'
+lit agent-profile remove my-bot                   # Remove custom profile
+```
+
+**Built-in profiles (10):**
+| Profile | Domain | Capabilities | Trust | Content Types |
+| --- | --- | --- | --- | --- |
+| `swe-default` | Software | read, write, branch, merge, test, diff, intent, converge | standard | All source code |
+| `cad-designer` | CAD | read, write, branch, lfs, diff, intent, structural-analysis | standard | STEP, STL, IGES, 3MF |
+| `eda-engineer` | EDA | read, write, branch, diff, intent, structural-analysis | standard | KiCad, Gerber, SPICE |
+| `tech-writer` | Writer | read, write, branch, diff, intent, content-metadata | standard | LaTeX, DOCX, Typst, AsciiDoc |
+| `dba` | DBA | read, write, branch, diff, intent, schema-management | elevated | SQLite, CSV, Parquet, SQL |
+| `reviewer` | Reviewer | read, review, diff, converge | elevated | All (read-only) |
+| `ci-bot` | CI | read, test, deploy, security-scan, diff | elevated | All |
+| `security-auditor` | Security | read, review, security-scan, diff | elevated | All (read-only) |
+| `data-scientist` | DataScience | read, write, branch, lfs, intent, schema-management | standard | HDF5, Jupyter, Parquet, CSV |
+| `orchestrator` | General | read, orchestrate, intent, converge, review | admin | All |
+
+Each profile enforces:
+- **Capabilities** — what operations the agent can perform
+- **Content type affinity** — which file types the agent is designed for
+- **Path-based access control** — allowed/denied glob patterns
+- **Resource limits** — max file size, storage quota, files per commit, concurrent leases, rate limits
+- **Trust level** — untrusted → limited → standard → elevated → admin
 
 ### Events & Delegation
 
@@ -488,6 +588,10 @@ Sandboxes combine with airgap mode automatically. See [EXAMPLES.md § Sandboxed 
 ## Use Cases
 
 - **AI agent swarms** — multiple agents collaborating via structured API with file leasing
+- **Hardware design teams** — CAD and EDA engineers versioning PCB layouts, schematics, and 3D models with structural diff and component-level locking
+- **Research & publishing** — scientists and authors versioning LaTeX manuscripts, Jupyter notebooks, HDF5 datasets, and FITS astronomical data
+- **Database versioning** — schema-aware diffing and merging of SQLite databases, Parquet files, CSV datasets, and SQL migration scripts
+- **Datacenter-scale deployments** — distributed clusters with sharding, replication, health checks, and Prometheus metrics
 - **CI/CD pipelines** — machine-readable output eliminates fragile text parsing
 - **MCP-enabled IDEs** — LLM agents operate on repos through tool calls (VS Code, Claude Desktop)
 - **Sandboxed builds** — run untrusted code in isolated process environments

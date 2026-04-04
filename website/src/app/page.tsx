@@ -2,10 +2,12 @@ import Link from "next/link";
 
 const FEATURES = [
   { icon: "🔐", title: "Post-Quantum Cryptography", desc: "ML-DSA-87 (FIPS 204), AES-256-GCM, SHA3-512 + BLAKE3 hashing" },
-  { icon: "⚡", title: "52 CLI Commands", desc: "Full Git-compatible command set plus identity, federation, issues, and agent delegation" },
+  { icon: "⚡", title: "65+ CLI Commands", desc: "Full Git-compatible command set plus identity, federation, content types, datacenter, and agent profiles" },
   { icon: "🤖", title: "30 MCP Tools", desc: "First-class AI agent integration via Model Context Protocol" },
+  { icon: "🎭", title: "Universal Content Types", desc: "30+ built-in types for CAD, EDA, manuscripts, databases, scientific data, media, geospatial, and more" },
+  { icon: "🏛️", title: "Datacenter Deployment", desc: "Cluster sharding, replication, health monitoring, Prometheus metrics, and connection pooling" },
+  { icon: "👥", title: "Generic Agent Profiles", desc: "10 built-in profiles: SWE, CAD, EDA, writer, DBA, reviewer, CI, security, data scientist, orchestrator" },
   { icon: "🆔", title: "DID Identity & UCAN", desc: "Decentralized identifiers with fine-grained capability delegation tokens" },
-  { icon: "🎫", title: "Local-First Issues & PRs", desc: "Issue tracker and pull requests stored as git refs — no server required" },
   { icon: "🌍", title: "Peer-to-Peer Federation", desc: "Content-addressed repository sync with want-list negotiation" },
   { icon: "📦", title: "Sandboxed Execution", desc: "Process-isolated environments for untrusted operations" },
   { icon: "✈️", title: "Airgap Mode", desc: "Fully offline operation with transport permission controls" },
@@ -24,6 +26,9 @@ const COMPARISON = [
   { feature: "Agent trust scoring", lit: true, git: false },
   { feature: "Sandboxed execution", lit: true, git: false },
   { feature: "Airgap mode", lit: true, git: false },
+  { feature: "Universal content types (CAD, EDA, DB...)", lit: true, git: false },
+  { feature: "Domain-specific agent profiles", lit: true, git: false },
+  { feature: "Datacenter sharding & replication", lit: true, git: false },
   { feature: "Intent → Converge workflow", lit: true, git: false },
   { feature: "FIPS 140-3 compliance", lit: true, git: false },
   { feature: "HMAC-signed audit logs", lit: true, git: false },
@@ -51,9 +56,10 @@ export default function Home() {
           <span className="text-brand-600 dark:text-brand-400">Lit</span> Version Control
         </h1>
         <p className="text-xl text-[var(--muted)] max-w-2xl mx-auto mb-8">
-          The first agentic-first distributed version control system. Built in
-          Rust with post-quantum cryptography, sandbox isolation, and native AI
-          agent support.
+          The first universal agentic-first version control system. Version anything —
+          source code, CAD models, PCB layouts, manuscripts, databases, scientific data,
+          and more — with domain-aware diff, merge, and storage. Built in Rust with
+          post-quantum cryptography, datacenter-scale deployment, and native AI agent support.
         </p>
         <div className="flex gap-4 justify-center mb-10">
           <Link

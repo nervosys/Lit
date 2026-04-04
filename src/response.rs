@@ -1745,3 +1745,80 @@ impl CommandResponse for ConvergeResponse {
         out
     }
 }
+
+// ── Content Type Response ───────────────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ContentTypeResponse {
+    pub action: String,
+    pub content_type_id: Option<String>,
+    pub message: String,
+    pub details: Option<serde_json::Value>,
+}
+
+impl CommandResponse for ContentTypeResponse {
+    fn command_name(&self) -> &'static str {
+        "content-type"
+    }
+    fn human_readable(&self) -> String {
+        let mut out = format!("{}\n", self.message);
+        if let Some(ref id) = self.content_type_id {
+            out.push_str(&format!("  Content-Type: {}\n", id));
+        }
+        if let Some(ref d) = self.details {
+            out.push_str(&serde_json::to_string_pretty(d).unwrap_or_default());
+            out.push('\n');
+        }
+        out
+    }
+}
+
+// ── Datacenter Response ─────────────────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DatacenterResponse {
+    pub action: String,
+    pub message: String,
+    pub details: Option<serde_json::Value>,
+}
+
+impl CommandResponse for DatacenterResponse {
+    fn command_name(&self) -> &'static str {
+        "datacenter"
+    }
+    fn human_readable(&self) -> String {
+        let mut out = format!("{}\n", self.message);
+        if let Some(ref d) = self.details {
+            out.push_str(&serde_json::to_string_pretty(d).unwrap_or_default());
+            out.push('\n');
+        }
+        out
+    }
+}
+
+// ── Agent Profile Response ──────────────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AgentProfileResponse {
+    pub action: String,
+    pub profile_id: Option<String>,
+    pub message: String,
+    pub details: Option<serde_json::Value>,
+}
+
+impl CommandResponse for AgentProfileResponse {
+    fn command_name(&self) -> &'static str {
+        "agent-profile"
+    }
+    fn human_readable(&self) -> String {
+        let mut out = format!("{}\n", self.message);
+        if let Some(ref id) = self.profile_id {
+            out.push_str(&format!("  Profile: {}\n", id));
+        }
+        if let Some(ref d) = self.details {
+            out.push_str(&serde_json::to_string_pretty(d).unwrap_or_default());
+            out.push('\n');
+        }
+        out
+    }
+}

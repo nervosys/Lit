@@ -1,4 +1,5 @@
 pub mod add;
+pub mod agent_profile;
 pub mod batch;
 pub mod bisect;
 pub mod blame;
@@ -8,7 +9,9 @@ pub mod cherry_pick;
 pub mod clone;
 pub mod commit;
 pub mod config;
+pub mod content_type;
 pub mod converge;
+pub mod datacenter;
 pub mod delegate;
 pub mod diff;
 pub mod export_git;
