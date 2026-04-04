@@ -10,30 +10,31 @@ Git was designed in 2005 for human developers using terminals. Every interface �
 
 **Lit inverts this.** Every command emits structured JSON by default. Errors include machine-actionable codes and remediation hints. Merge conflicts are structured objects, not text markers. Batch operations accept JSONL on stdin. Nothing ever prompts for input. Humans get the same power through a `--human` flag.
 
-|                         | Git                        | Lit                                      |
-| ----------------------- | -------------------------- | ---------------------------------------- |
-| **Designed for**        | Human developers           | AI agents (humans supported)             |
-| **Default output**      | Freeform text              | Structured JSON                          |
-| **Error handling**      | Freeform strings           | Typed error codes + remediation          |
-| **Batch operations**    | Shell scripting            | Native JSONL batch mode                  |
-| **API access**          | Third-party wrappers       | Built-in REST + MCP + `lit://` + stdio   |
-| **Merge conflicts**     | `<<<<<<<` markers          | Structured conflict objects              |
-| **Agent metadata**      | Commit message conventions | First-class metadata field               |
-| **Agent coordination**  | None                       | Swarm registration, file leasing         |
-| **Identity**            | None                       | DID-based identity, UCAN delegation      |
-| **Trust scoring**       | None                       | Reputation tracking per agent            |
-| **Issues & PRs**        | None built-in              | Local-first, stored as git refs          |
-| **Federation**          | Centralized (GitHub/GitLab)| Content-addressed peer-to-peer           |
-| **Sandboxing**          | None                       | Process isolation with env/fs/net fences |
-| **Cryptography**        | SHA-1 / SHA-256            | SHA3-512 + BLAKE3 (quantum-resistant)    |
-| **Signatures**          | GPG / SSH                  | ML-DSA-87 (NIST FIPS 204)                |
-| **Encryption**          | None built-in              | AES-256-GCM at rest, TLS 1.3 in transit  |
-| **Compliance**          | None                       | FIPS 140-3, auto self-test at startup    |
-| **Interactive prompts** | Frequent                   | Never (zero-prompt design)               |
+|                         | Git                         | Lit                                      |
+| ----------------------- | --------------------------- | ---------------------------------------- |
+| **Designed for**        | Human developers            | AI agents (humans supported)             |
+| **Default output**      | Freeform text               | Structured JSON                          |
+| **Error handling**      | Freeform strings            | Typed error codes + remediation          |
+| **Batch operations**    | Shell scripting             | Native JSONL batch mode                  |
+| **API access**          | Third-party wrappers        | Built-in REST + MCP + `lit://` + stdio   |
+| **Merge conflicts**     | `<<<<<<<` markers           | Structured conflict objects              |
+| **Agent metadata**      | Commit message conventions  | First-class metadata field               |
+| **Agent coordination**  | None                        | Swarm registration, file leasing         |
+| **Agent workflow**      | Branch → PR → merge         | Intent → Commit → Converge               |
+| **Identity**            | None                        | DID-based identity, UCAN delegation      |
+| **Trust scoring**       | None                        | Reputation tracking per agent            |
+| **Issues & PRs**        | None built-in               | Local-first, stored as git refs          |
+| **Federation**          | Centralized (GitHub/GitLab) | Content-addressed peer-to-peer           |
+| **Sandboxing**          | None                        | Process isolation with env/fs/net fences |
+| **Cryptography**        | SHA-1 / SHA-256             | SHA3-512 + BLAKE3 (quantum-resistant)    |
+| **Signatures**          | GPG / SSH                   | ML-DSA-87 (NIST FIPS 204)                |
+| **Encryption**          | None built-in               | AES-256-GCM at rest, TLS 1.3 in transit  |
+| **Compliance**          | None                        | FIPS 140-3, auto self-test at startup    |
+| **Interactive prompts** | Frequent                    | Never (zero-prompt design)               |
 
 ## Features
 
-- **50 CLI commands** — full Git-equivalent workflow plus agent-native extensions
+- **52 CLI commands** — full Git-equivalent workflow plus agent-native extensions
 - **30 MCP tools** — LLM agents interact via Model Context Protocol tool calls
 - **Decentralized identity** -- DID-based identity with Ed25519 and ML-DSA-87 post-quantum keys
 - **UCAN capability delegation** -- fine-grained, cryptographically signed permission tokens
@@ -44,6 +45,7 @@ Git was designed in 2005 for human developers using terminals. Every interface �
 - **Content-addressed federation** -- peer-to-peer repository sync with want-list negotiation
 - **4 transport protocols** — HTTPS, SSH, `lit://` (custom TCP), stdio pipe
 - **Sandboxed execution** — run untrusted code in isolated environments with filesystem, environment, and network fences
+- **Intent → Commit → Converge** — agentic workflow replacing branch/PR with scoped intents, commit attachment, and trust-gated convergence
 - **Swarm coordination** — multi-agent registration, file leasing, and conflict-free concurrent access
 - **Post-quantum signatures** — ML-DSA-87 (NIST FIPS 204, Security Level 5)
 - **FIPS 140-3 compliance** — AES-256-GCM, PBKDF2-HMAC-SHA512, automatic Known Answer Tests at startup
@@ -100,14 +102,14 @@ lit diff --human
 export LIT_OUTPUT=human
 ```
 
-## Commands (50)
+## Commands (52)
 
 ### Version Control
 
 ```bash
 lit init [--bare] [path]           # Initialize repository
 lit add <files...>                 # Stage files
-lit commit -m <message>            # Record changes
+lit commit -m <message> [--intent <id>]  # Record changes (optionally attach to intent)
 lit status                         # Show working tree status
 lit log [--count N]                # Show commit history
 lit diff [--word-diff] [--stat]    # Show changes (structured hunks)
@@ -220,6 +222,24 @@ lit pr merge <id>                                        # Merge PR
 lit pr close <id>                                        # Close PR
 lit pr comment <id> <body>                               # Comment on PR
 ```
+
+### Intent → Commit → Converge
+
+Declare scoped intents, attach commits, and converge work — replacing the branch → PR → merge ceremony:
+
+```bash
+lit intent create <title> --agent <id> --scope <paths...>  # Declare a scoped unit of work
+lit intent list [--status active] [--agent <id>]           # List intents
+lit intent show <intent-id>                                # Show intent details
+lit intent close <intent-id>                               # Abandon an intent
+lit commit -m <msg> --intent <intent-id>                   # Attach commit to intent
+lit converge <intent-id> [--strategy auto|squash|rebase|accumulate]
+                                                           # Merge intent into mainline
+lit converge <intent-id> --dry-run                         # Preview convergence
+lit converge <intent-id> --verify                          # Verify commit objects first
+```
+
+Intents auto-acquire swarm leases for their scope, detect scope conflicts with other active intents, and support hierarchical decomposition (parent/child intents). The `accumulate` strategy waits for all child intents to converge before merging the parent.
 
 ### Events & Delegation
 

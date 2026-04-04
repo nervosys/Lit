@@ -77,6 +77,10 @@ enum Commands {
         /// Author name (optional)
         #[arg(short, long)]
         author: Option<String>,
+
+        /// Attach this commit to an active intent
+        #[arg(long)]
+        intent: Option<String>,
     },
 
     /// Show the working tree status
@@ -522,6 +526,34 @@ enum Commands {
         command: DelegateCommands,
     },
 
+    /// Declare an intent — a scoped unit of agentic work
+    Intent {
+        #[command(subcommand)]
+        command: IntentCommands,
+    },
+
+    /// Converge an intent's commits into the mainline
+    Converge {
+        /// Intent ID to converge
+        intent_id: String,
+
+        /// Strategy: auto (default), rebase, squash, accumulate
+        #[arg(long, default_value = "auto")]
+        strategy: Option<String>,
+
+        /// Verify commit objects before converging
+        #[arg(long)]
+        verify: bool,
+
+        /// Show what would happen without making changes
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Target branch (defaults to current branch)
+        #[arg(long)]
+        target: Option<String>,
+    },
+
     /// Content-addressed federation and peer management
     Peer {
         #[command(subcommand)]
@@ -921,6 +953,49 @@ enum DelegateCommands {
 }
 
 #[derive(Subcommand)]
+enum IntentCommands {
+    /// Create a new intent with declared scope
+    Create {
+        /// Intent title
+        title: String,
+        /// Agent identifier (DID or name)
+        #[arg(long)]
+        agent: String,
+        /// File/path scope patterns (e.g. src/auth/**)
+        #[arg(long)]
+        scope: Vec<String>,
+        /// Priority: low, medium (default), high, critical
+        #[arg(long, default_value = "medium")]
+        priority: String,
+        /// Parent intent ID for hierarchical decomposition
+        #[arg(long)]
+        parent: Option<String>,
+        /// UCAN proof token
+        #[arg(long)]
+        ucan_proof: Option<String>,
+    },
+    /// List intents
+    List {
+        /// Filter by status: active, converged, abandoned
+        #[arg(long)]
+        status: Option<String>,
+        /// Filter by agent
+        #[arg(long)]
+        agent: Option<String>,
+    },
+    /// Show details of an intent
+    Show {
+        /// Intent ID
+        intent_id: String,
+    },
+    /// Close (abandon) an intent
+    Close {
+        /// Intent ID
+        intent_id: String,
+    },
+}
+
+#[derive(Subcommand)]
 enum PeerCommands {
     /// Add a federation peer
     Add {
@@ -1064,7 +1139,23 @@ fn run() {
     match cli.command {
         Commands::Init { bare, path } => run!(commands::init::execute(bare, path)),
         Commands::Add { files } => run!(commands::add::execute(files)),
-        Commands::Commit { message, author } => run!(commands::commit::execute(message, author)),
+        Commands::Commit { message, author, intent } => {
+            let result = commands::commit::execute(message, author);
+            match result {
+                Ok(ref resp) if intent.is_some() => {
+                    let repo_root = core::find_repo_root().ok();
+                    if let Some(root) = repo_root {
+                        let _ = commands::intent::attach_commit(
+                            &root,
+                            intent.as_ref().unwrap(),
+                            &resp.hash,
+                        );
+                    }
+                    run!(result)
+                }
+                _ => run!(result),
+            }
+        }
         Commands::Status => run!(commands::status::execute()),
         Commands::Log { count, oneline } => run!(commands::log::execute(count, oneline)),
         Commands::Branch { name, delete, all } => {
@@ -1282,510 +1373,1055 @@ fn run() {
             SandboxCommands::Destroy { name } => run!(commands::sandbox::execute_destroy(name)),
         },
 
-
-        // Phase 6: Decentralized Identity & Federation
-        Commands::Did { command } => {
-            let repo_root = core::find_repo_root()
-                .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
-            match command {
-                DidCommands::Generate { method } => {
-                    let did_method = match method.as_str() {
-                        "ml-dsa-87" | "mldsa87" => identity::did::DidMethod::MlDsa87,
-                        _ => identity::did::DidMethod::Ed25519,
-                    };
-                    let keypair = identity::did::DidKeyPair::generate(did_method);
-                    let doc = identity::did::DidDocument::from_keypair(&keypair);
-                    run!(identity::did::save_identity(&repo_root, &keypair).map(|()| {
-                        response::DidResponse {
-                            action: "generate".into(),
-                            did: Some(keypair.did.clone()),
-                            message: format!("DID identity generated: {}", keypair.did),
-                            details: Some(serde_json::to_value(&doc).unwrap_or_default()),
-                        }
-                    }))
-                }
-                DidCommands::Show => {
-                    run!(identity::did::load_identity(&repo_root).map(|kp| {
-                        let doc = identity::did::DidDocument::from_keypair(&kp);
-                        response::DidResponse {
-                            action: "show".into(),
-                            did: Some(kp.did.clone()),
-                            message: format!("Current identity: {}", kp.did),
-                            details: Some(serde_json::to_value(&doc).unwrap_or_default()),
-                        }
-                    }))
-                }
-                DidCommands::Resolve { did } => {
-                    run!(identity::did::resolve_did(&repo_root, &did).map(|doc| {
-                        response::DidResponse {
-                            action: "resolve".into(),
-                            did: Some(did),
-                            message: "DID resolved".into(),
-                            details: Some(serde_json::to_value(&doc).unwrap_or_default()),
-                        }
-                    }))
-                }
-            }
-        }
-
-        Commands::Ucan { command } => {
-            let repo_root = core::find_repo_root()
-                .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
-            match command {
-                UcanCommands::Issue { audience, resource, action, duration } => {
-                    run!(identity::did::load_identity(&repo_root).and_then(|kp| {
-                        let cap = identity::ucan::Capability {
-                            resource,
-                            action,
-                            caveats: None,
-                        };
-                        let mut token = identity::ucan::UcanToken::new(
-                            kp.did.clone(), audience, vec![cap], duration,
-                        );
-                        if let Some(ref sk) = kp.private_key {
-                            token.sign(sk)?;
-                        }
-                        let cid = identity::ucan::save_token(&repo_root, &token)?;
-                        Ok(response::UcanResponse {
-                            action: "issue".into(),
-                            token_cid: Some(cid),
-                            message: "UCAN token issued".into(),
-                            details: Some(serde_json::to_value(&token).unwrap_or_default()),
-                        })
-                    }))
-                }
-                UcanCommands::List { audience } => {
-                    let aud = audience.unwrap_or_default();
-                    run!(identity::ucan::load_tokens_for(&repo_root, &aud).map(|tokens| {
-                        response::UcanResponse {
-                            action: "list".into(),
-                            token_cid: None,
-                            message: format!("{} token(s) found", tokens.len()),
-                            details: Some(serde_json::to_value(&tokens).unwrap_or_default()),
-                        }
-                    }))
-                }
-                UcanCommands::Revoke { cid } => {
-                    run!(identity::ucan::revoke_token(&repo_root, &cid).map(|()| {
-                        response::UcanResponse {
-                            action: "revoke".into(),
-                            token_cid: Some(cid),
-                            message: "Token revoked".into(),
-                            details: None,
-                        }
-                    }))
-                }
-            }
-        }
-
-        Commands::Trust { command } => {
-            let repo_root = core::find_repo_root()
-                .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
-            let engine = identity::trust::TrustEngine::new(&repo_root);
-            match command {
-                TrustCommands::Show { did } => {
-                    run!(engine.get_score(&did).map(|score| {
-                        response::TrustResponse {
-                            action: "show".into(),
-                            did: Some(score.did.clone()),
-                            score: Some(score.score),
-                            level: Some(score.level.to_string()),
-                            message: format!("Trust score for {}: {:.1}", score.did, score.score),
-                            details: Some(serde_json::to_value(&score).unwrap_or_default()),
-                        }
-                    }))
-                }
-                TrustCommands::List => {
-                    run!(engine.list_agents().map(|agents| {
-                        response::TrustResponse {
-                            action: "list".into(),
-                            did: None,
-                            score: None,
-                            level: None,
-                            message: format!("{} agent(s) tracked", agents.len()),
-                            details: Some(serde_json::to_value(&agents).unwrap_or_default()),
-                        }
-                    }))
-                }
-                TrustCommands::History { did } => {
-                    run!(engine.get_score(&did).map(|score| {
-                        response::TrustResponse {
-                            action: "history".into(),
-                            did: Some(score.did.clone()),
-                            score: Some(score.score),
-                            level: Some(score.level.to_string()),
-                            message: format!("{} events for {}", score.events.len(), score.did),
-                            details: Some(serde_json::to_value(&score.events).unwrap_or_default()),
-                        }
-                    }))
-                }
-            }
-        }
-
-        Commands::Issue { command } => {
-            let repo_root = core::find_repo_root()
-                .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
-            let author = identity::did::load_identity(&repo_root)
-                .map(|kp| kp.did.clone())
-                .unwrap_or_else(|_| "anonymous".to_string());
-            match command {
-                IssueCommands::Create { title, body, label } => {
-                    run!(commands::issue::create_issue(&repo_root, &title, &body, &author, label).map(|issue| {
-                        response::IssueResponse {
-                            action: "create".into(),
-                            id: Some(issue.id),
-                            message: format!("Issue #{} created: {}", issue.id, issue.title),
-                            details: Some(serde_json::to_value(&issue).unwrap_or_default()),
-                        }
-                    }))
-                }
-                IssueCommands::List { state } => {
-                    let filter = match state.as_str() {
-                        "closed" => Some(commands::issue::IssueState::Closed),
-                        "all" => None,
-                        _ => Some(commands::issue::IssueState::Open),
-                    };
-                    run!(commands::issue::list_issues(&repo_root, filter).map(|issues| {
-                        response::IssueResponse {
-                            action: "list".into(),
-                            id: None,
-                            message: format!("{} issue(s)", issues.len()),
-                            details: Some(serde_json::to_value(&issues).unwrap_or_default()),
-                        }
-                    }))
-                }
-                IssueCommands::Show { id } => {
-                    run!(commands::issue::get_issue(&repo_root, id).map(|issue| {
-                        response::IssueResponse {
-                            action: "show".into(),
-                            id: Some(issue.id),
-                            message: format!("#{}: {} [{}]", issue.id, issue.title, issue.state),
-                            details: Some(serde_json::to_value(&issue).unwrap_or_default()),
-                        }
-                    }))
-                }
-                IssueCommands::Close { id } => {
-                    run!(commands::issue::close_issue(&repo_root, id).map(|issue| {
-                        response::IssueResponse {
-                            action: "close".into(),
-                            id: Some(issue.id),
-                            message: format!("Issue #{} closed", issue.id),
-                            details: None,
-                        }
-                    }))
-                }
-                IssueCommands::Comment { id, body } => {
-                    run!(commands::issue::comment_issue(&repo_root, id, &author, &body).map(|issue| {
-                        response::IssueResponse {
-                            action: "comment".into(),
-                            id: Some(issue.id),
-                            message: format!("Comment added to issue #{}", issue.id),
-                            details: None,
-                        }
-                    }))
-                }
-            }
-        }
-
-        Commands::Pr { command } => {
-            let repo_root = core::find_repo_root()
-                .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
-            let author = identity::did::load_identity(&repo_root)
-                .map(|kp| kp.did.clone())
-                .unwrap_or_else(|_| "anonymous".to_string());
-            match command {
-                PrCommands::Create { title, body, head, base, label } => {
-                    run!(commands::pr::create_pr(&repo_root, &title, &body, &author, &head, &base, label).map(|pr| {
-                        response::PrResponse {
-                            action: "create".into(),
-                            id: Some(pr.id),
-                            message: format!("PR #{} created: {}", pr.id, pr.title),
-                            details: Some(serde_json::to_value(&pr).unwrap_or_default()),
-                        }
-                    }))
-                }
-                PrCommands::List { state } => {
-                    let filter = match state.as_str() {
-                        "merged" => Some(commands::pr::PrState::Merged),
-                        "closed" => Some(commands::pr::PrState::Closed),
-                        "all" => None,
-                        _ => Some(commands::pr::PrState::Open),
-                    };
-                    run!(commands::pr::list_prs(&repo_root, filter).map(|prs| {
-                        response::PrResponse {
-                            action: "list".into(),
-                            id: None,
-                            message: format!("{} PR(s)", prs.len()),
-                            details: Some(serde_json::to_value(&prs).unwrap_or_default()),
-                        }
-                    }))
-                }
-                PrCommands::Show { id } => {
-                    run!(commands::pr::get_pr(&repo_root, id).map(|pr| {
-                        response::PrResponse {
-                            action: "show".into(),
-                            id: Some(pr.id),
-                            message: format!("#{}: {} [{} -> {}] {}", pr.id, pr.title, pr.head, pr.base, pr.state),
-                            details: Some(serde_json::to_value(&pr).unwrap_or_default()),
-                        }
-                    }))
-                }
-                PrCommands::Merge { id } => {
-                    run!(commands::pr::merge_pr(&repo_root, id).map(|pr| {
-                        response::PrResponse {
-                            action: "merge".into(),
-                            id: Some(pr.id),
-                            message: format!("PR #{} merged", pr.id),
-                            details: None,
-                        }
-                    }))
-                }
-                PrCommands::Close { id } => {
-                    run!(commands::pr::close_pr(&repo_root, id).map(|pr| {
-                        response::PrResponse {
-                            action: "close".into(),
-                            id: Some(pr.id),
-                            message: format!("PR #{} closed", pr.id),
-                            details: None,
-                        }
-                    }))
-                }
-                PrCommands::Comment { id, body } => {
-                    run!(commands::pr::comment_pr(&repo_root, id, &author, &body).map(|pr| {
-                        response::PrResponse {
-                            action: "comment".into(),
-                            id: Some(pr.id),
-                            message: format!("Comment added to PR #{}", pr.id),
-                            details: None,
-                        }
-                    }))
-                }
-            }
-        }
-
-        Commands::Subscribe { command } => {
-            let repo_root = core::find_repo_root()
-                .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
-            let subscriber = identity::did::load_identity(&repo_root)
-                .map(|kp| kp.did.clone())
-                .unwrap_or_else(|_| "local".to_string());
-            match command {
-                SubscribeCommands::Add { event_types, branch } => {
-                    let parsed: Result<Vec<events::subscription::EventType>, _> =
-                        event_types.iter().map(|s| s.parse()).collect();
-                    match parsed {
-                        Ok(types) => {
-                            run!(events::subscription::subscribe(&repo_root, &subscriber, types, branch).map(|sub| {
-                                response::SubscribeResponse {
-                                    action: "add".into(),
-                                    subscription_id: Some(sub.id.clone()),
-                                    message: format!("Subscribed ({})", sub.id),
-                                    details: Some(serde_json::to_value(&sub).unwrap_or_default()),
-                                }
-                            }))
-                        }
-                        Err(e) => {
-                            let err = errors::LitError::general(format!("Invalid event type: {}", e));
-                            let output = formatter::format_error(&err, "subscribe", format);
-                            use std::io::Write;
-                            let _ = std::io::stderr().write_all(&output);
-                            let _ = std::io::stderr().write_all(b"\n");
-                            process::exit(1);
-                        }
-                    }
-                }
-                SubscribeCommands::List => {
-                    run!(events::subscription::list_subscriptions(&repo_root).map(|subs| {
-                        response::SubscribeResponse {
-                            action: "list".into(),
-                            subscription_id: None,
-                            message: format!("{} subscription(s)", subs.len()),
-                            details: Some(serde_json::to_value(&subs).unwrap_or_default()),
-                        }
-                    }))
-                }
-                SubscribeCommands::Remove { id } => {
-                    let id_clone = id.clone();
-                    run!(events::subscription::unsubscribe(&repo_root, &id).map(|()| {
-                        response::SubscribeResponse {
-                            action: "remove".into(),
-                            subscription_id: Some(id_clone),
-                            message: "Subscription removed".into(),
-                            details: None,
-                        }
-                    }))
-                }
-                SubscribeCommands::Events { event_type, limit } => {
-                    let et = event_type
-                        .as_deref()
-                        .map(|s| s.parse::<events::subscription::EventType>())
-                        .transpose();
-                    match et {
-                        Ok(filter) => {
-                            run!(events::subscription::read_events(&repo_root, filter.as_ref(), limit).map(|evts| {
-                                response::SubscribeResponse {
-                                    action: "events".into(),
-                                    subscription_id: None,
-                                    message: format!("{} event(s)", evts.len()),
-                                    details: Some(serde_json::to_value(&evts).unwrap_or_default()),
-                                }
-                            }))
-                        }
-                        Err(e) => {
-                            let err = errors::LitError::general(format!("Invalid event type: {}", e));
-                            let output = formatter::format_error(&err, "subscribe", format);
-                            use std::io::Write;
-                            let _ = std::io::stderr().write_all(&output);
-                            let _ = std::io::stderr().write_all(b"\n");
-                            process::exit(1);
-                        }
-                    }
-                }
-            }
-        }
-
-        Commands::Delegate { command } => {
-            let repo_root = core::find_repo_root()
-                .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
-            let my_did = identity::did::load_identity(&repo_root)
-                .map(|kp| kp.did.clone())
-                .unwrap_or_else(|_| "anonymous".to_string());
-            match command {
-                DelegateCommands::Create { to, title, description, priority, scope } => {
-                    let prio = match priority.as_str() {
-                        "low" => commands::delegate::TaskPriority::Low,
-                        "high" => commands::delegate::TaskPriority::High,
-                        "critical" => commands::delegate::TaskPriority::Critical,
-                        _ => commands::delegate::TaskPriority::Medium,
-                    };
-                    run!(commands::delegate::create_task(
-                        &repo_root, &my_did, &to, &title, &description, prio, scope, None, None,
-                    ).map(|task| {
-                        response::DelegateResponse {
-                            action: "create".into(),
-                            task_id: Some(task.id.clone()),
-                            message: format!("Task '{}' delegated to {}", task.title, task.delegatee),
-                            details: Some(serde_json::to_value(&task).unwrap_or_default()),
-                        }
-                    }))
-                }
-                DelegateCommands::Accept { task_id } => {
-                    run!(commands::delegate::update_task_status(
-                        &repo_root, &task_id, commands::delegate::TaskStatus::Accepted, Some("Accepted".into()),
-                    ).map(|task| {
-                        response::DelegateResponse {
-                            action: "accept".into(),
-                            task_id: Some(task.id.clone()),
-                            message: format!("Task {} accepted", task.id),
-                            details: None,
-                        }
-                    }))
-                }
-                DelegateCommands::Complete { task_id, result } => {
-                    run!(commands::delegate::complete_task(&repo_root, &task_id, &result).map(|task| {
-                        response::DelegateResponse {
-                            action: "complete".into(),
-                            task_id: Some(task.id.clone()),
-                            message: format!("Task {} completed", task.id),
-                            details: Some(serde_json::to_value(&task).unwrap_or_default()),
-                        }
-                    }))
-                }
-                DelegateCommands::List { agent, status } => {
-                    let st = status.map(|s| match s.as_str() {
-                        "pending" => commands::delegate::TaskStatus::Pending,
-                        "accepted" => commands::delegate::TaskStatus::Accepted,
-                        "in-progress" => commands::delegate::TaskStatus::InProgress,
-                        "completed" => commands::delegate::TaskStatus::Completed,
-                        "failed" => commands::delegate::TaskStatus::Failed,
-                        "rejected" => commands::delegate::TaskStatus::Rejected,
-                        _ => commands::delegate::TaskStatus::Pending,
-                    });
-                    run!(commands::delegate::list_tasks(&repo_root, agent.as_deref(), st).map(|tasks| {
-                        response::DelegateResponse {
-                            action: "list".into(),
-                            task_id: None,
-                            message: format!("{} task(s)", tasks.len()),
-                            details: Some(serde_json::to_value(&tasks).unwrap_or_default()),
-                        }
-                    }))
-                }
-                DelegateCommands::Show { task_id } => {
-                    run!(commands::delegate::get_task(&repo_root, &task_id).map(|task| {
-                        response::DelegateResponse {
-                            action: "show".into(),
-                            task_id: Some(task.id.clone()),
-                            message: format!("{} [{}]", task.title, task.status),
-                            details: Some(serde_json::to_value(&task).unwrap_or_default()),
-                        }
-                    }))
-                }
-            }
-        }
-
-        Commands::Peer { command } => {
-            let repo_root = core::find_repo_root()
-                .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
-            match command {
-                PeerCommands::Add { did, endpoint, public_key, alias } => {
-                    let peer = federation::peers::PeerInfo {
-                        did: did.clone(),
-                        alias,
-                        endpoint,
-                        public_key_hex: public_key,
-                        last_known_head: None,
-                        last_sync: None,
-                        reachable: false,
-                        added: chrono::Utc::now().to_rfc3339(),
-                    };
-                    run!(federation::peers::add_peer(&repo_root, &peer).map(|()| {
-                        response::FederationResponse {
-                            action: "add".into(),
-                            message: format!("Peer {} added", did),
-                            details: Some(serde_json::to_value(&peer).unwrap_or_default()),
-                        }
-                    }))
-                }
-                PeerCommands::Remove { did } => {
-                    let did_clone = did.clone();
-                    run!(federation::peers::remove_peer(&repo_root, &did).map(|()| {
-                        response::FederationResponse {
-                            action: "remove".into(),
-                            message: format!("Peer {} removed", did_clone),
-                            details: None,
-                        }
-                    }))
-                }
-                PeerCommands::List => {
-                    run!(federation::peers::list_peers(&repo_root).map(|peers| {
-                        response::FederationResponse {
-                            action: "list".into(),
-                            message: format!("{} peer(s)", peers.len()),
-                            details: Some(serde_json::to_value(&peers).unwrap_or_default()),
-                        }
-                    }))
-                }
-                PeerCommands::Show { did } => {
-                    run!(federation::peers::get_peer(&repo_root, &did).map(|peer| {
-                        response::FederationResponse {
-                            action: "show".into(),
-                            message: format!("Peer: {} ({})", peer.did, if peer.reachable { "reachable" } else { "unreachable" }),
-                            details: Some(serde_json::to_value(&peer).unwrap_or_default()),
-                        }
-                    }))
-                }
-                PeerCommands::Sync { did } => {
-                    let wants = federation::peers::generate_want_list(&repo_root).unwrap_or_default();
-                    run!(federation::peers::get_peer(&repo_root, &did).map(|_peer| {
-                        response::FederationResponse {
-                            action: "sync".into(),
-                            message: format!("Sync with {} — {} objects wanted", did, wants.len()),
-                            details: Some(serde_json::json!({"wants": wants})),
-                        }
-                    }))
-                }
-            }
-        }
+
+
+        // Phase 6: Decentralized Identity & Federation
+
+        Commands::Did { command } => {
+
+            let repo_root = core::find_repo_root()
+
+                .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
+
+            match command {
+
+                DidCommands::Generate { method } => {
+
+                    let did_method = match method.as_str() {
+
+                        "ml-dsa-87" | "mldsa87" => identity::did::DidMethod::MlDsa87,
+
+                        _ => identity::did::DidMethod::Ed25519,
+
+                    };
+
+                    let keypair = identity::did::DidKeyPair::generate(did_method);
+
+                    let doc = identity::did::DidDocument::from_keypair(&keypair);
+
+                    run!(identity::did::save_identity(&repo_root, &keypair).map(|()| {
+
+                        response::DidResponse {
+
+                            action: "generate".into(),
+
+                            did: Some(keypair.did.clone()),
+
+                            message: format!("DID identity generated: {}", keypair.did),
+
+                            details: Some(serde_json::to_value(&doc).unwrap_or_default()),
+
+                        }
+
+                    }))
+
+                }
+
+                DidCommands::Show => {
+
+                    run!(identity::did::load_identity(&repo_root).map(|kp| {
+
+                        let doc = identity::did::DidDocument::from_keypair(&kp);
+
+                        response::DidResponse {
+
+                            action: "show".into(),
+
+                            did: Some(kp.did.clone()),
+
+                            message: format!("Current identity: {}", kp.did),
+
+                            details: Some(serde_json::to_value(&doc).unwrap_or_default()),
+
+                        }
+
+                    }))
+
+                }
+
+                DidCommands::Resolve { did } => {
+
+                    run!(identity::did::resolve_did(&repo_root, &did).map(|doc| {
+
+                        response::DidResponse {
+
+                            action: "resolve".into(),
+
+                            did: Some(did),
+
+                            message: "DID resolved".into(),
+
+                            details: Some(serde_json::to_value(&doc).unwrap_or_default()),
+
+                        }
+
+                    }))
+
+                }
+
+            }
+
+        }
+
+
+
+        Commands::Ucan { command } => {
+
+            let repo_root = core::find_repo_root()
+
+                .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
+
+            match command {
+
+                UcanCommands::Issue { audience, resource, action, duration } => {
+
+                    run!(identity::did::load_identity(&repo_root).and_then(|kp| {
+
+                        let cap = identity::ucan::Capability {
+
+                            resource,
+
+                            action,
+
+                            caveats: None,
+
+                        };
+
+                        let mut token = identity::ucan::UcanToken::new(
+
+                            kp.did.clone(), audience, vec![cap], duration,
+
+                        );
+
+                        if let Some(ref sk) = kp.private_key {
+
+                            token.sign(sk)?;
+
+                        }
+
+                        let cid = identity::ucan::save_token(&repo_root, &token)?;
+
+                        Ok(response::UcanResponse {
+
+                            action: "issue".into(),
+
+                            token_cid: Some(cid),
+
+                            message: "UCAN token issued".into(),
+
+                            details: Some(serde_json::to_value(&token).unwrap_or_default()),
+
+                        })
+
+                    }))
+
+                }
+
+                UcanCommands::List { audience } => {
+
+                    let aud = audience.unwrap_or_default();
+
+                    run!(identity::ucan::load_tokens_for(&repo_root, &aud).map(|tokens| {
+
+                        response::UcanResponse {
+
+                            action: "list".into(),
+
+                            token_cid: None,
+
+                            message: format!("{} token(s) found", tokens.len()),
+
+                            details: Some(serde_json::to_value(&tokens).unwrap_or_default()),
+
+                        }
+
+                    }))
+
+                }
+
+                UcanCommands::Revoke { cid } => {
+
+                    run!(identity::ucan::revoke_token(&repo_root, &cid).map(|()| {
+
+                        response::UcanResponse {
+
+                            action: "revoke".into(),
+
+                            token_cid: Some(cid),
+
+                            message: "Token revoked".into(),
+
+                            details: None,
+
+                        }
+
+                    }))
+
+                }
+
+            }
+
+        }
+
+
+
+        Commands::Trust { command } => {
+
+            let repo_root = core::find_repo_root()
+
+                .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
+
+            let engine = identity::trust::TrustEngine::new(&repo_root);
+
+            match command {
+
+                TrustCommands::Show { did } => {
+
+                    run!(engine.get_score(&did).map(|score| {
+
+                        response::TrustResponse {
+
+                            action: "show".into(),
+
+                            did: Some(score.did.clone()),
+
+                            score: Some(score.score),
+
+                            level: Some(score.level.to_string()),
+
+                            message: format!("Trust score for {}: {:.1}", score.did, score.score),
+
+                            details: Some(serde_json::to_value(&score).unwrap_or_default()),
+
+                        }
+
+                    }))
+
+                }
+
+                TrustCommands::List => {
+
+                    run!(engine.list_agents().map(|agents| {
+
+                        response::TrustResponse {
+
+                            action: "list".into(),
+
+                            did: None,
+
+                            score: None,
+
+                            level: None,
+
+                            message: format!("{} agent(s) tracked", agents.len()),
+
+                            details: Some(serde_json::to_value(&agents).unwrap_or_default()),
+
+                        }
+
+                    }))
+
+                }
+
+                TrustCommands::History { did } => {
+
+                    run!(engine.get_score(&did).map(|score| {
+
+                        response::TrustResponse {
+
+                            action: "history".into(),
+
+                            did: Some(score.did.clone()),
+
+                            score: Some(score.score),
+
+                            level: Some(score.level.to_string()),
+
+                            message: format!("{} events for {}", score.events.len(), score.did),
+
+                            details: Some(serde_json::to_value(&score.events).unwrap_or_default()),
+
+                        }
+
+                    }))
+
+                }
+
+            }
+
+        }
+
+
+
+        Commands::Issue { command } => {
+
+            let repo_root = core::find_repo_root()
+
+                .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
+
+            let author = identity::did::load_identity(&repo_root)
+
+                .map(|kp| kp.did.clone())
+
+                .unwrap_or_else(|_| "anonymous".to_string());
+
+            match command {
+
+                IssueCommands::Create { title, body, label } => {
+
+                    run!(commands::issue::create_issue(&repo_root, &title, &body, &author, label).map(|issue| {
+
+                        response::IssueResponse {
+
+                            action: "create".into(),
+
+                            id: Some(issue.id),
+
+                            message: format!("Issue #{} created: {}", issue.id, issue.title),
+
+                            details: Some(serde_json::to_value(&issue).unwrap_or_default()),
+
+                        }
+
+                    }))
+
+                }
+
+                IssueCommands::List { state } => {
+
+                    let filter = match state.as_str() {
+
+                        "closed" => Some(commands::issue::IssueState::Closed),
+
+                        "all" => None,
+
+                        _ => Some(commands::issue::IssueState::Open),
+
+                    };
+
+                    run!(commands::issue::list_issues(&repo_root, filter).map(|issues| {
+
+                        response::IssueResponse {
+
+                            action: "list".into(),
+
+                            id: None,
+
+                            message: format!("{} issue(s)", issues.len()),
+
+                            details: Some(serde_json::to_value(&issues).unwrap_or_default()),
+
+                        }
+
+                    }))
+
+                }
+
+                IssueCommands::Show { id } => {
+
+                    run!(commands::issue::get_issue(&repo_root, id).map(|issue| {
+
+                        response::IssueResponse {
+
+                            action: "show".into(),
+
+                            id: Some(issue.id),
+
+                            message: format!("#{}: {} [{}]", issue.id, issue.title, issue.state),
+
+                            details: Some(serde_json::to_value(&issue).unwrap_or_default()),
+
+                        }
+
+                    }))
+
+                }
+
+                IssueCommands::Close { id } => {
+
+                    run!(commands::issue::close_issue(&repo_root, id).map(|issue| {
+
+                        response::IssueResponse {
+
+                            action: "close".into(),
+
+                            id: Some(issue.id),
+
+                            message: format!("Issue #{} closed", issue.id),
+
+                            details: None,
+
+                        }
+
+                    }))
+
+                }
+
+                IssueCommands::Comment { id, body } => {
+
+                    run!(commands::issue::comment_issue(&repo_root, id, &author, &body).map(|issue| {
+
+                        response::IssueResponse {
+
+                            action: "comment".into(),
+
+                            id: Some(issue.id),
+
+                            message: format!("Comment added to issue #{}", issue.id),
+
+                            details: None,
+
+                        }
+
+                    }))
+
+                }
+
+            }
+
+        }
+
+
+
+        Commands::Pr { command } => {
+
+            let repo_root = core::find_repo_root()
+
+                .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
+
+            let author = identity::did::load_identity(&repo_root)
+
+                .map(|kp| kp.did.clone())
+
+                .unwrap_or_else(|_| "anonymous".to_string());
+
+            match command {
+
+                PrCommands::Create { title, body, head, base, label } => {
+
+                    run!(commands::pr::create_pr(&repo_root, &title, &body, &author, &head, &base, label).map(|pr| {
+
+                        response::PrResponse {
+
+                            action: "create".into(),
+
+                            id: Some(pr.id),
+
+                            message: format!("PR #{} created: {}", pr.id, pr.title),
+
+                            details: Some(serde_json::to_value(&pr).unwrap_or_default()),
+
+                        }
+
+                    }))
+
+                }
+
+                PrCommands::List { state } => {
+
+                    let filter = match state.as_str() {
+
+                        "merged" => Some(commands::pr::PrState::Merged),
+
+                        "closed" => Some(commands::pr::PrState::Closed),
+
+                        "all" => None,
+
+                        _ => Some(commands::pr::PrState::Open),
+
+                    };
+
+                    run!(commands::pr::list_prs(&repo_root, filter).map(|prs| {
+
+                        response::PrResponse {
+
+                            action: "list".into(),
+
+                            id: None,
+
+                            message: format!("{} PR(s)", prs.len()),
+
+                            details: Some(serde_json::to_value(&prs).unwrap_or_default()),
+
+                        }
+
+                    }))
+
+                }
+
+                PrCommands::Show { id } => {
+
+                    run!(commands::pr::get_pr(&repo_root, id).map(|pr| {
+
+                        response::PrResponse {
+
+                            action: "show".into(),
+
+                            id: Some(pr.id),
+
+                            message: format!("#{}: {} [{} -> {}] {}", pr.id, pr.title, pr.head, pr.base, pr.state),
+
+                            details: Some(serde_json::to_value(&pr).unwrap_or_default()),
+
+                        }
+
+                    }))
+
+                }
+
+                PrCommands::Merge { id } => {
+
+                    run!(commands::pr::merge_pr(&repo_root, id).map(|pr| {
+
+                        response::PrResponse {
+
+                            action: "merge".into(),
+
+                            id: Some(pr.id),
+
+                            message: format!("PR #{} merged", pr.id),
+
+                            details: None,
+
+                        }
+
+                    }))
+
+                }
+
+                PrCommands::Close { id } => {
+
+                    run!(commands::pr::close_pr(&repo_root, id).map(|pr| {
+
+                        response::PrResponse {
+
+                            action: "close".into(),
+
+                            id: Some(pr.id),
+
+                            message: format!("PR #{} closed", pr.id),
+
+                            details: None,
+
+                        }
+
+                    }))
+
+                }
+
+                PrCommands::Comment { id, body } => {
+
+                    run!(commands::pr::comment_pr(&repo_root, id, &author, &body).map(|pr| {
+
+                        response::PrResponse {
+
+                            action: "comment".into(),
+
+                            id: Some(pr.id),
+
+                            message: format!("Comment added to PR #{}", pr.id),
+
+                            details: None,
+
+                        }
+
+                    }))
+
+                }
+
+            }
+
+        }
+
+
+
+        Commands::Subscribe { command } => {
+
+            let repo_root = core::find_repo_root()
+
+                .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
+
+            let subscriber = identity::did::load_identity(&repo_root)
+
+                .map(|kp| kp.did.clone())
+
+                .unwrap_or_else(|_| "local".to_string());
+
+            match command {
+
+                SubscribeCommands::Add { event_types, branch } => {
+
+                    let parsed: Result<Vec<events::subscription::EventType>, _> =
+
+                        event_types.iter().map(|s| s.parse()).collect();
+
+                    match parsed {
+
+                        Ok(types) => {
+
+                            run!(events::subscription::subscribe(&repo_root, &subscriber, types, branch).map(|sub| {
+
+                                response::SubscribeResponse {
+
+                                    action: "add".into(),
+
+                                    subscription_id: Some(sub.id.clone()),
+
+                                    message: format!("Subscribed ({})", sub.id),
+
+                                    details: Some(serde_json::to_value(&sub).unwrap_or_default()),
+
+                                }
+
+                            }))
+
+                        }
+
+                        Err(e) => {
+
+                            let err = errors::LitError::general(format!("Invalid event type: {}", e));
+
+                            let output = formatter::format_error(&err, "subscribe", format);
+
+                            use std::io::Write;
+
+                            let _ = std::io::stderr().write_all(&output);
+
+                            let _ = std::io::stderr().write_all(b"\n");
+
+                            process::exit(1);
+
+                        }
+
+                    }
+
+                }
+
+                SubscribeCommands::List => {
+
+                    run!(events::subscription::list_subscriptions(&repo_root).map(|subs| {
+
+                        response::SubscribeResponse {
+
+                            action: "list".into(),
+
+                            subscription_id: None,
+
+                            message: format!("{} subscription(s)", subs.len()),
+
+                            details: Some(serde_json::to_value(&subs).unwrap_or_default()),
+
+                        }
+
+                    }))
+
+                }
+
+                SubscribeCommands::Remove { id } => {
+
+                    let id_clone = id.clone();
+
+                    run!(events::subscription::unsubscribe(&repo_root, &id).map(|()| {
+
+                        response::SubscribeResponse {
+
+                            action: "remove".into(),
+
+                            subscription_id: Some(id_clone),
+
+                            message: "Subscription removed".into(),
+
+                            details: None,
+
+                        }
+
+                    }))
+
+                }
+
+                SubscribeCommands::Events { event_type, limit } => {
+
+                    let et = event_type
+
+                        .as_deref()
+
+                        .map(|s| s.parse::<events::subscription::EventType>())
+
+                        .transpose();
+
+                    match et {
+
+                        Ok(filter) => {
+
+                            run!(events::subscription::read_events(&repo_root, filter.as_ref(), limit).map(|evts| {
+
+                                response::SubscribeResponse {
+
+                                    action: "events".into(),
+
+                                    subscription_id: None,
+
+                                    message: format!("{} event(s)", evts.len()),
+
+                                    details: Some(serde_json::to_value(&evts).unwrap_or_default()),
+
+                                }
+
+                            }))
+
+                        }
+
+                        Err(e) => {
+
+                            let err = errors::LitError::general(format!("Invalid event type: {}", e));
+
+                            let output = formatter::format_error(&err, "subscribe", format);
+
+                            use std::io::Write;
+
+                            let _ = std::io::stderr().write_all(&output);
+
+                            let _ = std::io::stderr().write_all(b"\n");
+
+                            process::exit(1);
+
+                        }
+
+                    }
+
+                }
+
+            }
+
+        }
+
+
+
+        Commands::Delegate { command } => {
+
+            let repo_root = core::find_repo_root()
+
+                .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
+
+            let my_did = identity::did::load_identity(&repo_root)
+
+                .map(|kp| kp.did.clone())
+
+                .unwrap_or_else(|_| "anonymous".to_string());
+
+            match command {
+
+                DelegateCommands::Create { to, title, description, priority, scope } => {
+
+                    let prio = match priority.as_str() {
+
+                        "low" => commands::delegate::TaskPriority::Low,
+
+                        "high" => commands::delegate::TaskPriority::High,
+
+                        "critical" => commands::delegate::TaskPriority::Critical,
+
+                        _ => commands::delegate::TaskPriority::Medium,
+
+                    };
+
+                    run!(commands::delegate::create_task(
+
+                        &repo_root, &my_did, &to, &title, &description, prio, scope, None, None,
+
+                    ).map(|task| {
+
+                        response::DelegateResponse {
+
+                            action: "create".into(),
+
+                            task_id: Some(task.id.clone()),
+
+                            message: format!("Task '{}' delegated to {}", task.title, task.delegatee),
+
+                            details: Some(serde_json::to_value(&task).unwrap_or_default()),
+
+                        }
+
+                    }))
+
+                }
+
+                DelegateCommands::Accept { task_id } => {
+
+                    run!(commands::delegate::update_task_status(
+
+                        &repo_root, &task_id, commands::delegate::TaskStatus::Accepted, Some("Accepted".into()),
+
+                    ).map(|task| {
+
+                        response::DelegateResponse {
+
+                            action: "accept".into(),
+
+                            task_id: Some(task.id.clone()),
+
+                            message: format!("Task {} accepted", task.id),
+
+                            details: None,
+
+                        }
+
+                    }))
+
+                }
+
+                DelegateCommands::Complete { task_id, result } => {
+
+                    run!(commands::delegate::complete_task(&repo_root, &task_id, &result).map(|task| {
+
+                        response::DelegateResponse {
+
+                            action: "complete".into(),
+
+                            task_id: Some(task.id.clone()),
+
+                            message: format!("Task {} completed", task.id),
+
+                            details: Some(serde_json::to_value(&task).unwrap_or_default()),
+
+                        }
+
+                    }))
+
+                }
+
+                DelegateCommands::List { agent, status } => {
+
+                    let st = status.map(|s| match s.as_str() {
+
+                        "pending" => commands::delegate::TaskStatus::Pending,
+
+                        "accepted" => commands::delegate::TaskStatus::Accepted,
+
+                        "in-progress" => commands::delegate::TaskStatus::InProgress,
+
+                        "completed" => commands::delegate::TaskStatus::Completed,
+
+                        "failed" => commands::delegate::TaskStatus::Failed,
+
+                        "rejected" => commands::delegate::TaskStatus::Rejected,
+
+                        _ => commands::delegate::TaskStatus::Pending,
+
+                    });
+
+                    run!(commands::delegate::list_tasks(&repo_root, agent.as_deref(), st).map(|tasks| {
+
+                        response::DelegateResponse {
+
+                            action: "list".into(),
+
+                            task_id: None,
+
+                            message: format!("{} task(s)", tasks.len()),
+
+                            details: Some(serde_json::to_value(&tasks).unwrap_or_default()),
+
+                        }
+
+                    }))
+
+                }
+
+                DelegateCommands::Show { task_id } => {
+
+                    run!(commands::delegate::get_task(&repo_root, &task_id).map(|task| {
+
+                        response::DelegateResponse {
+
+                            action: "show".into(),
+
+                            task_id: Some(task.id.clone()),
+
+                            message: format!("{} [{}]", task.title, task.status),
+
+                            details: Some(serde_json::to_value(&task).unwrap_or_default()),
+
+                        }
+
+                    }))
+
+                }
+
+            }
+
+        }
+
+
+
+        Commands::Peer { command } => {
+
+            let repo_root = core::find_repo_root()
+
+                .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
+
+            match command {
+
+                PeerCommands::Add { did, endpoint, public_key, alias } => {
+
+                    let peer = federation::peers::PeerInfo {
+
+                        did: did.clone(),
+
+                        alias,
+
+                        endpoint,
+
+                        public_key_hex: public_key,
+
+                        last_known_head: None,
+
+                        last_sync: None,
+
+                        reachable: false,
+
+                        added: chrono::Utc::now().to_rfc3339(),
+
+                    };
+
+                    run!(federation::peers::add_peer(&repo_root, &peer).map(|()| {
+
+                        response::FederationResponse {
+
+                            action: "add".into(),
+
+                            message: format!("Peer {} added", did),
+
+                            details: Some(serde_json::to_value(&peer).unwrap_or_default()),
+
+                        }
+
+                    }))
+
+                }
+
+                PeerCommands::Remove { did } => {
+
+                    let did_clone = did.clone();
+
+                    run!(federation::peers::remove_peer(&repo_root, &did).map(|()| {
+
+                        response::FederationResponse {
+
+                            action: "remove".into(),
+
+                            message: format!("Peer {} removed", did_clone),
+
+                            details: None,
+
+                        }
+
+                    }))
+
+                }
+
+                PeerCommands::List => {
+
+                    run!(federation::peers::list_peers(&repo_root).map(|peers| {
+
+                        response::FederationResponse {
+
+                            action: "list".into(),
+
+                            message: format!("{} peer(s)", peers.len()),
+
+                            details: Some(serde_json::to_value(&peers).unwrap_or_default()),
+
+                        }
+
+                    }))
+
+                }
+
+                PeerCommands::Show { did } => {
+
+                    run!(federation::peers::get_peer(&repo_root, &did).map(|peer| {
+
+                        response::FederationResponse {
+
+                            action: "show".into(),
+
+                            message: format!("Peer: {} ({})", peer.did, if peer.reachable { "reachable" } else { "unreachable" }),
+
+                            details: Some(serde_json::to_value(&peer).unwrap_or_default()),
+
+                        }
+
+                    }))
+
+                }
+
+                PeerCommands::Sync { did } => {
+
+                    let wants = federation::peers::generate_want_list(&repo_root).unwrap_or_default();
+
+                    run!(federation::peers::get_peer(&repo_root, &did).map(|_peer| {
+
+                        response::FederationResponse {
+
+                            action: "sync".into(),
+
+                            message: format!("Sync with {} — {} objects wanted", did, wants.len()),
+
+                            details: Some(serde_json::json!({"wants": wants})),
+
+                        }
+
+                    }))
+
+                }
+
+            }
+
+        }
+
+        Commands::Intent { command } => match command {
+            IntentCommands::Create {
+                title,
+                agent,
+                scope,
+                priority,
+                parent,
+                ucan_proof,
+            } => {
+                let prio = match priority.as_str() {
+                    "low" => commands::intent::IntentPriority::Low,
+                    "high" => commands::intent::IntentPriority::High,
+                    "critical" => commands::intent::IntentPriority::Critical,
+                    _ => commands::intent::IntentPriority::Medium,
+                };
+                run!(commands::intent::execute_create(
+                    title, agent, scope, prio, parent, ucan_proof
+                ))
+            }
+            IntentCommands::List { status, agent } => {
+                run!(commands::intent::execute_list(status, agent))
+            }
+            IntentCommands::Show { intent_id } => {
+                run!(commands::intent::execute_show(intent_id))
+            }
+            IntentCommands::Close { intent_id } => {
+                run!(commands::intent::execute_close(intent_id))
+            }
+        },
+
+        Commands::Converge {
+            intent_id,
+            strategy,
+            verify,
+            dry_run,
+            target,
+        } => {
+            run!(commands::converge::execute(
+                intent_id, strategy, verify, dry_run, target
+            ))
+        }
 
     }
 }

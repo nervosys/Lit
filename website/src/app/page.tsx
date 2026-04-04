@@ -2,7 +2,7 @@ import Link from "next/link";
 
 const FEATURES = [
   { icon: "🔐", title: "Post-Quantum Cryptography", desc: "ML-DSA-87 (FIPS 204), AES-256-GCM, SHA3-512 + BLAKE3 hashing" },
-  { icon: "⚡", title: "50 CLI Commands", desc: "Full Git-compatible command set plus identity, federation, issues, and agent delegation" },
+  { icon: "⚡", title: "52 CLI Commands", desc: "Full Git-compatible command set plus identity, federation, issues, and agent delegation" },
   { icon: "🤖", title: "30 MCP Tools", desc: "First-class AI agent integration via Model Context Protocol" },
   { icon: "🆔", title: "DID Identity & UCAN", desc: "Decentralized identifiers with fine-grained capability delegation tokens" },
   { icon: "🎫", title: "Local-First Issues & PRs", desc: "Issue tracker and pull requests stored as git refs — no server required" },
@@ -10,6 +10,7 @@ const FEATURES = [
   { icon: "📦", title: "Sandboxed Execution", desc: "Process-isolated environments for untrusted operations" },
   { icon: "✈️", title: "Airgap Mode", desc: "Fully offline operation with transport permission controls" },
   { icon: "🌐", title: "4 Transport Protocols", desc: "HTTPS, SSH, lit://, and stdio for maximum flexibility" },
+  { icon: "🎯", title: "Intent → Commit → Converge", desc: "Agentic workflow replacing branch/PR with scoped intents, commit attachment, and trust-gated convergence" },
 ];
 
 const COMPARISON = [
@@ -23,6 +24,7 @@ const COMPARISON = [
   { feature: "Agent trust scoring", lit: true, git: false },
   { feature: "Sandboxed execution", lit: true, git: false },
   { feature: "Airgap mode", lit: true, git: false },
+  { feature: "Intent → Converge workflow", lit: true, git: false },
   { feature: "FIPS 140-3 compliance", lit: true, git: false },
   { feature: "HMAC-signed audit logs", lit: true, git: false },
   { feature: "Brute-force protection", lit: true, git: false },
@@ -39,7 +41,7 @@ const SECURITY_HIGHLIGHTS = [
 
 export default function Home() {
   return (
-    <main className="max-w-5xl mx-auto px-6 py-16">
+    <main className="max-w-7xl mx-auto px-6 py-16">
       {/* Hero */}
       <section className="text-center mb-20">
         <div className="inline-block mb-4 px-3 py-1 text-xs font-medium rounded-full bg-brand-100 dark:bg-brand-900 text-brand-700 dark:text-brand-300">
@@ -70,7 +72,7 @@ export default function Home() {
 
         {/* Install command */}
         <div className="max-w-lg mx-auto">
-          <div className="relative rounded-lg border border-[var(--border)] bg-[var(--code-bg)] px-4 py-3 text-sm font-mono text-left">
+          <div className="relative rounded-lg border border-[var(--border)] bg-[var(--code-bg)] px-4 py-3 text-sm font-mono text-center">
             <span className="text-[var(--muted)] select-none">$ </span>
             <span>cargo install lit-vcs</span>
           </div>

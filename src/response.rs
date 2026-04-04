@@ -1686,3 +1686,62 @@ impl CommandResponse for UcanResponse {
         out
     }
 }
+
+// ── Intent / Converge response types ────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct IntentResponse {
+    pub action: String,
+    pub intent_id: Option<String>,
+    pub message: String,
+    pub details: Option<serde_json::Value>,
+}
+
+impl CommandResponse for IntentResponse {
+    fn command_name(&self) -> &'static str {
+        "intent"
+    }
+    fn human_readable(&self) -> String {
+        let mut out = format!("{}\n", self.message);
+        if let Some(ref id) = self.intent_id {
+            out.push_str(&format!("  Intent: {}\n", id));
+        }
+        if let Some(ref d) = self.details {
+            out.push_str(&serde_json::to_string_pretty(d).unwrap_or_default());
+            out.push('\n');
+        }
+        out
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ConvergeResponse {
+    pub converged: bool,
+    pub strategy: String,
+    pub intent_id: String,
+    pub intent_title: String,
+    pub commit_hash: Option<String>,
+    pub commits_converged: usize,
+    pub fast_forward: bool,
+    pub message: String,
+    pub details: Option<serde_json::Value>,
+}
+
+impl CommandResponse for ConvergeResponse {
+    fn command_name(&self) -> &'static str {
+        "converge"
+    }
+    fn human_readable(&self) -> String {
+        let mut out = format!("{}\n", self.message);
+        if let Some(ref h) = self.commit_hash {
+            out.push_str(&format!("  Commit: {}\n", h));
+        }
+        out.push_str(&format!("  Strategy: {}\n", self.strategy));
+        out.push_str(&format!("  Fast-forward: {}\n", self.fast_forward));
+        if let Some(ref d) = self.details {
+            out.push_str(&serde_json::to_string_pretty(d).unwrap_or_default());
+            out.push('\n');
+        }
+        out
+    }
+}
