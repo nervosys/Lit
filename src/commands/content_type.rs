@@ -204,7 +204,10 @@ fn builtin_types() -> Vec<ContentType> {
             id: "cad/3mf".into(),
             name: "3MF Model".into(),
             domain: ContentDomain::Cad,
-            mime_types: vec!["model/3mf".into(), "application/vnd.ms-package.3dmanufacturing-3dmodel+xml".into()],
+            mime_types: vec![
+                "model/3mf".into(),
+                "application/vnd.ms-package.3dmanufacturing-3dmodel+xml".into(),
+            ],
             extensions: vec!["3mf".into()],
             magic_bytes: vec!["504B0304".into()], // ZIP header
             diff_strategy: DiffStrategy::Structural,
@@ -265,7 +268,14 @@ fn builtin_types() -> Vec<ContentType> {
             name: "Gerber PCB Fabrication".into(),
             domain: ContentDomain::Eda,
             mime_types: vec!["application/x-gerber".into()],
-            extensions: vec!["gbr".into(), "ger".into(), "gtl".into(), "gbl".into(), "gts".into(), "gbs".into()],
+            extensions: vec![
+                "gbr".into(),
+                "ger".into(),
+                "gtl".into(),
+                "gbl".into(),
+                "gts".into(),
+                "gbs".into(),
+            ],
             magic_bytes: vec![],
             diff_strategy: DiffStrategy::Text,
             merge_strategy: MergeStrategy::LastWriterWins,
@@ -320,7 +330,9 @@ fn builtin_types() -> Vec<ContentType> {
             id: "manuscript/docx".into(),
             name: "Word Document".into(),
             domain: ContentDomain::Manuscript,
-            mime_types: vec!["application/vnd.openxmlformats-officedocument.wordprocessingml.document".into()],
+            mime_types: vec![
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document".into(),
+            ],
             extensions: vec!["docx".into()],
             magic_bytes: vec!["504B0304".into()], // ZIP
             diff_strategy: DiffStrategy::Structural,
@@ -377,7 +389,10 @@ fn builtin_types() -> Vec<ContentType> {
             id: "db/sqlite".into(),
             name: "SQLite Database".into(),
             domain: ContentDomain::Database,
-            mime_types: vec!["application/vnd.sqlite3".into(), "application/x-sqlite3".into()],
+            mime_types: vec![
+                "application/vnd.sqlite3".into(),
+                "application/x-sqlite3".into(),
+            ],
             extensions: vec!["sqlite".into(), "sqlite3".into(), "db".into()],
             magic_bytes: vec!["53514C69746520666F726D6174".into()], // "SQLite format"
             diff_strategy: DiffStrategy::Semantic,
@@ -536,8 +551,21 @@ fn builtin_types() -> Vec<ContentType> {
             id: "media/image".into(),
             name: "Image Asset".into(),
             domain: ContentDomain::Media,
-            mime_types: vec!["image/png".into(), "image/jpeg".into(), "image/webp".into(), "image/tiff".into()],
-            extensions: vec!["png".into(), "jpg".into(), "jpeg".into(), "webp".into(), "tiff".into(), "tif".into(), "bmp".into()],
+            mime_types: vec![
+                "image/png".into(),
+                "image/jpeg".into(),
+                "image/webp".into(),
+                "image/tiff".into(),
+            ],
+            extensions: vec![
+                "png".into(),
+                "jpg".into(),
+                "jpeg".into(),
+                "webp".into(),
+                "tiff".into(),
+                "tif".into(),
+                "bmp".into(),
+            ],
             magic_bytes: vec!["89504E47".into(), "FFD8FF".into()], // PNG, JPEG
             diff_strategy: DiffStrategy::Opaque,
             merge_strategy: MergeStrategy::LastWriterWins,
@@ -560,8 +588,18 @@ fn builtin_types() -> Vec<ContentType> {
             id: "media/video".into(),
             name: "Video Asset".into(),
             domain: ContentDomain::Media,
-            mime_types: vec!["video/mp4".into(), "video/webm".into(), "video/quicktime".into()],
-            extensions: vec!["mp4".into(), "webm".into(), "mov".into(), "mkv".into(), "avi".into()],
+            mime_types: vec![
+                "video/mp4".into(),
+                "video/webm".into(),
+                "video/quicktime".into(),
+            ],
+            extensions: vec![
+                "mp4".into(),
+                "webm".into(),
+                "mov".into(),
+                "mkv".into(),
+                "avi".into(),
+            ],
             magic_bytes: vec![],
             diff_strategy: DiffStrategy::Opaque,
             merge_strategy: MergeStrategy::LastWriterWins,
@@ -583,8 +621,19 @@ fn builtin_types() -> Vec<ContentType> {
             id: "media/audio".into(),
             name: "Audio Asset".into(),
             domain: ContentDomain::Media,
-            mime_types: vec!["audio/mpeg".into(), "audio/wav".into(), "audio/flac".into(), "audio/ogg".into()],
-            extensions: vec!["mp3".into(), "wav".into(), "flac".into(), "ogg".into(), "aac".into()],
+            mime_types: vec![
+                "audio/mpeg".into(),
+                "audio/wav".into(),
+                "audio/flac".into(),
+                "audio/ogg".into(),
+            ],
+            extensions: vec![
+                "mp3".into(),
+                "wav".into(),
+                "flac".into(),
+                "ogg".into(),
+                "aac".into(),
+            ],
             magic_bytes: vec!["494433".into(), "52494646".into()], // "ID3", "RIFF"
             diff_strategy: DiffStrategy::Opaque,
             merge_strategy: MergeStrategy::LastWriterWins,
@@ -663,7 +712,9 @@ fn builtin_types() -> Vec<ContentType> {
             id: "financial/xlsx".into(),
             name: "Excel Spreadsheet".into(),
             domain: ContentDomain::Financial,
-            mime_types: vec!["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet".into()],
+            mime_types: vec![
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet".into(),
+            ],
             extensions: vec!["xlsx".into()],
             magic_bytes: vec!["504B0304".into()], // ZIP
             diff_strategy: DiffStrategy::Structural,
@@ -726,7 +777,8 @@ fn types_dir(repo_root: &Path) -> std::path::PathBuf {
 
 fn save_type(repo_root: &Path, ct: &ContentType) -> Result<(), LitError> {
     let dir = types_dir(repo_root);
-    fs::create_dir_all(&dir).map_err(|e| LitError::io(format!("Create content-types dir: {}", e)))?;
+    fs::create_dir_all(&dir)
+        .map_err(|e| LitError::io(format!("Create content-types dir: {}", e)))?;
     let safe_id: String = ct.id.replace('/', "_");
     let path = dir.join(format!("{}.json", safe_id));
     let json = serde_json::to_string_pretty(ct)
@@ -743,8 +795,14 @@ fn load_all_types(repo_root: &Path) -> Result<Vec<ContentType>, LitError> {
     if dir.exists() {
         for entry in fs::read_dir(&dir).map_err(|e| LitError::io(e.to_string()))? {
             let entry = entry.map_err(|e| LitError::io(e.to_string()))?;
-            if entry.path().extension().map(|e| e == "json").unwrap_or(false) {
-                let json = fs::read_to_string(entry.path()).map_err(|e| LitError::io(e.to_string()))?;
+            if entry
+                .path()
+                .extension()
+                .map(|e| e == "json")
+                .unwrap_or(false)
+            {
+                let json =
+                    fs::read_to_string(entry.path()).map_err(|e| LitError::io(e.to_string()))?;
                 if let Ok(ct) = serde_json::from_str::<ContentType>(&json) {
                     // Custom types override builtins with the same id
                     types.retain(|t| t.id != ct.id);
@@ -774,10 +832,15 @@ pub fn detect(file_path: &str, first_bytes: Option<&[u8]>) -> Option<ContentType
 
     // Magic bytes match
     if let Some(bytes) = first_bytes {
-        let hex: String = bytes.iter().take(16).map(|b| format!("{:02X}", b)).collect();
-        if let Some(ct) = all.iter().find(|t| {
-            t.magic_bytes.iter().any(|mb| hex.starts_with(mb))
-        }) {
+        let hex: String = bytes
+            .iter()
+            .take(16)
+            .map(|b| format!("{:02X}", b))
+            .collect();
+        if let Some(ct) = all
+            .iter()
+            .find(|t| t.magic_bytes.iter().any(|mb| hex.starts_with(mb)))
+        {
             return Some(ct.clone());
         }
     }

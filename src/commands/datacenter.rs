@@ -240,8 +240,14 @@ fn load_all_nodes(repo_root: &Path) -> Result<Vec<ClusterNode>, LitError> {
     if dir.exists() {
         for entry in fs::read_dir(&dir).map_err(|e| LitError::io(e.to_string()))? {
             let entry = entry.map_err(|e| LitError::io(e.to_string()))?;
-            if entry.path().extension().map(|e| e == "json").unwrap_or(false) {
-                let json = fs::read_to_string(entry.path()).map_err(|e| LitError::io(e.to_string()))?;
+            if entry
+                .path()
+                .extension()
+                .map(|e| e == "json")
+                .unwrap_or(false)
+            {
+                let json =
+                    fs::read_to_string(entry.path()).map_err(|e| LitError::io(e.to_string()))?;
                 if let Ok(node) = serde_json::from_str::<ClusterNode>(&json) {
                     nodes.push(node);
                 }
@@ -252,11 +258,7 @@ fn load_all_nodes(repo_root: &Path) -> Result<Vec<ClusterNode>, LitError> {
 }
 
 /// Assign shard ranges to a node based on current cluster state
-fn compute_shard_ranges(
-    node_id: &str,
-    all_nodes: &[ClusterNode],
-    shard_count: u32,
-) -> Vec<String> {
+fn compute_shard_ranges(node_id: &str, all_nodes: &[ClusterNode], shard_count: u32) -> Vec<String> {
     let active_nodes: Vec<&ClusterNode> = all_nodes
         .iter()
         .filter(|n| n.health != HealthStatus::Unreachable && n.health != HealthStatus::Draining)
@@ -342,7 +344,10 @@ pub fn execute_status() -> Result<DatacenterResponse, LitError> {
     let config = load_cluster_config(&repo_root)?;
     let nodes = load_all_nodes(&repo_root)?;
 
-    let healthy = nodes.iter().filter(|n| n.health == HealthStatus::Healthy).count();
+    let healthy = nodes
+        .iter()
+        .filter(|n| n.health == HealthStatus::Healthy)
+        .count();
     let total = nodes.len();
 
     Ok(DatacenterResponse {
@@ -495,8 +500,7 @@ pub fn execute_health() -> Result<DatacenterResponse, LitError> {
     let nodes = load_all_nodes(&repo_root)?;
 
     let mut health_report: Vec<serde_json::Value> = Vec::new();
-    let timeout_cutoff = Utc::now()
-        - chrono::Duration::seconds(config.node_timeout_secs as i64);
+    let timeout_cutoff = Utc::now() - chrono::Duration::seconds(config.node_timeout_secs as i64);
 
     for node in &nodes {
         let last_hb = chrono::DateTime::parse_from_rfc3339(&node.last_heartbeat)
@@ -553,7 +557,10 @@ pub fn execute_metrics() -> Result<DatacenterResponse, LitError> {
         labels: HashMap::new(),
     });
 
-    let healthy = nodes.iter().filter(|n| n.health == HealthStatus::Healthy).count();
+    let healthy = nodes
+        .iter()
+        .filter(|n| n.health == HealthStatus::Healthy)
+        .count();
     all_metrics.push(Metric {
         name: "lit_cluster_nodes_healthy".into(),
         help: "Healthy nodes in cluster".into(),

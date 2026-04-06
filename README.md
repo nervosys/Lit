@@ -28,7 +28,7 @@ Git was designed in 2005 for human developers using terminals. Every interface â
 | **Issues & PRs**        | None built-in               | Local-first, stored as git refs          |
 | **Federation**          | Centralized (GitHub/GitLab) | Content-addressed peer-to-peer           |
 | **Sandboxing**          | None                        | Process isolation with env/fs/net fences |
-| **Content types**       | Source code only             | CAD, EDA, manuscripts, DBs, media, etc.  |
+| **Content types**       | Source code only            | CAD, EDA, manuscripts, DBs, media, etc.  |
 | **Agent types**         | N/A                         | SWE, CAD, EDA, writer, DBA, reviewer, CI |
 | **Datacenter**          | N/A                         | Sharding, replication, metrics, health   |
 | **Cryptography**        | SHA-1 / SHA-256             | SHA3-512 + BLAKE3 (quantum-resistant)    |
@@ -321,18 +321,18 @@ lit agent-profile remove my-bot                   # Remove custom profile
 ```
 
 **Built-in profiles (10):**
-| Profile | Domain | Capabilities | Trust | Content Types |
-| --- | --- | --- | --- | --- |
-| `swe-default` | Software | read, write, branch, merge, test, diff, intent, converge | standard | All source code |
-| `cad-designer` | CAD | read, write, branch, lfs, diff, intent, structural-analysis | standard | STEP, STL, IGES, 3MF |
-| `eda-engineer` | EDA | read, write, branch, diff, intent, structural-analysis | standard | KiCad, Gerber, SPICE |
-| `tech-writer` | Writer | read, write, branch, diff, intent, content-metadata | standard | LaTeX, DOCX, Typst, AsciiDoc |
-| `dba` | DBA | read, write, branch, diff, intent, schema-management | elevated | SQLite, CSV, Parquet, SQL |
-| `reviewer` | Reviewer | read, review, diff, converge | elevated | All (read-only) |
-| `ci-bot` | CI | read, test, deploy, security-scan, diff | elevated | All |
-| `security-auditor` | Security | read, review, security-scan, diff | elevated | All (read-only) |
-| `data-scientist` | DataScience | read, write, branch, lfs, intent, schema-management | standard | HDF5, Jupyter, Parquet, CSV |
-| `orchestrator` | General | read, orchestrate, intent, converge, review | admin | All |
+| Profile            | Domain      | Capabilities                                                | Trust    | Content Types                |
+| ------------------ | ----------- | ----------------------------------------------------------- | -------- | ---------------------------- |
+| `swe-default`      | Software    | read, write, branch, merge, test, diff, intent, converge    | standard | All source code              |
+| `cad-designer`     | CAD         | read, write, branch, lfs, diff, intent, structural-analysis | standard | STEP, STL, IGES, 3MF         |
+| `eda-engineer`     | EDA         | read, write, branch, diff, intent, structural-analysis      | standard | KiCad, Gerber, SPICE         |
+| `tech-writer`      | Writer      | read, write, branch, diff, intent, content-metadata         | standard | LaTeX, DOCX, Typst, AsciiDoc |
+| `dba`              | DBA         | read, write, branch, diff, intent, schema-management        | elevated | SQLite, CSV, Parquet, SQL    |
+| `reviewer`         | Reviewer    | read, review, diff, converge                                | elevated | All (read-only)              |
+| `ci-bot`           | CI          | read, test, deploy, security-scan, diff                     | elevated | All                          |
+| `security-auditor` | Security    | read, review, security-scan, diff                           | elevated | All (read-only)              |
+| `data-scientist`   | DataScience | read, write, branch, lfs, intent, schema-management         | standard | HDF5, Jupyter, Parquet, CSV  |
+| `orchestrator`     | General     | read, orchestrate, intent, converge, review                 | admin    | All                          |
 
 Each profile enforces:
 - **Capabilities** â€” what operations the agent can perform
