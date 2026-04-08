@@ -17,6 +17,19 @@ clippy_output.txt
 fix_*.ps1
 append_responses.ps1
 
+# Secrets & credentials (defense-in-depth)
+*.key
+*.pem
+*.p12
+*.pfx
+*.keystore
+*.jks
+*.env
+.env.*
+*.secret
+*.credentials
+!docs/**
+
 # IDE
 .vscode/
 .idea/
