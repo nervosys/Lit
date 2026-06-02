@@ -1,5 +1,5 @@
 [package]
-name = "lit"
+name = "litvc"
 version = "1.0.1"
 edition = "2021"
 rust-version = "1.82"
@@ -18,6 +18,13 @@ keywords = [
 readme = "README.md"
 categories = ["command-line-utilities", "development-tools"]
 exclude = ["target/", "website/", "tests/", "examples/", "docs/", ".github/"]
+
+[lib]
+name = "lit"
+
+[[bin]]
+name = "lit"
+path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4.5", features = ["derive", "env"] }
