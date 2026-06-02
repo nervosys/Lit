@@ -134,10 +134,10 @@ pub fn list_prs(repo_root: &Path, state: Option<PrState>) -> Result<Vec<PullRequ
     let mut prs = Vec::new();
     for entry in fs::read_dir(&dir).map_err(|e| LitError::io(format!("IO: {}", e)))? {
         let entry = entry.map_err(|e| LitError::io(format!("IO: {}", e)))?;
-        if entry.path().extension().map_or(false, |e| e == "json") {
+        if entry.path().extension().is_some_and(|e| e == "json") {
             if let Ok(json) = fs::read_to_string(entry.path()) {
                 if let Ok(pr) = serde_json::from_str::<PullRequest>(&json) {
-                    if state.as_ref().map_or(true, |s| pr.state == *s) {
+                    if state.as_ref().is_none_or(|s| pr.state == *s) {
                         prs.push(pr);
                     }
                 }
@@ -145,7 +145,7 @@ pub fn list_prs(repo_root: &Path, state: Option<PrState>) -> Result<Vec<PullRequ
         }
     }
 
-    prs.sort_by(|a, b| b.id.cmp(&a.id));
+    prs.sort_by_key(|b| std::cmp::Reverse(b.id));
     Ok(prs)
 }
 

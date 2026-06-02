@@ -115,7 +115,7 @@ pub fn list_peers(repo_root: &Path) -> Result<Vec<PeerInfo>, LitError> {
     let mut peers = Vec::new();
     for entry in fs::read_dir(&dir).map_err(|e| LitError::io(format!("IO: {}", e)))? {
         let entry = entry.map_err(|e| LitError::io(format!("IO: {}", e)))?;
-        if entry.path().extension().map_or(false, |e| e == "json") {
+        if entry.path().extension().is_some_and(|e| e == "json") {
             if let Ok(json) = fs::read_to_string(entry.path()) {
                 if let Ok(peer) = serde_json::from_str::<PeerInfo>(&json) {
                     peers.push(peer);

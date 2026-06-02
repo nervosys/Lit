@@ -98,6 +98,7 @@ fn tasks_dir(repo_root: &Path) -> std::path::PathBuf {
 }
 
 /// Create a new delegated task
+#[allow(clippy::too_many_arguments)]
 pub fn create_task(
     repo_root: &Path,
     delegator: &str,
@@ -211,12 +212,12 @@ pub fn list_tasks(
     let mut tasks = Vec::new();
     for entry in fs::read_dir(&dir).map_err(|e| LitError::io(format!("IO: {}", e)))? {
         let entry = entry.map_err(|e| LitError::io(format!("IO: {}", e)))?;
-        if entry.path().extension().map_or(false, |e| e == "json") {
+        if entry.path().extension().is_some_and(|e| e == "json") {
             if let Ok(json) = fs::read_to_string(entry.path()) {
                 if let Ok(task) = serde_json::from_str::<DelegatedTask>(&json) {
                     let agent_match = agent_did
-                        .map_or(true, |did| task.delegator == did || task.delegatee == did);
-                    let status_match = status.as_ref().map_or(true, |s| task.status == *s);
+                        .is_none_or(|did| task.delegator == did || task.delegatee == did);
+                    let status_match = status.as_ref().is_none_or(|s| task.status == *s);
                     if agent_match && status_match {
                         tasks.push(task);
                     }

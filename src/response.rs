@@ -41,8 +41,24 @@ pub trait CommandResponse: Serialize {
     /// Render as human-readable text
     fn human_readable(&self) -> String;
 
-    /// Render as JSON (default implementation via serde)
+    /// Render as JSON (default implementation via serde).
+    ///
+    /// Output is compact (single line, no extra whitespace) by default — this
+    /// is the agent-first, token-efficient representation and is also valid
+    /// JSONL. Use [`CommandResponse::to_json_output_pretty`] for human-readable
+    /// indented JSON.
     fn to_json_output(&self) -> String {
+        let data = serde_json::to_value(self).unwrap_or(serde_json::Value::Null);
+        let output = CommandOutput {
+            status: "ok",
+            command: self.command_name(),
+            data,
+        };
+        serde_json::to_string(&output).unwrap_or_default()
+    }
+
+    /// Render as indented, human-readable JSON (opt-in via `--pretty`).
+    fn to_json_output_pretty(&self) -> String {
         let data = serde_json::to_value(self).unwrap_or(serde_json::Value::Null);
         let output = CommandOutput {
             status: "ok",
@@ -78,7 +94,7 @@ pub fn render_error(
                     "suggestions": error.suggestions(),
                 }
             });
-            serde_json::to_string_pretty(&err_obj).unwrap_or_default()
+            serde_json::to_string(&err_obj).unwrap_or_default()
         }
         OutputFormat::Human => {
             let mut out = format!("error: {}", error.user_message());

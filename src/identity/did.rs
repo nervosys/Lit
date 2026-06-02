@@ -78,15 +78,15 @@ impl DidKeyPair {
 
         // Derive a deterministic keypair from the random bytes
         let mut hasher = Sha3_256::new();
-        hasher.update(&rng_bytes);
+        hasher.update(rng_bytes);
         let private_bytes = hasher.finalize();
 
         let mut pub_hasher = Sha3_256::new();
-        pub_hasher.update(&private_bytes);
+        pub_hasher.update(private_bytes);
         let public_bytes = pub_hasher.finalize();
 
-        let public_hex = hex::encode(&public_bytes);
-        let private_hex = hex::encode(&private_bytes);
+        let public_hex = hex::encode(public_bytes);
+        let private_hex = hex::encode(private_bytes);
 
         // Create DID string using base58-style encoding of public key
         let did_id = base58_encode(&public_bytes);

@@ -119,10 +119,10 @@ pub fn list_issues(repo_root: &Path, state: Option<IssueState>) -> Result<Vec<Is
     let mut issues = Vec::new();
     for entry in fs::read_dir(&dir).map_err(|e| LitError::io(format!("IO: {}", e)))? {
         let entry = entry.map_err(|e| LitError::io(format!("IO: {}", e)))?;
-        if entry.path().extension().map_or(false, |e| e == "json") {
+        if entry.path().extension().is_some_and(|e| e == "json") {
             if let Ok(json) = fs::read_to_string(entry.path()) {
                 if let Ok(issue) = serde_json::from_str::<Issue>(&json) {
-                    if state.as_ref().map_or(true, |s| issue.state == *s) {
+                    if state.as_ref().is_none_or(|s| issue.state == *s) {
                         issues.push(issue);
                     }
                 }
@@ -130,7 +130,7 @@ pub fn list_issues(repo_root: &Path, state: Option<IssueState>) -> Result<Vec<Is
         }
     }
 
-    issues.sort_by(|a, b| b.id.cmp(&a.id));
+    issues.sort_by_key(|b| std::cmp::Reverse(b.id));
     Ok(issues)
 }
 

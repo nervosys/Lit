@@ -34,6 +34,10 @@ struct Cli {
     #[arg(long, global = true)]
     human: bool,
 
+    /// Pretty-print (indent) JSON output. Token-heavy; for human inspection.
+    #[arg(long, global = true, env = "LIT_PRETTY")]
+    pretty: bool,
+
     /// Output format: json, human, msgpack
     #[arg(long, global = true, env = "LIT_OUTPUT")]
     output: Option<String>,
@@ -580,6 +584,87 @@ enum Commands {
     Peer {
         #[command(subcommand)]
         command: PeerCommands,
+    },
+
+    // --- GitButler-parity features ---
+    /// Amend the most recent commit with staged changes
+    Amend {
+        /// New commit message (keeps original if omitted)
+        #[arg(short, long)]
+        message: Option<String>,
+
+        /// New author name (keeps original if omitted)
+        #[arg(short, long)]
+        author: Option<String>,
+    },
+
+    /// Reword the message of the most recent commit
+    Reword {
+        /// New commit message
+        message: String,
+
+        /// Target commit hash (defaults to HEAD)
+        #[arg(long)]
+        target: Option<String>,
+    },
+
+    /// Squash the last N commits into one
+    Squash {
+        /// Number of commits to squash
+        count: usize,
+
+        /// Squash commit message (auto-generated if omitted)
+        #[arg(short, long)]
+        message: Option<String>,
+    },
+
+    /// Uncommit the last commit, keeping changes in the working tree
+    Uncommit {
+        /// Discard the committed content instead of keeping it
+        #[arg(long)]
+        discard: bool,
+    },
+
+    /// Auto-assign working directory changes to the correct ancestor commits
+    Absorb {
+        /// Base branch/commit to stop at
+        #[arg(long)]
+        base: Option<String>,
+
+        /// Show what would happen without making changes
+        #[arg(long)]
+        dry_run: bool,
+    },
+
+    /// Operation log and undo timeline
+    Undo {
+        #[command(subcommand)]
+        command: UndoCommands,
+    },
+
+    /// Stacked branch management
+    Stack {
+        #[command(subcommand)]
+        command: StackCommands,
+    },
+
+    /// Parallel (virtual) branch workspace
+    Workspace {
+        #[command(subcommand)]
+        command: WorkspaceCommands,
+    },
+
+    /// Remove empty branches
+    Clean {
+        /// Show what would be removed without removing
+        #[arg(long)]
+        dry_run: bool,
+    },
+
+    /// AI-assisted generation (commit messages, branch names, PR descriptions)
+    Ai {
+        #[command(subcommand)]
+        command: AiCommands,
     },
 }
 
@@ -1206,6 +1291,97 @@ enum PeerCommands {
     },
 }
 
+#[derive(Subcommand)]
+enum UndoCommands {
+    /// List recent operations
+    List {
+        /// Number of entries to show
+        #[arg(short, long, default_value = "20")]
+        count: usize,
+    },
+    /// Undo the last operation (or a specific one by ID)
+    Revert {
+        /// Operation ID to undo (defaults to most recent)
+        id: Option<u64>,
+    },
+    /// Redo a previously undone operation
+    Redo {
+        /// Operation ID to redo (defaults to most recent undone)
+        id: Option<u64>,
+    },
+}
+
+#[derive(Subcommand)]
+enum StackCommands {
+    /// List all stacked branch chains
+    List,
+    /// Push a new branch onto the current branch (create a stacked branch)
+    Push {
+        /// Name for the new stacked branch
+        name: String,
+    },
+    /// Restack all dependent branches after amending/editing commits
+    Restack,
+    /// Show the stack containing the current branch
+    Show,
+}
+
+#[derive(Subcommand)]
+enum WorkspaceCommands {
+    /// List all virtual branches in the workspace
+    List,
+    /// Create a new virtual branch
+    Create {
+        /// Branch name
+        name: String,
+    },
+    /// Apply a virtual branch to the workspace
+    Apply {
+        /// Branch name
+        name: String,
+    },
+    /// Unapply a virtual branch from the workspace
+    Unapply {
+        /// Branch name
+        name: String,
+    },
+    /// Move a file from one virtual branch to another
+    MoveFile {
+        /// File path
+        file: String,
+        /// Source branch
+        #[arg(long)]
+        from: String,
+        /// Destination branch
+        #[arg(long)]
+        to: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum AiCommands {
+    /// Generate a commit message from staged changes
+    CommitMessage {
+        /// Additional context for the AI
+        #[arg(long)]
+        context: Option<String>,
+    },
+    /// Generate a branch name from a description
+    BranchName {
+        /// Description of the work
+        description: String,
+    },
+    /// Generate a PR description from branch diff
+    PrDescription {
+        /// Head branch (defaults to current)
+        #[arg(long)]
+        head: Option<String>,
+        /// Base branch (defaults to main)
+        #[arg(long)]
+        base: Option<String>,
+    },
+}
+
 fn main() {
     // Use a thread with a larger stack to avoid stack overflow in debug builds.
     // The Commands enum + route_request match arms produce large stack frames
@@ -1286,7 +1462,7 @@ fn run() {
     // Load hierarchical config (user global -> repo-local -> env vars)
     let _config = config::LitConfig::load(core::find_repo_root().ok().as_deref());
 
-    let format = Format::resolve(cli.json, cli.human, cli.output.as_deref());
+    let format = Format::resolve(cli.json, cli.human, cli.output.as_deref(), cli.pretty);
 
     // Helper macro to run a command, render its response, and handle errors
     // Structured error output uses LitError for machine-readable codes and suggestions
@@ -2511,6 +2687,47 @@ fn run() {
             }
             AgentProfileCommands::Remove { profile_id } => {
                 run!(commands::agent_profile::execute_remove(profile_id))
+            }
+        },
+
+        // GitButler-parity features
+        Commands::Amend { message, author } => run!(commands::amend::execute(message, author)),
+        Commands::Reword { message, target } => run!(commands::reword::execute(message, target)),
+        Commands::Squash { count, message } => run!(commands::squash::execute(count, message)),
+        Commands::Uncommit { discard } => run!(commands::uncommit::execute(discard)),
+        Commands::Absorb { base, dry_run } => run!(commands::absorb::execute(base, dry_run)),
+        Commands::Clean { dry_run } => run!(commands::clean::execute(dry_run)),
+        Commands::Undo { command } => match command {
+            UndoCommands::List { count } => run!(commands::undo::execute_list(count)),
+            UndoCommands::Revert { id } => run!(commands::undo::execute_undo(id)),
+            UndoCommands::Redo { id } => run!(commands::undo::execute_redo(id)),
+        },
+        Commands::Stack { command } => match command {
+            StackCommands::List => run!(commands::stack::execute_list()),
+            StackCommands::Push { name } => run!(commands::stack::execute_push(name)),
+            StackCommands::Restack => run!(commands::stack::execute_restack()),
+            StackCommands::Show => run!(commands::stack::execute_show()),
+        },
+        Commands::Workspace { command } => match command {
+            WorkspaceCommands::List => run!(commands::workspace::execute_list()),
+            WorkspaceCommands::Create { name } => run!(commands::workspace::execute_create(name)),
+            WorkspaceCommands::Apply { name } => run!(commands::workspace::execute_apply(name)),
+            WorkspaceCommands::Unapply { name } => {
+                run!(commands::workspace::execute_unapply(name))
+            }
+            WorkspaceCommands::MoveFile { file, from, to } => {
+                run!(commands::workspace::execute_move_file(file, from, to))
+            }
+        },
+        Commands::Ai { command } => match command {
+            AiCommands::CommitMessage { context } => {
+                run!(commands::ai::execute_commit_message(context))
+            }
+            AiCommands::BranchName { description } => {
+                run!(commands::ai::execute_branch_name(description))
+            }
+            AiCommands::PrDescription { head, base } => {
+                run!(commands::ai::execute_pr_description(head, base))
             }
         },
     }

@@ -126,8 +126,15 @@ impl UcanToken {
     /// Check if this token grants a specific capability
     pub fn has_capability(&self, resource: &str, action: &str) -> bool {
         self.capabilities.iter().any(|cap| {
-            (cap.resource == "*" || cap.resource == resource || resource.starts_with(&cap.resource))
-                && (cap.action == "*" || cap.action == action)
+            let resource_match = cap.resource == "*"
+                || cap.resource == resource
+                || cap
+                    .resource
+                    .strip_suffix('*')
+                    .map(|prefix| resource.starts_with(prefix))
+                    .unwrap_or(false)
+                || resource.starts_with(&cap.resource);
+            resource_match && (cap.action == "*" || cap.action == action)
         })
     }
 
@@ -218,7 +225,7 @@ pub fn load_tokens_for(repo_root: &Path, audience_did: &str) -> Result<Vec<UcanT
     let mut tokens = Vec::new();
     for entry in fs::read_dir(&dir).map_err(|e| LitError::io(format!("IO error: {}", e)))? {
         let entry = entry.map_err(|e| LitError::io(format!("IO error: {}", e)))?;
-        if entry.path().extension().map_or(false, |e| e == "json") {
+        if entry.path().extension().is_some_and(|e| e == "json") {
             if let Ok(json) = fs::read_to_string(entry.path()) {
                 if let Ok(token) = serde_json::from_str::<UcanToken>(&json) {
                     if token.audience == audience_did && token.is_valid() {

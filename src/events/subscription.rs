@@ -150,7 +150,7 @@ pub fn list_subscriptions(repo_root: &Path) -> Result<Vec<EventSubscription>, Li
     let mut subs = Vec::new();
     for entry in fs::read_dir(&dir).map_err(|e| LitError::io(format!("IO: {}", e)))? {
         let entry = entry.map_err(|e| LitError::io(format!("IO: {}", e)))?;
-        if entry.path().extension().map_or(false, |e| e == "json") {
+        if entry.path().extension().is_some_and(|e| e == "json") {
             if let Ok(json) = fs::read_to_string(entry.path()) {
                 if let Ok(sub) = serde_json::from_str::<EventSubscription>(&json) {
                     subs.push(sub);
@@ -212,7 +212,7 @@ pub fn read_events(
     let mut events: Vec<Event> = content
         .lines()
         .filter_map(|line| serde_json::from_str::<Event>(line).ok())
-        .filter(|e| event_type.map_or(true, |et| *et == EventType::All || e.event_type == *et))
+        .filter(|e| event_type.is_none_or(|et| *et == EventType::All || e.event_type == *et))
         .collect();
 
     // Return most recent first

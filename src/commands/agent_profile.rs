@@ -185,7 +185,7 @@ impl Default for ResourceLimits {
     fn default() -> Self {
         Self {
             max_file_size: 100 * 1024 * 1024, // 100 MB
-            max_total_storage: 0,               // unlimited
+            max_total_storage: 0,             // unlimited
             max_files_per_commit: 1000,
             max_concurrent_leases: 10,
             max_branches: 5,
@@ -521,8 +521,14 @@ fn load_all_profiles(repo_root: &Path) -> Result<Vec<AgentProfile>, LitError> {
     if dir.exists() {
         for entry in fs::read_dir(&dir).map_err(|e| LitError::io(e.to_string()))? {
             let entry = entry.map_err(|e| LitError::io(e.to_string()))?;
-            if entry.path().extension().map(|e| e == "json").unwrap_or(false) {
-                let json = fs::read_to_string(entry.path()).map_err(|e| LitError::io(e.to_string()))?;
+            if entry
+                .path()
+                .extension()
+                .map(|e| e == "json")
+                .unwrap_or(false)
+            {
+                let json =
+                    fs::read_to_string(entry.path()).map_err(|e| LitError::io(e.to_string()))?;
                 if let Ok(p) = serde_json::from_str::<AgentProfile>(&json) {
                     profiles.retain(|b| b.profile_id != p.profile_id);
                     profiles.push(p);
@@ -580,12 +586,16 @@ pub fn execute_show(profile_id: String) -> Result<AgentProfileResponse, LitError
     Ok(AgentProfileResponse {
         action: "show".into(),
         profile_id: Some(profile.profile_id.clone()),
-        message: format!("{} ({}, trust={})", profile.name, profile.domain, profile.trust_level),
+        message: format!(
+            "{} ({}, trust={})",
+            profile.name, profile.domain, profile.trust_level
+        ),
         details: Some(serde_json::to_value(profile).unwrap_or_default()),
     })
 }
 
 /// Register a custom agent profile
+#[allow(clippy::too_many_arguments)]
 pub fn execute_register(
     profile_id: String,
     name: String,
@@ -679,7 +689,10 @@ pub fn execute_capabilities(domain: Option<String>) -> Result<AgentProfileRespon
     let profiles = load_all_profiles(&repo_root)?;
 
     let filtered: Vec<&AgentProfile> = if let Some(ref d) = domain {
-        profiles.iter().filter(|p| p.domain.to_string() == *d).collect()
+        profiles
+            .iter()
+            .filter(|p| p.domain.to_string() == *d)
+            .collect()
     } else {
         profiles.iter().collect()
     };

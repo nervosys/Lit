@@ -181,7 +181,7 @@ impl TrustEngine {
         let mut scores = Vec::new();
         for entry in fs::read_dir(&dir).map_err(|e| LitError::io(format!("IO error: {}", e)))? {
             let entry = entry.map_err(|e| LitError::io(format!("IO error: {}", e)))?;
-            if entry.path().extension().map_or(false, |e| e == "json") {
+            if entry.path().extension().is_some_and(|e| e == "json") {
                 if let Ok(json) = fs::read_to_string(entry.path()) {
                     if let Ok(score) = serde_json::from_str::<TrustScore>(&json) {
                         scores.push(score);

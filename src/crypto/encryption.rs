@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
 use sha2::Sha512;
 use std::collections::HashMap;
 use std::fs;
+use std::io::IsTerminal;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
@@ -579,6 +580,16 @@ pub fn prompt_for_passphrase(
         return Ok(pass);
     }
 
+    // Agent safety: never block on an interactive prompt when there is no TTY
+    // (the default for agents, pipes, and CI). Fail fast with remediation.
+    if !std::io::stdin().is_terminal() {
+        return Err(
+            "no passphrase available and no interactive terminal; set LIT_PASSPHRASE or \
+             LIT_PASSPHRASE_FILE"
+                .to_string(),
+        );
+    }
+
     // Fall back to interactive prompt
     rpassword::prompt_password(prompt_text)
         .map(Zeroizing::new)
@@ -652,6 +663,15 @@ pub fn prompt_for_passphrase_confirmation(prompt_text: &str) -> Result<Zeroizing
                 return Ok(Zeroizing::new(pass));
             }
         }
+    }
+
+    // Agent safety: never block on an interactive prompt when there is no TTY.
+    if !std::io::stdin().is_terminal() {
+        return Err(
+            "no passphrase available and no interactive terminal; set LIT_PASSPHRASE or \
+             LIT_PASSPHRASE_FILE"
+                .to_string(),
+        );
     }
 
     // Interactive prompt with confirmation
@@ -782,6 +802,19 @@ impl EncryptionManager {
 mod tests {
     use super::*;
 
+    /// Serializes tests that mutate the process-global passphrase cache.
+    ///
+    /// Several tests call [`clear_passphrase_cache`], which wipes every entry;
+    /// running them in parallel lets one test clear another's freshly-cached
+    /// entry, producing spurious failures. Holding this lock makes those tests
+    /// mutually exclusive. Poisoning is recovered from since a panic in one
+    /// test must not cascade into the others.
+    static CACHE_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn cache_test_guard() -> std::sync::MutexGuard<'static, ()> {
+        CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
     #[test]
     fn test_key_derivation() {
         let passphrase = "test-passphrase-12345";
@@ -876,6 +909,7 @@ mod tests {
 
     #[test]
     fn test_passphrase_caching() {
+        let _guard = cache_test_guard();
         let repo_path = "/tmp/test-repo";
         let passphrase = "cache-test-passphrase".to_string();
 
@@ -898,23 +932,25 @@ mod tests {
 
     #[test]
     fn test_passphrase_cache_expiration() {
+        let _guard = cache_test_guard();
         let repo_path = "/tmp/test-repo-expire";
         let passphrase = "expire-test".to_string();
 
         clear_passphrase_cache();
 
-        // Cache with short timeout
+        // Cache with a short timeout, then wait well past it and assert the
+        // entry was evicted. This test deliberately avoids asserting immediate
+        // availability — that behavior is covered by `test_passphrase_caching`,
+        // and a tight "available right now" check would race the timeout under
+        // heavy parallel CPU load. Asserting only expiration is robust: more
+        // load can only make the entry *more* expired, never less.
         cache_passphrase(
             repo_path,
             passphrase.clone(),
-            Some(Duration::from_millis(500)),
+            Some(Duration::from_millis(200)),
         );
 
-        // Immediately should be available
-        assert_eq!(&*get_cached_passphrase(repo_path).unwrap(), &passphrase);
-
-        // Wait for expiration
-        std::thread::sleep(Duration::from_millis(1000));
+        std::thread::sleep(Duration::from_millis(600));
 
         // Should be expired and removed
         assert!(get_cached_passphrase(repo_path).is_none());
@@ -922,6 +958,7 @@ mod tests {
 
     #[test]
     fn test_passphrase_cache_multiple_repos() {
+        let _guard = cache_test_guard();
         let repo1 = "/tmp/multi-cache-repo1";
         let repo2 = "/tmp/multi-cache-repo2";
         let pass1 = "password1".to_string();
@@ -942,6 +979,8 @@ mod tests {
     #[ignore] // Test is flaky due to shared key file state between tests
     fn test_encryption_manager_with_cache() {
         use std::env;
+
+        let _guard = cache_test_guard();
 
         // Clean up any existing key file from previous tests
         let key_path = shellexpand::tilde("~/.lit/encryption.key");

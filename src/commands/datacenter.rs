@@ -436,6 +436,7 @@ pub fn execute_register_node(
 }
 
 /// Configure cluster-level settings
+#[allow(clippy::too_many_arguments)]
 pub fn execute_configure(
     replication_factor: Option<u32>,
     shard_count: Option<u32>,
