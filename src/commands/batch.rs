@@ -3,6 +3,56 @@ use crate::response::{BatchOperationResult, BatchResponse};
 use serde::Deserialize;
 use std::io::{self, BufRead};
 
+/// Maximum size of a single JSONL request line (1 MiB). A larger line is
+/// rejected without being fully buffered, so a malformed or hostile stream
+/// (e.g. a very long line with no newline) cannot exhaust memory.
+const MAX_LINE_BYTES: usize = 1_048_576;
+
+/// Read a single newline-terminated record from `reader`, capping buffering at
+/// `max_bytes`. Returns `Ok(None)` at end of input, otherwise the line bytes
+/// (without the trailing newline) and a flag indicating the line exceeded
+/// `max_bytes` and was truncated (the remainder is drained from the stream).
+fn read_capped_line<R: BufRead>(
+    reader: &mut R,
+    max_bytes: usize,
+) -> io::Result<Option<(Vec<u8>, bool)>> {
+    let mut buf = Vec::new();
+    let mut oversized = false;
+    let mut saw_any = false;
+    loop {
+        let available = match reader.fill_buf() {
+            Ok(b) => b,
+            Err(ref e) if e.kind() == io::ErrorKind::Interrupted => continue,
+            Err(e) => return Err(e),
+        };
+        if available.is_empty() {
+            if !saw_any {
+                return Ok(None);
+            }
+            return Ok(Some((buf, oversized)));
+        }
+        saw_any = true;
+        let newline = available.iter().position(|&b| b == b'\n');
+        let chunk_len = newline.map_or(available.len(), |idx| idx);
+        let room = max_bytes.saturating_sub(buf.len());
+        let take = room.min(chunk_len);
+        buf.extend_from_slice(&available[..take]);
+        if chunk_len > room {
+            oversized = true;
+        }
+        match newline {
+            Some(idx) => {
+                reader.consume(idx + 1);
+                return Ok(Some((buf, oversized)));
+            }
+            None => {
+                let consumed = available.len();
+                reader.consume(consumed);
+            }
+        }
+    }
+}
+
 /// A single operation in a batch JSONL stream
 #[derive(Debug, Deserialize)]
 struct BatchOperation {
@@ -15,18 +65,25 @@ pub fn execute(atomic: bool, dry_run: bool) -> Result<BatchResponse, crate::erro
     let _repo_root = find_repo_root()?;
 
     let stdin = io::stdin();
-    let operations: Vec<BatchOperation> = stdin
-        .lock()
-        .lines()
-        .filter_map(|line| {
-            let line = line.ok()?;
-            let trimmed = line.trim();
-            if trimmed.is_empty() {
-                return None;
-            }
-            serde_json::from_str(trimmed).ok()
-        })
-        .collect();
+    let mut reader = stdin.lock();
+    let mut operations: Vec<BatchOperation> = Vec::new();
+    while let Some((raw, oversized)) = read_capped_line(&mut reader, MAX_LINE_BYTES)
+        .map_err(|e| crate::errors::LitError::io(e.to_string()))?
+    {
+        // Skip oversized lines: the reader never buffered more than
+        // MAX_LINE_BYTES, so an unbounded line cannot exhaust memory.
+        if oversized {
+            continue;
+        }
+        let line = String::from_utf8_lossy(&raw);
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if let Ok(op) = serde_json::from_str(trimmed) {
+            operations.push(op);
+        }
+    }
 
     if operations.is_empty() {
         return Err("No operations provided on stdin (expected JSONL)".into());
