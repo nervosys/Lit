@@ -21,7 +21,11 @@ impl Format {
             return Format::Human;
         }
         if json {
-            return if pretty { Format::JsonPretty } else { Format::Json };
+            return if pretty {
+                Format::JsonPretty
+            } else {
+                Format::Json
+            };
         }
         if let Some(fmt) = output {
             return match fmt {
