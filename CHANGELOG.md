@@ -5,6 +5,18 @@ All notable changes to Lit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2026-06-02
+
+### Added
+
+- **Universal content-type registry expanded to ~100 built-in types** — Lit is now a one-stop VCS for modern engineering, versioning CAD, EDA, CAM, 3D modeling, simulation, and AI/ML model files alongside source code, each with domain-appropriate diff, merge, and storage strategies
+- **New content domains** — `cam`, `simulation`, and `ml-model` join the existing software/cad/eda/manuscript/database/scientific/media/geospatial/legal/financial/config domains
+- **CAD & 3D** — Siemens NX, Siemens Solid Edge, SolidWorks, CATIA, Autodesk Inventor, Fusion 360, PTC Creo/Pro-E, Rhino 3DM, SketchUp, FreeCAD, OpenSCAD, Blender, AutoCAD DWG/DXF, Parasolid, ACIS, JT, OBJ, FBX, glTF/GLB, COLLADA, USD/USDZ, PLY, and Alembic
+- **EDA** — KiCad (PCB & schematic), Altium (schematic/PCB/project), EAGLE, OrCAD, Gerber, Excellon drill, GDSII, OASIS, IPC-2581, Touchstone, LEF/DEF, SPEF, SPICE, Verilog, and VHDL
+- **CAM** — G-code, STEP-NC, APT, and Mastercam
+- **Simulation / FEA / CFD** — Nastran (bulk & OP2), Abaqus (input & ODB), ANSYS (CDB & DB), LS-DYNA, OpenFOAM, COMSOL, Gmsh, VTK, CGNS, Exodus, Modelica, Simulink, and FMU
+- **AI/ML models** — ONNX, SafeTensors, PyTorch, TensorFlow, Keras, GGUF, TensorRT, Core ML, TFLite, NumPy, pickle, checkpoint, joblib
+
 ## [1.0.0] - 2026-04-01
 
 ### Security

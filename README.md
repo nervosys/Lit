@@ -28,7 +28,7 @@ Git was designed in 2005 for human developers using terminals. Every interface �
 | **Issues & PRs**        | None built-in               | Local-first, stored as git refs          |
 | **Federation**          | Centralized (GitHub/GitLab) | Content-addressed peer-to-peer           |
 | **Sandboxing**          | None                        | Process isolation with env/fs/net fences |
-| **Content types**       | Source code only            | CAD, EDA, manuscripts, DBs, media, etc.  |
+| **Content types**       | Source code only            | CAD, EDA, CAM, simulation, AI models, manuscripts, DBs, media, etc. |
 | **Agent types**         | N/A                         | SWE, CAD, EDA, writer, DBA, reviewer, CI |
 | **Datacenter**          | N/A                         | Sharding, replication, metrics, health   |
 | **Cryptography**        | SHA-1 / SHA-256             | SHA3-512 + BLAKE3 (quantum-resistant)    |
@@ -51,7 +51,7 @@ Git was designed in 2005 for human developers using terminals. Every interface �
 - **4 transport protocols** — HTTPS, SSH, `lit://` (custom TCP), stdio pipe
 - **Sandboxed execution** — run untrusted code in isolated environments with filesystem, environment, and network fences
 - **Intent → Commit → Converge** — agentic workflow replacing branch/PR with scoped intents, commit attachment, and trust-gated convergence
-- **Universal content types** — 30+ built-in types for CAD (STEP, STL, IGES, 3MF), EDA (KiCad, Gerber, SPICE), manuscripts (LaTeX, DOCX, Typst), databases (SQLite, Parquet, CSV), scientific data (HDF5, FITS, Jupyter), media, geospatial, legal, and financial formats — each with domain-appropriate diff, merge, and storage strategies
+- **Universal content types** — 90+ built-in types making Lit a one-stop VCS for modern engineering: CAD & 3D modeling (STEP, IGES, STL, 3MF, DWG/DXF, SolidWorks, CATIA, Inventor, Fusion 360, Creo, Rhino, Parasolid, ACIS, JT, OBJ, FBX, glTF/GLB, USD, COLLADA, PLY, Blender, Alembic), EDA (KiCad, Gerber, Excellon, Altium, EAGLE, OrCAD, Verilog/SystemVerilog, VHDL, GDSII, OASIS, IPC-2581, Touchstone, LEF/DEF, SPICE), CAM (G-code, STEP-NC, APT, Mastercam), simulation/FEA/CFD (Nastran, Abaqus, ANSYS, LS-DYNA, OpenFOAM, COMSOL, Gmsh, VTK, CGNS, Exodus, Modelica, Simulink, FMU), AI/ML models (ONNX, SafeTensors, PyTorch, TensorFlow, Keras, GGUF/GGML, TensorRT, Core ML, TFLite, NumPy, checkpoints), plus manuscripts, databases, scientific data, media, geospatial, legal, and financial formats — each with domain-appropriate diff, merge, and storage strategies
 - **Datacenter deployment** — cluster node management, consistent-hash sharding, configurable replication (sync/async/semi-sync), health monitoring, Prometheus-style metrics, connection pooling, and chunked large-object transfer
 - **Generic agent profiles** — 10 built-in profiles (SWE, CAD designer, EDA engineer, writer, DBA, reviewer, CI bot, security auditor, data scientist, orchestrator) with capabilities, trust levels, content type affinity, resource limits, and path-based access control
 - **Swarm coordination** — multi-agent registration, file leasing, and conflict-free concurrent access
@@ -251,7 +251,7 @@ Intents auto-acquire swarm leases for their scope, detect scope conflicts with o
 
 ### Content Type Registry
 
-Register, detect, and manage content types for domain-specific versioning. 30+ built-in types cover CAD, EDA, manuscripts, databases, scientific data, media, geospatial, and more — each with appropriate diff, merge, and storage strategies:
+Register, detect, and manage content types for domain-specific versioning. 90+ built-in types make Lit a one-stop VCS for modern engineering — covering CAD, 3D modeling, EDA, CAM, simulation (FEA/CFD), AI/ML models, manuscripts, databases, scientific data, media, geospatial, and more — each with appropriate diff, merge, and storage strategies:
 
 ```bash
 lit content-type list                            # List all registered content types
@@ -265,7 +265,7 @@ lit content-type register custom/my-format \     # Register custom type
     --merge-strategy schema-aware --storage-tier chunked
 ```
 
-Built-in domains: **software**, **cad** (STEP, STL, IGES, 3MF), **eda** (KiCad PCB/schematic, Gerber, SPICE), **manuscript** (LaTeX, DOCX, Typst, AsciiDoc), **database** (SQLite, CSV, Parquet, SQL migrations), **scientific** (HDF5, FITS, Jupyter), **media** (image, video, audio), **geospatial** (GeoJSON, Shapefile), **legal** (PDF), **financial** (Excel), **config** (Terraform, Kubernetes).
+Built-in domains: **software**, **cad** (STEP, IGES, STL, 3MF, DWG/DXF, SolidWorks, CATIA, Inventor, Fusion 360, Creo, Rhino, Parasolid, ACIS, JT, OBJ, FBX, glTF/GLB, USD, COLLADA, PLY, Blender, Alembic, 3DS), **eda** (KiCad PCB/schematic, Gerber, Excellon, Altium, EAGLE, OrCAD, Verilog/SystemVerilog, VHDL, GDSII, OASIS, IPC-2581, Touchstone, LEF/DEF, SPEF, SPICE), **cam** (G-code, STEP-NC, APT, Mastercam), **simulation** (Nastran, Abaqus, ANSYS, LS-DYNA, OpenFOAM, COMSOL, Gmsh, VTK, CGNS, Exodus, Modelica, Simulink, FMU), **ml-model** (ONNX, SafeTensors, PyTorch, TensorFlow, Keras, GGUF/GGML, TensorRT, Core ML, TFLite, NumPy, pickle, checkpoints, joblib), **manuscript** (LaTeX, DOCX, Typst, AsciiDoc), **database** (SQLite, CSV, Parquet, SQL migrations), **scientific** (HDF5, FITS, Jupyter), **media** (image, video, audio), **geospatial** (GeoJSON, Shapefile), **legal** (PDF), **financial** (Excel), **config** (Terraform, Kubernetes).
 
 Each content type specifies:
 - **Diff strategy** — text, binary, structural, semantic, or opaque
