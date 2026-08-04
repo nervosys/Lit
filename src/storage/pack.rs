@@ -17,6 +17,7 @@
 //! [`ObjectStore`]: crate::storage::ObjectStore
 
 use crate::core::{Object, ObjectHash};
+use crate::crypto::encryption::EncryptionManager;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use crc32fast::Hasher as Crc32Hasher;
 use flate2::read::ZlibDecoder;
@@ -50,10 +51,17 @@ pub fn packs_dir(repo_root: &Path) -> PathBuf {
     repo_root.join(".lit").join("packs")
 }
 
-/// Write a pack file from a set of objects
+/// Write a pack file from a set of objects.
+///
+/// `encryption` must be the same manager the loose objects were written
+/// through. A packed object gets the identical compress-then-encrypt treatment,
+/// so packing an encrypted repository cannot quietly put its contents on disk
+/// in the clear. When encryption is disabled the manager passes bytes through
+/// untouched and the pack is plain zlib.
 pub fn write_pack(
     objects: &[(ObjectHash, Object)],
     pack_path: &Path,
+    encryption: &EncryptionManager,
 ) -> Result<Vec<PackIndexEntry>, crate::errors::LitError> {
     let mut buf: Vec<u8> = Vec::new();
     let mut index_entries = Vec::new();
@@ -87,18 +95,21 @@ pub fn write_pack(
             .finish()
             .map_err(|e| format!("Compress finish error: {}", e))?;
 
-        // CRC32 of compressed data
+        // Same treatment the loose objects get: compress, then encrypt.
+        let stored = encryption.encrypt(&compressed)?;
+
+        // CRC32 covers what is actually on disk
         let mut crc32 = Crc32Hasher::new();
-        crc32.update(&compressed);
+        crc32.update(&stored);
         let crc_val = crc32.finalize();
 
-        // Write entry header: type(1) + uncompressed_size(8) + compressed_size(8)
+        // Write entry header: type(1) + uncompressed_size(8) + stored_size(8)
         buf.push(type_byte);
         buf.write_u64::<BigEndian>(uncompressed_size)
             .map_err(|e| format!("Write error: {}", e))?;
-        buf.write_u64::<BigEndian>(compressed.len() as u64)
+        buf.write_u64::<BigEndian>(stored.len() as u64)
             .map_err(|e| format!("Write error: {}", e))?;
-        buf.extend_from_slice(&compressed);
+        buf.extend_from_slice(&stored);
 
         index_entries.push(PackIndexEntry {
             hash: hash.clone(),
@@ -146,7 +157,11 @@ pub fn write_pack_index(
 }
 
 /// Read a single object from a pack file by offset
-pub fn read_pack_object(pack_path: &Path, offset: u64) -> Result<Object, crate::errors::LitError> {
+pub fn read_pack_object(
+    pack_path: &Path,
+    offset: u64,
+    encryption: &EncryptionManager,
+) -> Result<Object, crate::errors::LitError> {
     let pack_data = fs::read(pack_path).map_err(|e| format!("Failed to read pack: {}", e))?;
     let mut cursor = Cursor::new(&pack_data);
     cursor.set_position(offset);
@@ -170,10 +185,13 @@ pub fn read_pack_object(pack_path: &Path, offset: u64) -> Result<Object, crate::
     if end > pack_data.len() {
         return Err("Pack data truncated".into());
     }
-    let compressed = &pack_data[pos..end];
+    let stored = &pack_data[pos..end];
+
+    // Undo the write path: decrypt, then decompress.
+    let compressed = encryption.decrypt(stored)?;
 
     // Decompress
-    let mut decoder = ZlibDecoder::new(compressed);
+    let mut decoder = ZlibDecoder::new(&compressed[..]);
     let mut raw = Vec::new();
     decoder
         .read_to_end(&mut raw)

@@ -707,6 +707,43 @@ impl EncryptionManager {
         }
     }
 
+    /// Build a manager, initializing it from a non-interactive passphrase
+    /// source when encryption is enabled and one is available.
+    ///
+    /// Every command builds its object store through `ObjectStore::new`, which
+    /// returns `Self` rather than a `Result` and must not prompt — Lit is
+    /// zero-prompt by design. So the passphrase comes from `LIT_PASSPHRASE`,
+    /// `LIT_PASSPHRASE_FILE` or the cache, and nothing else.
+    ///
+    /// With encryption enabled and no source available the manager stays
+    /// uninitialized on purpose: the first encrypt or decrypt then reports
+    /// that plainly, which is a better failure than a constructor that cannot
+    /// explain itself.
+    pub fn new_auto(config: EncryptionConfig, repo_path: &Path) -> Self {
+        let mut manager = EncryptionManager::new(config);
+        if !manager.config.enabled {
+            return manager;
+        }
+
+        let repo = repo_path.to_string_lossy().to_string();
+        let Some(passphrase) = get_passphrase_non_interactive(&repo, &manager.config) else {
+            return manager;
+        };
+
+        manager.repo_path = Some(repo.clone());
+        if let Err(e) = manager.initialize(&passphrase) {
+            eprintln!("Warning: encryption is enabled but could not be unlocked: {e}");
+            return manager;
+        }
+
+        if manager.config.cache_timeout_secs > 0 {
+            let timeout = Duration::from_secs(manager.config.cache_timeout_secs);
+            cache_passphrase(&repo, (*passphrase).clone(), Some(timeout));
+        }
+
+        manager
+    }
+
     /// Initialize encryption with passphrase
     pub fn initialize(&mut self, passphrase: &str) -> Result<(), String> {
         if !self.config.enabled {

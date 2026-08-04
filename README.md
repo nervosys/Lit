@@ -33,7 +33,7 @@ Git was designed in 2005 for human developers using terminals. Every interface �
 | **Datacenter**          | N/A                         | Sharding, replication, metrics, health   |
 | **Cryptography**        | SHA-1 / SHA-256             | SHA3-512 + BLAKE3 (quantum-resistant)    |
 | **Signatures**          | GPG / SSH                   | ML-DSA-87 (NIST FIPS 204)                |
-| **Encryption**          | None built-in               | TLS 1.3 in transit (at-rest: see below)  |
+| **Encryption**          | None built-in               | AES-256-GCM at rest, TLS 1.3 in transit  |
 | **Compliance**          | None                        | FIPS 140-3, auto self-test at startup    |
 | **Interactive prompts** | Frequent                    | Never (zero-prompt design)               |
 
@@ -599,29 +599,46 @@ Sandboxes combine with airgap mode automatically. See [EXAMPLES.md § Sandboxed 
 - **Post-quantum security** — organizations preparing for quantum computing threats
 - **Git migration** — import existing Git repos, export back when needed
 
-## At-rest encryption status
+## At-rest encryption
 
-The AES-256-GCM object encryption is implemented and tested at the crypto
-layer, but it is **not yet wired into the commands**. Every command builds its
-object store with `ObjectStore::new`, which loads `.lit/encryption.toml` but
-never supplies a passphrase; the only constructor that does,
-`new_with_encryption`, has no callers. So setting `enabled = true` makes `add`
-and `commit` fail with "Encryption not initialized" rather than encrypting
-anything, with or without `LIT_PASSPHRASE`, and leaving it `false` — the
-default — stores objects unencrypted.
+Objects, the index and packs can be encrypted with AES-256-GCM. Enable it on a
+**new** repository by writing `.lit/encryption.toml` before staging anything:
 
-Treat objects at rest as unencrypted until this is connected. Transport
-security (TLS 1.3), signatures (ML-DSA-87) and the FIPS self-tests are
-unaffected.
+```toml
+enabled = true
+key_file = "~/.lit/encryption.key"
+fips_mode = false
+cache_timeout_secs = 900
+```
+
+The passphrase is read from `LIT_PASSPHRASE`, `LIT_PASSPHRASE_FILE`, or the
+cache — never by prompting, since Lit is zero-prompt by design. The key file is
+created on first use. Without a passphrase the repository stays locked and
+commands fail rather than falling back to plaintext.
+
+`gc` packs through the same cipher, so packing an encrypted repository does not
+put its contents on disk in the clear.
+
+Two limits worth knowing:
+
+- **No migration.** Turning encryption on for a repository that already has
+  commits leaves the existing plaintext index and objects unreadable — you get
+  `Unsupported encryption version`. Start encrypted, or re-import into a fresh
+  encrypted repository.
+- **A key derivation per command.** PBKDF2 runs with 600,000 iterations each
+  time a store is opened, which costs roughly 0.85s per command in a release
+  build and far more unoptimized. That is the intended cost of the iteration
+  count, not a bug, but caching the derived key per process would remove most
+  of it.
 
 ## Testing
 
-`cargo test` runs 417 tests across unit, integration, and performance suites:
+`cargo test` runs 418 tests across unit, integration, and performance suites:
 
 ```shell
 cargo test                                                       # everything
 cargo test --lib -- --test-threads=1                             # 94 unit tests
-cargo test --test command_tests -- --test-threads=1              # 246 command tests
+cargo test --test command_tests -- --test-threads=1              # 247 command tests
 cargo test --test feature_integration_test                       # 38 integration tests
 cargo test --test performance_benchmarks --release               # 9 benchmarks
 cargo test --test adversarial_test -- --test-threads=1           # 6 security tests

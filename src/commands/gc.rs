@@ -58,7 +58,15 @@ pub fn execute() -> Result<GcResponse, crate::errors::LitError> {
     let index_path = packs_dir.join(format!("{}.idx", pack_name));
 
     // Write pack and index
-    let index_entries = write_pack(&objects, &pack_path)?;
+    // Pack through the store's own encryption manager, so a packed object is
+    // protected exactly as the loose one it replaces was.
+    let encryption = store.encryption();
+    let index_entries = {
+        let encryption = encryption
+            .lock()
+            .map_err(|e| format!("Failed to acquire encryption lock: {}", e))?;
+        write_pack(&objects, &pack_path, &encryption)?
+    };
     write_pack_index(&index_entries, &index_path)?;
 
     let pack_bytes = fs::metadata(&pack_path).map(|m| m.len()).unwrap_or(0);

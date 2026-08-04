@@ -25,7 +25,10 @@ impl ObjectStore {
 
         // Load encryption configuration
         let encryption_config = EncryptionConfig::load(repo_path).unwrap_or_default();
-        let encryption = Arc::new(Mutex::new(EncryptionManager::new(encryption_config)));
+        let encryption = Arc::new(Mutex::new(EncryptionManager::new_auto(
+            encryption_config,
+            repo_path,
+        )));
 
         ObjectStore {
             objects_dir,
@@ -141,11 +144,25 @@ impl ObjectStore {
     /// Read an object that lives in a pack rather than loose on disk.
     fn read_packed(&self, hash: &ObjectHash) -> Result<Object, String> {
         let packed = crate::storage::pack::load_all(&self.packs_dir);
-        match packed.get(hash.as_str()) {
-            Some((pack_path, offset)) => crate::storage::pack::read_pack_object(pack_path, *offset)
-                .map_err(|e| format!("Failed to read {} from pack: {}", hash.short(), e)),
-            None => Err(format!("Object {} not found", hash.short())),
-        }
+        let Some((pack_path, offset)) = packed.get(hash.as_str()) else {
+            return Err(format!("Object {} not found", hash.short()));
+        };
+
+        let encryption = self
+            .encryption
+            .lock()
+            .map_err(|e| format!("Failed to acquire encryption lock: {}", e))?;
+
+        crate::storage::pack::read_pack_object(pack_path, *offset, &encryption)
+            .map_err(|e| format!("Failed to read {} from pack: {}", hash.short(), e))
+    }
+
+    /// The encryption manager this store reads and writes through.
+    ///
+    /// `gc` needs it so that packed objects get exactly the treatment the loose
+    /// ones had, rather than landing on disk in the clear.
+    pub fn encryption(&self) -> Arc<Mutex<EncryptionManager>> {
+        Arc::clone(&self.encryption)
     }
 
     /// List all objects
