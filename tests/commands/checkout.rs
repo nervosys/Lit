@@ -231,3 +231,46 @@ fn test_checkout_by_commit_hash() {
         "HEAD should be detached or contain commit hash"
     );
 }
+
+#[test]
+fn test_checkout_indexes_nested_files_by_full_path() {
+    let temp = init_test_repo();
+
+    fs::create_dir_all(temp.path().join("src").join("deep")).unwrap();
+    fs::write(temp.path().join("src").join("main.rs"), "fn main() {}\n").unwrap();
+    fs::write(temp.path().join("src").join("deep").join("n.rs"), "// n\n").unwrap();
+    create_file(temp.path(), "README.md", "# readme\n");
+
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
+    lit::commands::add::execute(vec![
+        "src/main.rs".to_string(),
+        "src/deep/n.rs".to_string(),
+        "README.md".to_string(),
+    ])
+    .unwrap();
+    lit::commands::commit::execute("nested".to_string(), None).unwrap();
+
+    lit::commands::checkout::execute("main".to_string(), false).unwrap();
+
+    // The index was previously rebuilt from the root tree's entries alone, so a
+    // subdirectory was recorded as if it were a file — "src" carrying the
+    // subtree's hash — and the blobs under it got no entry. status then called
+    // fs::read on a directory and the whole command failed.
+    let index = lit::storage::Index::load(temp.path()).unwrap();
+    let mut keys: Vec<String> = index.entries.keys().cloned().collect();
+    keys.sort();
+    assert_eq!(
+        keys,
+        vec![
+            "README.md".to_string(),
+            "src/deep/n.rs".to_string(),
+            "src/main.rs".to_string()
+        ],
+        "every blob should be indexed under its full path, and no directory should be"
+    );
+
+    assert!(
+        lit::commands::status::execute().is_ok(),
+        "status must survive a checkout in a repository with subdirectories"
+    );
+}

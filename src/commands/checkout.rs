@@ -60,30 +60,31 @@ fn checkout_commit(
         _ => return Err("Not a tree".into()),
     };
 
-    // Update working directory
-    checkout_tree(repo_root, &tree, &store, "")?;
-
-    // Update index
+    // Update the working directory and the index in one walk.
+    //
+    // These were two walks, and only this one recursed. The index was rebuilt
+    // from the root tree's entries alone, keyed by entry name, so a
+    // subdirectory was recorded as though it were a file — `src` with the
+    // subtree's hash — and the blobs beneath it got no entry at all. `status`
+    // then called `fs::read` on a directory and failed outright, so any
+    // repository with a subdirectory was broken by a checkout. Populating the
+    // index from the same recursion that writes the files keeps the two in
+    // step by construction.
     let mut index = Index::new();
-    for entry in &tree.entries {
-        let path = if entry.name.is_empty() {
-            continue;
-        } else {
-            entry.name.clone()
-        };
-
-        index.add(path, entry.hash.to_string(), entry.mode.clone());
-    }
+    checkout_tree(repo_root, &tree, &store, "", &mut index)?;
     index.save(repo_root)?;
 
     Ok(())
 }
 
+/// Write a tree to the working directory, recording each blob in `index`
+/// under its full path.
 fn checkout_tree(
     repo_root: &Path,
     tree: &Tree,
     store: &ObjectStore,
     prefix: &str,
+    index: &mut Index,
 ) -> Result<(), crate::errors::LitError> {
     for entry in &tree.entries {
         let path = if prefix.is_empty() {
@@ -109,6 +110,8 @@ fn checkout_tree(
 
                 fs::write(&full_path, &blob.content)
                     .map_err(|e| format!("Failed to write file: {}", e))?;
+
+                index.add(path, entry.hash.to_string(), entry.mode.clone());
             }
             "tree" => {
                 // Recursively checkout subtree
@@ -117,7 +120,7 @@ fn checkout_tree(
                     _ => return Err("Expected tree".into()),
                 };
 
-                checkout_tree(repo_root, &subtree, store, &path)?;
+                checkout_tree(repo_root, &subtree, store, &path, index)?;
             }
             _ => {}
         }
