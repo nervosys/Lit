@@ -310,9 +310,13 @@ fn get_secure_log_path() -> Result<std::path::PathBuf, String> {
         use std::fs::OpenOptions;
         use std::os::unix::fs::PermissionsExt;
 
+        // `create_new` rather than `create`: the only goal is to bring the file
+        // into existence so the mode can be tightened below. Should it appear
+        // between the check and the open, this fails harmlessly instead of
+        // truncating a log that is already being written.
         if !log_file.exists() {
             OpenOptions::new()
-                .create(true)
+                .create_new(true)
                 .write(true)
                 .open(&log_file)
                 .ok();

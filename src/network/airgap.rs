@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Global airgap mode flag
@@ -237,17 +237,17 @@ impl AirgapValidator {
             return Ok(TransportType::FileProtocol);
         }
 
-        // Path-based detection
-        let path_obj = Path::new(path);
-
         // Windows network share detection (\\server\share or //server/share)
         if path.starts_with(r"\\") || path.starts_with("//") {
             return Ok(TransportType::NetworkShare);
         }
 
-        // Windows drive letter detection
+        // Windows drive letter detection. The parsed path is only consulted
+        // here, so it is bound inside the block rather than above it — on any
+        // other platform there is nothing to parse it for.
         #[cfg(target_os = "windows")]
         {
+            let path_obj = std::path::Path::new(path);
             if let Some(first_component) = path_obj.components().next() {
                 use std::path::Component;
                 if let Component::Prefix(prefix) = first_component {
@@ -289,7 +289,7 @@ impl AirgapValidator {
         use std::os::windows::ffi::OsStrExt;
 
         // Extract drive letter
-        let path_obj = Path::new(path);
+        let path_obj = std::path::Path::new(path);
         let drive = if let Some(first_component) = path_obj.components().next() {
             first_component.as_os_str().to_string_lossy().to_string()
         } else {
@@ -324,10 +324,9 @@ impl AirgapValidator {
         Ok(false)
     }
 
-    #[cfg(not(target_os = "windows"))]
-    fn is_removable_drive(&self, _path: &str) -> Result<bool, String> {
-        Ok(false)
-    }
+    // There is deliberately no non-Windows `is_removable_drive`: drive letters
+    // only exist on Windows, and its sole caller sits inside a Windows-gated
+    // block. Other platforms detect removable media by mount point instead.
 
     /// Check if a Unix path is a mount point for removable media
     fn is_removable_mount(&self, path: &str) -> Result<bool, String> {
