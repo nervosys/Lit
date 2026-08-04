@@ -35,7 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Commit` and `Tag` gain an optional `timezone` field, carrying the offset of an object imported from Git. It is skipped when absent, so objects Lit created itself serialize and hash exactly as before
 - `lib.rs` now exports `identity`, `federation`, `events` and `api`, which previously existed only inside the binary — so DID identity, UCAN delegation, trust scoring, federation and event subscriptions are reachable from the published crate, not just the CLI. Purely additive; no existing path changes
 - **The CLI consumes the library instead of recompiling it** — `main.rs` declared the same modules `lib.rs` does, so every one was compiled a second time into the binary and its unit tests ran twice. It now imports from `lit::`, converting the four clap subcommand enums to their library counterparts at the call sites. This also retires the blanket `#![allow(dead_code)]` the duplication required, so dead code in the CLI is visible again
-- `cargo test` now runs **416 tests** (plus 2 ignored), up from 382 at 1.0.0 — and 414 distinct, where the same suite previously reported 508 by running 94 unit tests in both targets. Two suites that had been disabled rather than fixed are running again
+- `cargo test` now runs **416 tests** (plus 2 ignored), up from 382 at 1.0.0, and all 416 are distinct — the same suite previously reported 508 by running 94 unit tests in both targets. Two suites that had been disabled rather than fixed are running again
 
 ## [1.0.1] - 2026-06-02
 
