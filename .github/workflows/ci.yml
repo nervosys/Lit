@@ -9,6 +9,10 @@ jobs:
     name: Test on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
+      # Report every platform's result. Cancelling the others on the first
+      # failure hides platform-specific problems behind whichever job happens
+      # to fail first, turning one broken run into several rounds of fixes.
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         rust: [stable]
@@ -41,7 +45,9 @@ jobs:
         run: cargo clippy -- -D warnings
 
       - name: Run tests
-        run: cargo test -- --test-threads=1 --verbose
+        # `--verbose` belongs to cargo; everything after `--` goes to the test
+        # harness, which has no such option and exits before running anything.
+        run: cargo test --verbose -- --test-threads=1
 
       - name: Build release
         run: cargo build --release
