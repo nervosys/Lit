@@ -5,6 +5,36 @@ All notable changes to Lit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Git pack delta resolution** — `import-git` reconstructs `OFS_DELTA` and `REF_DELTA` pack entries instead of discarding them, so packed repositories import in full. Delta chains resolve to any depth, and resolution is order-independent
+- **Annotated tag import** — `import-git` converts Git annotated tags into Lit tag objects, keeping their tagger, message and own identity; previously they were stored as opaque blobs and could not be re-exported
+- **Hash-preserving Git round-trip** — a repository taken through `import-git` and back out through `export-git` now reproduces every object under its original SHA-1 — blobs, trees, commits and annotated tags alike — and the result passes `git fsck --strict`. Verified by tests that build delta-compressed and tag-carrying repositories with the Git CLI and compare object sets
+- Referential-integrity tests for both directions of Git interop, walking the converted graph from every ref and asserting that each referenced object resolves
+- Unit tests for the delta decoder, covering copy and insert instructions, the 64K zero-size encoding, and each malformed-input rejection
+
+### Fixed
+
+- **Git interop no longer writes unresolvable hashes** — `export-git` and `import-git` converted objects in filesystem order, so a tree could be written before the blobs it names. Both sides filled the gap with a fabricated hash (the first 40 characters of the Lit hash on export, a zero-padded Git hash on import), silently producing repositories whose trees and commits pointed at objects that were never stored. Both now convert the object graph in dependency order and report an incomplete graph instead of encoding one
+- **`export-git` could hang while serializing a tree** — the SHA-1 padding loop in `serialize_git_tree` never terminated for a hash shorter than 20 bytes, growing the output buffer until memory was exhausted
+- **Commits survive a Git round-trip unchanged** — `import-git` dropped the author's timezone offset and the message's trailing newline, so `export-git` rewrote every commit with `+0000` and no final newline, changing its hash. The timezone is now retained and the message is preserved byte for byte
+- **A truncated pack no longer panics** — the entry loop computed `data.len() - 20` on a pack under 20 bytes, underflowing the subtraction
+- **Encryption tests wrote to the operator's key file** — `test_rate_limiting`, `test_encryption_manager_with_cache` and `attack_brute_force_passphrase` read, wrote and finally deleted real paths under `~/.lit`. All three carried `#[ignore]`, so a plain `cargo test` was unaffected, but `cargo test -- --ignored` destroyed whatever key the machine had. Each now uses a per-test path in the temp directory
+- **A security test that had never run** — `attack_brute_force_passphrase` asserted a brute-force attack takes 10+ seconds, but the throttle refuses rather than sleeps, and its guesses were dictionary words the complexity rule rejects before the throttle is ever consulted. It now exercises both gates in order and is enabled
+- **CI never ran the test suite** — the workflow invoked `cargo test -- --test-threads=1 --verbose`, which hands `--verbose` to the libtest harness rather than to cargo. The harness has no such option, so it exited with `Unrecognized option: 'verbose'` before running a single test, and the step failed on every push. Corrected to `cargo test --verbose -- --test-threads=1`. This is why formatting drift and three cross-platform clippy errors had accumulated on `master` unnoticed
+- **Three clippy errors that only fire off Windows** — an `unused_variables` and a `dead_code` in `airgap.rs`, both from bindings and a stub that only the Windows-gated paths use, and a `suspicious_open_options` in `errors.rs` where the debug log was opened with `create(true)` and no truncate behaviour. The log now uses `create_new(true)`, which also stops a file appearing between the existence check and the open from being truncated
+- **Flaky `identity::trust` unit tests** — the module's tests shared a single on-disk scratch directory, so trust scores persisted by one test leaked into another's assertions
+- **Flaky performance benchmarks** — wall-clock budgets written for an optimized build were asserted verbatim under `cargo test`, which builds unoptimized and runs the suite in parallel, so failures tracked machine load rather than any regression. The budgets are now enforced only in release builds, where they are meaningful; an unoptimized run still executes every benchmark and prints its timing. `LIT_BENCH_SCALE` widens the budgets for slow release runners
+
+### Changed
+
+- `Commit` and `Tag` gain an optional `timezone` field, carrying the offset of an object imported from Git. It is skipped when absent, so objects Lit created itself serialize and hash exactly as before
+- `lib.rs` now exports `identity`, `federation`, `events` and `api`, which previously existed only inside the binary — so DID identity, UCAN delegation, trust scoring, federation and event subscriptions are reachable from the published crate, not just the CLI. Purely additive; no existing path changes
+- **The CLI consumes the library instead of recompiling it** — `main.rs` declared the same modules `lib.rs` does, so every one was compiled a second time into the binary and its unit tests ran twice. It now imports from `lit::`, converting the four clap subcommand enums to their library counterparts at the call sites. This also retires the blanket `#![allow(dead_code)]` the duplication required, so dead code in the CLI is visible again
+- `cargo test` now runs **414 tests** (plus 2 ignored), up from 382 at 1.0.0 — and 414 distinct, where the same suite previously reported 508 by running 94 unit tests in both targets. Two suites that had been disabled rather than fixed are running again
+
 ## [1.0.1] - 2026-06-02
 
 ### Added

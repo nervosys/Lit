@@ -1,12 +1,12 @@
 # Lit — Implementation Roadmap
 
-## Current State (v1.0.0)
+## Current State (v1.0.1)
 
-All 6 phases complete. 50 CLI commands implemented with structured JSON/human/MsgPack output.
+All 6 phases complete. 66 CLI commands implemented with structured JSON/human/MsgPack output.
 Full VCS feature parity with Git (diff, merge, push/pull/clone/fetch, stash, rebase, cherry-pick, blame, bisect, reflog).
 Agentic features: batch mode, transactions, snapshots, agent metadata, search, watch, verify.
-API server and MCP tool server for LLM agent integration. Swarm coordination with branch namespacing and file leases.
-Git interop: import-git, export-git with SHA-1/SHA3+BLAKE3 conversion.
+API server and 30 MCP tools for LLM agent integration. Swarm coordination with branch namespacing and file leases.
+Git interop: hash-preserving import-git and export-git, including delta-compressed packs and annotated tags.
 Performance: pack files, parallel I/O, LFS support, binary index format.
 
 ---

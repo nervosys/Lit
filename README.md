@@ -601,17 +601,28 @@ Sandboxes combine with airgap mode automatically. See [EXAMPLES.md § Sandboxed 
 
 ## Testing
 
-382 tests across unit, integration, and performance suites:
+`cargo test` runs 414 tests across unit, integration, and performance suites:
 
 ```shell
-cargo test --lib -- --test-threads=1                             # 68 unit tests
-cargo test --test command_tests -- --test-threads=1              # 239 command tests
+cargo test                                                       # everything
+cargo test --lib -- --test-threads=1                             # 94 unit tests
+cargo test --test command_tests -- --test-threads=1              # 243 command tests
 cargo test --test feature_integration_test                       # 38 integration tests
 cargo test --test performance_benchmarks --release               # 9 benchmarks
-cargo test --test adversarial_test -- --test-threads=1           # 5 security tests
+cargo test --test adversarial_test -- --test-threads=1           # 6 security tests
 cargo test --test concurrency_test -- --test-threads=1           # 9 concurrency tests
 cargo test --test network_integration_test -- --test-threads=1   # 14 network tests
 ```
+
+The unit tests live in the library. `--bin lit` has none of its own: the CLI
+imports from `lit::` rather than re-declaring its modules, so nothing is
+compiled or tested twice.
+
+The benchmarks assert wall-clock budgets written for an optimized build, so the
+budgets are enforced only when the suite is built with `--release`. A plain
+`cargo test` still runs them and prints each timing, but will not fail on the
+timing of an unoptimized build. Set `LIT_BENCH_SCALE=<n>` to widen the budgets
+for a release run on a slow or heavily loaded machine.
 
 ## Documentation
 

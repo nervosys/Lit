@@ -614,6 +614,29 @@ $ lit import-git https://github.com/user/repo.git
 # - .gitignore → .litignore (also reads .gitignore for compatibility)
 ```
 
+Objects are converted in dependency order — a tree's children before the tree,
+a commit's tree and parents before the commit — because a Lit tree records its
+children by Lit hash. If the source is missing an object that something else
+references, the import fails and names it rather than storing a reference that
+cannot be resolved.
+
+Packed repositories are read directly, including deltified entries. Both
+`OFS_DELTA` (base named by offset) and `REF_DELTA` (base named by SHA-1) are
+reconstructed, and delta chains resolve to any depth. The only case that still
+fails is a *thin* pack, whose bases deliberately live outside the file; run
+`git index-pack --fix-thin` on it first.
+
+Annotated tags are converted to Lit tag objects, so they keep their own hash,
+tagger and message rather than collapsing into the commit they point at.
+Lightweight tags stay what they are — a ref.
+
+Import and export are hash-preserving: a Git repository taken through
+`import-git` and then `export-git` comes back with every object under its
+original SHA-1 — blobs, trees, commits and annotated tags alike — and the
+result passes `git fsck --strict`. Two tests cover this against repositories
+built with the Git CLI, one delta-compressed and one carrying annotated tags,
+each asserting the object sets match exactly.
+
 ### Export
 
 ```bash
