@@ -45,9 +45,7 @@ impl Default for AiConfig {
 }
 
 /// Generate a commit message from the current staged diff
-pub fn execute_commit_message(
-    context: Option<String>,
-) -> Result<AiResponse, LitError> {
+pub fn execute_commit_message(context: Option<String>) -> Result<AiResponse, LitError> {
     let repo_root = crate::core::find_repo_root()?;
 
     // Get the current diff to use as context
@@ -136,8 +134,13 @@ pub fn execute_pr_description(
     let base_ref = base.unwrap_or_else(|| "main".to_string());
 
     // Get diff between branches
-    let diff_result =
-        crate::commands::diff::execute(false, false, false, Some(base_ref.clone()), Some(head_ref.clone()))?;
+    let diff_result = crate::commands::diff::execute(
+        false,
+        false,
+        false,
+        Some(base_ref.clone()),
+        Some(head_ref.clone()),
+    )?;
     let diff_text = serde_json::to_string(&diff_result).unwrap_or_default();
 
     let generated = if let Some(key) = api_key {
@@ -181,11 +184,14 @@ fn load_ai_config(repo_root: &std::path::Path) -> AiConfig {
 }
 
 fn call_ai_api(config: &AiConfig, api_key: &str, prompt: &str) -> Result<String, LitError> {
-    let endpoint = config.endpoint.as_deref().unwrap_or(match config.provider.as_str() {
-        "openai" => "https://api.openai.com/v1/chat/completions",
-        "anthropic" => "https://api.anthropic.com/v1/messages",
-        _ => "https://api.openai.com/v1/chat/completions",
-    });
+    let endpoint = config
+        .endpoint
+        .as_deref()
+        .unwrap_or(match config.provider.as_str() {
+            "openai" => "https://api.openai.com/v1/chat/completions",
+            "anthropic" => "https://api.anthropic.com/v1/messages",
+            _ => "https://api.openai.com/v1/chat/completions",
+        });
 
     let body = match config.provider.as_str() {
         "anthropic" => serde_json::json!({

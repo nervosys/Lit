@@ -215,8 +215,8 @@ pub fn list_tasks(
         if entry.path().extension().is_some_and(|e| e == "json") {
             if let Ok(json) = fs::read_to_string(entry.path()) {
                 if let Ok(task) = serde_json::from_str::<DelegatedTask>(&json) {
-                    let agent_match = agent_did
-                        .is_none_or(|did| task.delegator == did || task.delegatee == did);
+                    let agent_match =
+                        agent_did.is_none_or(|did| task.delegator == did || task.delegatee == did);
                     let status_match = status.as_ref().is_none_or(|s| task.status == *s);
                     if agent_match && status_match {
                         tasks.push(task);
@@ -248,7 +248,8 @@ mod tests {
 
     fn tmp_dir() -> PathBuf {
         let n = COUNTER.fetch_add(1, Ordering::SeqCst);
-        let dir = std::env::temp_dir().join(format!("lit_delegate_test_{}_{}", std::process::id(), n));
+        let dir =
+            std::env::temp_dir().join(format!("lit_delegate_test_{}_{}", std::process::id(), n));
         fs::create_dir_all(&dir).unwrap();
         dir
     }
