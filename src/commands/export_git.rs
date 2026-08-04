@@ -2,7 +2,7 @@ use crate::core::{find_repo_root, list_refs, read_head, Object, ObjectHash};
 use crate::response::ExportGitResponse;
 use crate::storage::ObjectStore;
 use sha1::Digest as Sha1Digest;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -29,18 +29,21 @@ pub fn execute(destination: String) -> Result<ExportGitResponse, crate::errors::
     let mut objects_exported = 0u64;
     let mut refs_exported = 0u64;
 
-    // Export all objects
+    // Export all objects.
+    //
+    // Git trees, commits and tags embed the SHA-1 of the objects they point at,
+    // so an object can only be serialized once everything it references has
+    // been written and its Lit -> Git mapping recorded. `list()` returns
+    // objects in filesystem order, which puts no such guarantee on the caller,
+    // so walk the object graph in dependency order instead.
     let all_objects = store
         .list()
         .map_err(|e| format!("Failed to list objects: {}", e))?;
 
+    let mut scheduled: HashSet<String> = HashSet::new();
     for lit_hash in &all_objects {
-        match export_object(&store, lit_hash, &dest_path, &mut hash_map) {
-            Ok(_) => objects_exported += 1,
-            Err(e) => {
-                eprintln!("Warning: skipping object {}: {}", lit_hash.short(), e);
-            }
-        }
+        objects_exported +=
+            export_subgraph(&store, lit_hash, &dest_path, &mut hash_map, &mut scheduled)?;
     }
 
     // Export refs
@@ -144,6 +147,112 @@ pub fn execute(destination: String) -> Result<ExportGitResponse, crate::errors::
     })
 }
 
+/// A step in the iterative post-order walk of the Lit object graph.
+enum Step {
+    /// Expand this object's dependencies before writing it.
+    Visit(ObjectHash),
+    /// Every dependency has been written; serialize and write this object.
+    Emit(ObjectHash),
+}
+
+/// Export `root` and everything it references, dependencies first.
+///
+/// Returns the number of objects written. Objects already exported are
+/// skipped, so this can be driven over every hash in the store without
+/// writing anything twice. The walk is iterative rather than recursive
+/// because commit chains are as deep as the repository is long.
+fn export_subgraph(
+    store: &ObjectStore,
+    root: &ObjectHash,
+    dest: &Path,
+    hash_map: &mut HashMap<String, String>,
+    scheduled: &mut HashSet<String>,
+) -> Result<u64, crate::errors::LitError> {
+    let mut exported = 0u64;
+    let mut stack = vec![Step::Visit(root.clone())];
+
+    while let Some(step) = stack.pop() {
+        match step {
+            Step::Visit(hash) => {
+                if hash_map.contains_key(hash.as_str())
+                    || !scheduled.insert(hash.as_str().to_string())
+                {
+                    continue;
+                }
+                let deps = match dependencies_of(store, &hash) {
+                    Ok(deps) => deps,
+                    Err(e) => {
+                        // An unreadable object stays unmapped. Anything
+                        // referencing it now fails loudly in the serializers
+                        // below instead of being written against a made-up
+                        // hash, which would corrupt the exported repository.
+                        eprintln!("Warning: skipping object {}: {}", hash.short(), e);
+                        continue;
+                    }
+                };
+                stack.push(Step::Emit(hash));
+                for dep in deps {
+                    stack.push(Step::Visit(dep));
+                }
+            }
+            Step::Emit(hash) => {
+                export_object(store, &hash, dest, hash_map)?;
+                exported += 1;
+            }
+        }
+    }
+
+    Ok(exported)
+}
+
+/// The objects a given object references, all of which must be exported first.
+fn dependencies_of(
+    store: &ObjectStore,
+    hash: &ObjectHash,
+) -> Result<Vec<ObjectHash>, crate::errors::LitError> {
+    Ok(match store.read(hash)? {
+        Object::Blob(_) => Vec::new(),
+        Object::Tree(tree) => tree.entries.iter().map(|e| e.hash.clone()).collect(),
+        Object::Commit(commit) => std::iter::once(commit.tree.clone())
+            .chain(commit.parents.iter().cloned())
+            .collect(),
+        Object::Tag(tag) => vec![tag.target.clone()],
+    })
+}
+
+/// Look up the Git hash that a referenced Lit object was exported as.
+///
+/// A miss means the object was never written. Substituting a placeholder here
+/// would produce a Git repository whose trees and commits point at objects
+/// that do not exist, so an incomplete graph is reported rather than encoded.
+fn lookup_git_hash(
+    hash_map: &HashMap<String, String>,
+    lit_hash: &ObjectHash,
+    context: &str,
+) -> Result<String, crate::errors::LitError> {
+    hash_map.get(lit_hash.as_str()).cloned().ok_or_else(|| {
+        crate::errors::LitError::general(format!(
+            "Cannot export {}: referenced object {} is missing from this repository",
+            context,
+            lit_hash.short()
+        ))
+    })
+}
+
+/// Decode a 40-character Git SHA-1 hex string into its 20 raw bytes.
+fn decode_sha1(git_hex: &str) -> Result<Vec<u8>, crate::errors::LitError> {
+    let bytes = hex::decode(git_hex).map_err(|e| format!("Invalid Git hash hex: {}", e))?;
+    if bytes.len() != 20 {
+        return Err(format!(
+            "Expected a 20-byte Git SHA-1, got {} bytes from '{}'",
+            bytes.len(),
+            git_hex
+        )
+        .into());
+    }
+    Ok(bytes)
+}
+
 /// Export a single Lit object to Git format
 fn export_object(
     store: &ObjectStore,
@@ -212,19 +321,13 @@ fn serialize_git_tree(
         buf.extend_from_slice(entry.name.as_bytes());
         buf.push(0);
 
-        // Convert lit hash to git hash, take first 40 chars (SHA-1 hex), decode to 20 bytes
-        let git_hex = if let Some(gh) = hash_map.get(entry.hash.as_str()) {
-            gh.clone()
-        } else {
-            // Use first 40 chars of lit hash as placeholder
-            entry.hash.as_str()[..40.min(entry.hash.len())].to_string()
-        };
-        let sha1_bytes = hex::decode(&git_hex).map_err(|e| format!("Invalid hash hex: {}", e))?;
-        buf.extend_from_slice(&sha1_bytes[..20.min(sha1_bytes.len())]);
-        // Pad if SHA-1 hash is shorter than 20 bytes
-        while sha1_bytes.len() < 20 && buf.len() < (buf.len() + 20 - sha1_bytes.len()) {
-            buf.push(0);
-        }
+        // Git stores the referenced object's SHA-1 as 20 raw bytes.
+        let git_hex = lookup_git_hash(
+            hash_map,
+            &entry.hash,
+            &format!("tree entry '{}'", entry.name),
+        )?;
+        buf.extend_from_slice(&decode_sha1(&git_hex)?);
     }
     Ok(buf)
 }
@@ -237,29 +340,25 @@ fn serialize_git_commit(
     let mut lines = Vec::new();
 
     // tree
-    let tree_hash = hash_map
-        .get(commit.tree.as_str())
-        .cloned()
-        .unwrap_or_else(|| commit.tree.as_str()[..40.min(commit.tree.len())].to_string());
+    let tree_hash = lookup_git_hash(hash_map, &commit.tree, "commit tree")?;
     lines.push(format!("tree {}", tree_hash));
 
     // parents
     for parent in &commit.parents {
-        let parent_hash = hash_map
-            .get(parent.as_str())
-            .cloned()
-            .unwrap_or_else(|| parent.as_str()[..40.min(parent.len())].to_string());
+        let parent_hash = lookup_git_hash(hash_map, parent, "commit parent")?;
         lines.push(format!("parent {}", parent_hash));
     }
 
-    // author and committer
+    // author and committer. A commit imported from Git carries the offset it
+    // was written with; Lit's own commits are UTC.
+    let timezone = commit.timezone.as_deref().unwrap_or("+0000");
     lines.push(format!(
-        "author {} {} +0000",
-        commit.author, commit.timestamp
+        "author {} {} {}",
+        commit.author, commit.timestamp, timezone
     ));
     lines.push(format!(
-        "committer {} {} +0000",
-        commit.committer, commit.timestamp
+        "committer {} {} {}",
+        commit.committer, commit.timestamp, timezone
     ));
 
     // Lit metadata as Git notes (appended to message)
@@ -279,16 +378,20 @@ fn serialize_git_tag(
     tag: &crate::core::Tag,
     hash_map: &HashMap<String, String>,
 ) -> Result<Vec<u8>, crate::errors::LitError> {
-    let target_hash = hash_map
-        .get(tag.target.as_str())
-        .cloned()
-        .unwrap_or_else(|| tag.target.as_str()[..40.min(tag.target.len())].to_string());
+    let target_hash = lookup_git_hash(hash_map, &tag.target, "tag target")?;
+
+    // As for commits, a tag imported from Git carries the offset it was
+    // written with; Lit's own tags are UTC.
+    let timezone = tag.timezone.as_deref().unwrap_or("+0000");
 
     let mut lines = Vec::new();
     lines.push(format!("object {}", target_hash));
     lines.push(format!("type {}", tag.target_type));
     lines.push(format!("tag {}", tag.tag_name));
-    lines.push(format!("tagger {} {} +0000", tag.tagger, tag.timestamp));
+    lines.push(format!(
+        "tagger {} {} {}",
+        tag.tagger, tag.timestamp, timezone
+    ));
     lines.push(String::new());
     lines.push(tag.message.clone());
 

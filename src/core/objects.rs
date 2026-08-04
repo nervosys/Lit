@@ -168,6 +168,12 @@ pub struct Commit {
     /// Optional metadata (agent annotations, tool context, etc.)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<serde_json::Value>,
+    /// Original Git timezone offset (e.g. `-0700`) for a commit imported from
+    /// Git, so re-exporting it reproduces the same Git hash. Commits Lit
+    /// creates itself record UTC and leave this unset — and because the field
+    /// is skipped when absent, their serialization is unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timezone: Option<String>,
 }
 
 impl Commit {
@@ -187,6 +193,7 @@ impl Commit {
             message,
             pq_signature: None, // Can be added after creation
             metadata: None,
+            timezone: None, // Lit's own commits are UTC
         }
     }
 
@@ -239,6 +246,10 @@ pub struct Tag {
     /// Optional metadata (agent annotations, tool context, etc.)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<serde_json::Value>,
+    /// Original Git timezone offset for a tag imported from Git, so that
+    /// re-exporting it reproduces the same Git hash. See `Commit::timezone`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timezone: Option<String>,
 }
 
 impl Tag {
@@ -258,6 +269,7 @@ impl Tag {
             message,
             pq_signature: None,
             metadata: None,
+            timezone: None, // Lit's own tags are UTC
         }
     }
 
