@@ -10,54 +10,105 @@ mod adversarial_tests {
     use lit::crypto::encryption::{EncryptionEngine, EncryptionKey};
     use lit::errors::LitError;
 
-    /// ATTACK 1: Brute-force with rate limiting
+    /// ATTACK 1: Brute-force against the two gates that guard `load`.
+    ///
+    /// There are two, and they fire in order. A guess that fails the complexity
+    /// rule is thrown out before any key derivation happens, so low-effort
+    /// dictionary words cost the attacker nothing but buy them nothing either.
+    /// A guess that clears complexity is derived and checked once — and every
+    /// rapid guess after it is refused by the throttle without evaluation.
+    ///
+    /// The defense is refusal, not delay: the throttle returns an error telling
+    /// the caller how long to wait rather than parking a thread. An earlier
+    /// version of this test timed the attack and demanded it take 10+ seconds,
+    /// which a non-blocking throttle never does, and its guesses were all
+    /// dictionary words that never got past the complexity gate. It was
+    /// disabled rather than corrected, so it had never once run.
     #[test]
-    #[ignore] // Takes ~30 seconds due to rate limiting delays
     fn attack_brute_force_passphrase() {
         println!("\n╔═══════════════════════════════════════════════════════════╗");
         println!("║  ATTACK SIMULATION 1: Brute-Force with Rate Limiting    ║");
         println!("╚═══════════════════════════════════════════════════════════╝\n");
 
-        let key_path = shellexpand::tilde("~/.lit/adversarial_brute.key");
-        fs::remove_file(key_path.as_ref()).ok();
+        // A per-run path: the throttle keys its counter off the key-file path,
+        // and a fixed name under the operator's ~/.lit would both collide
+        // across runs and litter a real home directory.
+        let key_path =
+            std::env::temp_dir().join(format!("lit_adversarial_brute_{}.key", std::process::id()));
+        fs::remove_file(&key_path).ok();
 
         let correct = "SecureP@ssw0rd123456";
         let salt = EncryptionKey::generate_salt();
         let key = EncryptionKey::from_passphrase(correct, &salt).unwrap();
-        key.save(key_path.as_ref(), correct).unwrap();
+        key.save(&key_path.to_string_lossy(), correct).unwrap();
 
         println!("[+] Target: Key file created with strong passphrase");
 
-        // Attacker tries common passwords
-        let attacks = [
-            "passwordpassword", // Common
-            "admin12345678901", // Admin
-            "qwerty1234567890", // Keyboard
-        ];
-
-        println!("\n[!] ATTACKER: Launching brute-force attack...\n");
-        let start = Instant::now();
-
-        for (i, pwd) in attacks.iter().enumerate() {
+        // Gate 1: plain dictionary words never reach the cryptography.
+        println!("\n[!] ATTACKER: Trying common passwords...\n");
+        for pwd in ["passwordpassword", "admin12345678901", "qwerty1234567890"] {
             let t = Instant::now();
-            match EncryptionKey::load(Path::new(key_path.as_ref()), pwd) {
+            let err = match EncryptionKey::load(Path::new(&key_path), pwd) {
                 Ok(_) => panic!("⚠️  BREACH: Weak password accepted!"),
-                Err(_) => {
-                    let delay = t.elapsed();
-                    println!("    Attempt {}: '{}' → BLOCKED ({:?})", i + 1, pwd, delay);
-                    if delay.as_secs() >= 2 {
-                        println!("                     ↳ Rate limiting active!");
-                    }
-                }
-            }
+                Err(e) => e,
+            };
+            println!("    '{}' → REJECTED ({:?}): {}", pwd, t.elapsed(), err);
+            assert!(
+                !err.contains("wait"),
+                "a complexity failure should be reported as such, not as throttling"
+            );
         }
 
-        let total = start.elapsed();
-        println!("\n[✓] DEFENSE: Brute-force mitigated in {:?}", total);
-        println!("    Expected delay: ~30s (exponential backoff working)");
+        // Gate 2: credible guesses are evaluated, then throttled.
+        let credible = [
+            "Passw0rd!Passw0rd!",
+            "Adm1n@1234567890!",
+            "Qwerty!1234567890",
+        ];
 
-        assert!(total.as_secs() >= 10, "Rate limiting should delay attacks");
-        fs::remove_file(key_path.as_ref()).ok();
+        println!("\n[!] ATTACKER: Switching to complexity-compliant guesses...\n");
+        let start = Instant::now();
+        let mut refused_by_throttle = 0;
+
+        for (i, pwd) in credible.iter().enumerate() {
+            let t = Instant::now();
+            let err = match EncryptionKey::load(Path::new(&key_path), pwd) {
+                Ok(_) => panic!("⚠️  BREACH: Wrong passphrase accepted!"),
+                Err(e) => e,
+            };
+            let throttled = err.contains("wait");
+            if throttled {
+                refused_by_throttle += 1;
+            }
+            println!(
+                "    Attempt {}: '{}' → BLOCKED ({:?}){}",
+                i + 1,
+                pwd,
+                t.elapsed(),
+                if throttled {
+                    " ↳ refused by the throttle, never evaluated"
+                } else {
+                    " ↳ evaluated and rejected"
+                }
+            );
+        }
+
+        println!(
+            "\n[✓] DEFENSE: {} of {} credible guesses refused outright, in {:?}",
+            refused_by_throttle,
+            credible.len(),
+            start.elapsed()
+        );
+
+        // The first credible guess is evaluated and rejected on its merits;
+        // every one after it lands inside the backoff window and is refused.
+        assert_eq!(
+            refused_by_throttle,
+            credible.len() - 1,
+            "every guess after the first should be refused by the throttle"
+        );
+
+        fs::remove_file(&key_path).ok();
     }
 
     /// ATTACK 2: Nonce reuse detection

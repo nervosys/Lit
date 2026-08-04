@@ -815,6 +815,27 @@ mod tests {
         CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner())
     }
 
+    /// A key-file path belonging to a single test.
+    ///
+    /// Tests that exercise `EncryptionKey::save`/`load` write a real file, and
+    /// the rate-limiter keys its failed-attempt tracker off that path. Pointing
+    /// them at `~/.lit/encryption.key` therefore made them collide with one
+    /// another — and, since they delete the file to start clean, destroyed the
+    /// operator's real key on any run that included them. A per-test path in
+    /// the temp directory isolates the file and the tracker together.
+    fn test_key_path(label: &str) -> std::path::PathBuf {
+        static COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+        let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let path = std::env::temp_dir().join(format!(
+            "lit_enc_test_{}_{}_{}.key",
+            std::process::id(),
+            label,
+            n
+        ));
+        let _ = fs::remove_file(&path);
+        path
+    }
+
     #[test]
     fn test_key_derivation() {
         let passphrase = "test-passphrase-12345";
@@ -976,15 +997,12 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // Test is flaky due to shared key file state between tests
     fn test_encryption_manager_with_cache() {
         use std::env;
 
         let _guard = cache_test_guard();
 
-        // Clean up any existing key file from previous tests
-        let key_path = shellexpand::tilde("~/.lit/encryption.key");
-        fs::remove_file(key_path.as_ref()).ok();
+        let key_file = test_key_path("manager_cache");
 
         let temp_dir = env::temp_dir();
         let repo_path = temp_dir.join("test-cache-manager");
@@ -994,6 +1012,7 @@ mod tests {
 
         let config = EncryptionConfig {
             enabled: true,
+            key_file: key_file.to_string_lossy().into_owned(),
             cache_timeout_secs: 300, // 5 minutes
             ..Default::default()
         };
@@ -1015,82 +1034,71 @@ mod tests {
 
         // Clear cache for cleanup
         clear_passphrase_cache();
+        let _ = fs::remove_file(&key_file);
     }
 
+    /// Exercises the brute-force throttle on `EncryptionKey::load`.
+    ///
+    /// Ignored for runtime, not correctness: each attempt that gets as far as
+    /// verification runs PBKDF2 at 600k iterations, which costs seconds in an
+    /// unoptimized build. Run it with `cargo test -- --ignored`.
     #[test]
-    #[ignore] // This test takes ~10 seconds due to rate limiting delays
+    #[ignore]
     fn test_rate_limiting() {
-        // Clean up any existing key file and failed attempts
-        let key_path = shellexpand::tilde("~/.lit/encryption.key");
-        fs::remove_file(key_path.as_ref()).ok();
+        let key_file = test_key_path("rate_limiting");
+        let key_file_str = key_file.to_string_lossy().into_owned();
 
-        // Create a key with a known passphrase (NOT starting with "test-" so rate limiting applies)
+        // A passphrase that does NOT start with "test-", so the test-only
+        // bypass in `load` leaves the rate-limit check in play.
         let passphrase = "correct-passphrase-1234567890";
         let salt = EncryptionKey::generate_salt();
         let key = EncryptionKey::from_passphrase(passphrase, &salt).unwrap();
-        key.save("~/.lit/encryption.key", passphrase).unwrap();
+        key.save(&key_file_str, passphrase).unwrap();
 
-        // First failed attempt
-        let result1 = EncryptionKey::load(
-            Path::new(shellexpand::tilde("~/.lit/encryption.key").as_ref()),
-            "wrong-password-111111111111",
-        );
-        assert!(result1.is_err());
+        // A wrong passphrase is rejected on its merits, and counted.
+        assert!(EncryptionKey::load(&key_file, "wrong-password-111111111111").is_err());
 
-        // Second failed attempt immediately after should trigger rate limit (2 seconds delay)
+        // The next attempt falls inside the backoff window, so the throttle
+        // turns it away before any verification happens. The throttle refuses
+        // rather than sleeping, so the caller is told how long to wait instead
+        // of having a thread parked on its behalf.
+        // `unwrap_err` is avoided throughout: it would require `EncryptionKey`
+        // to be `Debug`, and that type holds live key material.
         let start = std::time::Instant::now();
-        let result2 = EncryptionKey::load(
-            Path::new(shellexpand::tilde("~/.lit/encryption.key").as_ref()),
-            "wrong-password-222222222222",
-        );
-        assert!(result2.is_err());
-        let elapsed2 = start.elapsed().as_secs();
+        let throttled = EncryptionKey::load(&key_file, "wrong-password-222222222222")
+            .err()
+            .expect("an attempt inside the backoff window must be refused");
         assert!(
-            elapsed2 >= 2,
-            "Expected at least 2 second rate limit delay, got {} seconds",
-            elapsed2
+            throttled.contains("wait"),
+            "expected a rate-limit refusal, got: {}",
+            throttled
         );
-
-        // Wait for backoff period to expire
-        std::thread::sleep(std::time::Duration::from_secs(3));
-
-        // Third failed attempt should trigger 4 second delay (2^2 = 4)
-        let start = std::time::Instant::now();
-        let result3 = EncryptionKey::load(
-            Path::new(shellexpand::tilde("~/.lit/encryption.key").as_ref()),
-            "wrong-password-333333333333",
-        );
-        assert!(result3.is_err());
-        let elapsed3 = start.elapsed().as_secs();
         assert!(
-            elapsed3 >= 4,
-            "Expected at least 4 second rate limit delay, got {} seconds",
-            elapsed3
+            start.elapsed() < Duration::from_secs(1),
+            "the throttle should refuse immediately rather than block the caller"
         );
 
-        // Correct passphrase should work and reset counter
-        let result_correct = EncryptionKey::load(
-            Path::new(shellexpand::tilde("~/.lit/encryption.key").as_ref()),
-            passphrase,
-        );
-        assert!(result_correct.is_ok());
-
-        // After successful login, next failed attempt should only have minimal delay (counter reset)
-        let start = std::time::Instant::now();
-        let result_after_reset = EncryptionKey::load(
-            Path::new(shellexpand::tilde("~/.lit/encryption.key").as_ref()),
-            "wrong-again-444444444444",
-        );
-        assert!(result_after_reset.is_err());
-        let elapsed_after_reset = start.elapsed().as_secs();
-        // Should not have the 2 second rate limit anymore (counter was reset)
+        // Once the 2^1-second window passes, attempts are evaluated again — the
+        // failure that comes back is about the passphrase, not the throttle.
+        std::thread::sleep(Duration::from_millis(2_100));
+        let correct = EncryptionKey::load(&key_file, passphrase);
         assert!(
-            elapsed_after_reset < 2,
-            "Expected <2 seconds after reset, got {} seconds",
-            elapsed_after_reset
+            correct.is_ok(),
+            "the correct passphrase should be accepted once the window passes: {:?}",
+            correct.as_ref().err()
         );
 
-        // Cleanup
-        fs::remove_file(shellexpand::tilde("~/.lit/encryption.key").as_ref()).ok();
+        // Success clears the counter, so the next wrong attempt is judged on
+        // its merits rather than being thrown out by the throttle.
+        let after_reset = EncryptionKey::load(&key_file, "wrong-again-444444444444")
+            .err()
+            .expect("a wrong passphrase must still fail");
+        assert!(
+            !after_reset.contains("wait"),
+            "a successful load should reset the counter, got: {}",
+            after_reset
+        );
+
+        let _ = fs::remove_file(&key_file);
     }
 }
