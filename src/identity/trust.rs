@@ -216,9 +216,19 @@ impl TrustEngine {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+    use std::sync::atomic::{AtomicU32, Ordering};
 
+    static COUNTER: AtomicU32 = AtomicU32::new(0);
+
+    /// Per-test scratch directory.
+    ///
+    /// Tests in this module run concurrently in one process and `TrustEngine`
+    /// persists scores to disk, so each needs its own root — otherwise a score
+    /// saved by one test is read back by another as its starting balance.
     fn tmp_dir() -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("lit_trust_test_{}", std::process::id()));
+        let n = COUNTER.fetch_add(1, Ordering::SeqCst);
+        let dir = std::env::temp_dir().join(format!("lit_trust_test_{}_{}", std::process::id(), n));
+        let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir
     }

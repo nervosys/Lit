@@ -48,6 +48,42 @@ mod cwd_guard {
     }
 }
 
+/// Check an elapsed duration against the budget written for this benchmark.
+///
+/// The budgets describe an optimized build, which is how the module docs above
+/// say to run this suite. A plain `cargo test` builds unoptimized, where the
+/// same work runs an order of magnitude slower — and by a factor that varies
+/// per benchmark, since the hash-bound ones lose far more to a debug build than
+/// the I/O-bound ones do. Enforcing a budget there measures the machine, not
+/// the code, so an unoptimized run reports its timing without failing on it.
+///
+/// `LIT_BENCH_SCALE=<n>` multiplies the budget for slow or loaded machines that
+/// do run the suite in release.
+fn assert_within(elapsed: std::time::Duration, release_ms: u64, what: &str) {
+    if cfg!(debug_assertions) {
+        println!(
+            "  (unoptimized build: {} took {:?}, release budget {}ms — not enforced)",
+            what, elapsed, release_ms
+        );
+        return;
+    }
+
+    let scale: u64 = std::env::var("LIT_BENCH_SCALE")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .filter(|v| *v > 0)
+        .unwrap_or(1);
+    let budget = release_ms * scale;
+
+    assert!(
+        (elapsed.as_millis() as u64) < budget,
+        "{} took {:?}, over its {}ms budget (set LIT_BENCH_SCALE to widen)",
+        what,
+        elapsed,
+        budget,
+    );
+}
+
 // Helper to initialize a test repository
 fn init_test_repo() -> TempDir {
     let temp = TempDir::new().unwrap();
@@ -86,14 +122,7 @@ fn bench_large_file_add() {
     let duration = start.elapsed();
 
     println!("✓ Add {}MB file: {:?}", size_mb, duration);
-    let threshold = if cfg!(debug_assertions) { 30 } else { 5 };
-    assert!(
-        duration.as_secs() < threshold,
-        "Should add {}MB file in under {} seconds (took {:?})",
-        size_mb,
-        threshold,
-        duration,
-    );
+    assert_within(duration, 5_000, &format!("Adding a {}MB file", size_mb));
 }
 
 #[test]
@@ -117,10 +146,10 @@ fn bench_many_small_files() {
     let duration = start.elapsed();
 
     println!("✓ Add {} small files: {:?}", num_files, duration);
-    assert!(
-        duration.as_secs() < 3,
-        "Should add {} files in under 3 seconds",
-        num_files
+    assert_within(
+        duration,
+        3_000,
+        &format!("Adding {} small files", num_files),
     );
 }
 
@@ -143,10 +172,10 @@ fn bench_many_commits() {
         "✓ {} commits: {:?} (avg: {:.2}ms/commit)",
         num_commits, duration, avg_time
     );
-    assert!(
-        duration.as_secs() < 30,
-        "Should create {} commits in under 30 seconds",
-        num_commits
+    assert_within(
+        duration,
+        30_000,
+        &format!("Creating {} commits", num_commits),
     );
 
     let temp_path = temp.path().to_path_buf();
@@ -158,10 +187,10 @@ fn bench_many_commits() {
     let log_duration = log_start.elapsed();
 
     println!("✓ Log {} commits: {:?}", num_commits, log_duration);
-    assert!(
-        log_duration.as_secs() < 2,
-        "Should log {} commits in under 2 seconds",
-        num_commits
+    assert_within(
+        log_duration,
+        2_000,
+        &format!("Logging {} commits", num_commits),
     );
 }
 
@@ -183,11 +212,7 @@ fn bench_commit_large_file() {
     let duration = start.elapsed();
 
     println!("✓ Commit {}MB file: {:?}", size_mb, duration);
-    assert!(
-        duration.as_secs() < 3,
-        "Should commit {}MB file in under 3 seconds",
-        size_mb
-    );
+    assert_within(duration, 3_000, &format!("Committing a {}MB file", size_mb));
 }
 
 #[test]
@@ -221,9 +246,10 @@ fn bench_index_operations() {
         num_entries, load_duration
     );
     assert_eq!(loaded_index.entries.len(), num_entries);
-    assert!(
-        load_duration.as_millis() < 100,
-        "Should load index in under 100ms"
+    assert_within(
+        load_duration,
+        100,
+        &format!("Loading an index of {} entries", num_entries),
     );
 }
 
@@ -254,9 +280,10 @@ fn bench_branch_operations() {
     let list_duration = list_start.elapsed();
 
     println!("✓ List {} branches: {:?}", num_branches, list_duration);
-    assert!(
-        list_duration.as_millis() < 100,
-        "Should list branches in under 100ms"
+    assert_within(
+        list_duration,
+        100,
+        &format!("Listing {} branches", num_branches),
     );
 }
 
@@ -285,9 +312,10 @@ fn bench_status_with_many_files() {
         "✓ Status with {} untracked files: {:?}",
         num_files, duration
     );
-    assert!(
-        duration.as_secs() < 2,
-        "Should run status in under 2 seconds"
+    assert_within(
+        duration,
+        2_000,
+        &format!("Status with {} untracked files", num_files),
     );
 }
 
@@ -316,7 +344,7 @@ fn bench_checkout_performance() {
     let duration = start.elapsed();
 
     println!("✓ Checkout branch with 20 files: {:?}", duration);
-    assert!(duration.as_millis() < 500, "Should checkout in under 500ms");
+    assert_within(duration, 500, "Checking out a branch with 20 files");
 }
 
 #[test]
@@ -348,8 +376,9 @@ fn bench_object_store_performance() {
     let read_duration = read_start.elapsed();
 
     println!("✓ Read {} objects: {:?}", num_objects, read_duration);
-    assert!(
-        read_duration.as_millis() < 500,
-        "Should read objects quickly"
+    assert_within(
+        read_duration,
+        500,
+        &format!("Reading {} objects", num_objects),
     );
 }
