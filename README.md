@@ -33,7 +33,7 @@ Git was designed in 2005 for human developers using terminals. Every interface �
 | **Datacenter**          | N/A                         | Sharding, replication, metrics, health   |
 | **Cryptography**        | SHA-1 / SHA-256             | SHA3-512 + BLAKE3 (quantum-resistant)    |
 | **Signatures**          | GPG / SSH                   | ML-DSA-87 (NIST FIPS 204)                |
-| **Encryption**          | None built-in               | AES-256-GCM at rest, TLS 1.3 in transit  |
+| **Encryption**          | None built-in               | TLS 1.3 in transit (at-rest: see below)  |
 | **Compliance**          | None                        | FIPS 140-3, auto self-test at startup    |
 | **Interactive prompts** | Frequent                    | Never (zero-prompt design)               |
 
@@ -599,14 +599,29 @@ Sandboxes combine with airgap mode automatically. See [EXAMPLES.md § Sandboxed 
 - **Post-quantum security** — organizations preparing for quantum computing threats
 - **Git migration** — import existing Git repos, export back when needed
 
+## At-rest encryption status
+
+The AES-256-GCM object encryption is implemented and tested at the crypto
+layer, but it is **not yet wired into the commands**. Every command builds its
+object store with `ObjectStore::new`, which loads `.lit/encryption.toml` but
+never supplies a passphrase; the only constructor that does,
+`new_with_encryption`, has no callers. So setting `enabled = true` makes `add`
+and `commit` fail with "Encryption not initialized" rather than encrypting
+anything, with or without `LIT_PASSPHRASE`, and leaving it `false` — the
+default — stores objects unencrypted.
+
+Treat objects at rest as unencrypted until this is connected. Transport
+security (TLS 1.3), signatures (ML-DSA-87) and the FIPS self-tests are
+unaffected.
+
 ## Testing
 
-`cargo test` runs 416 tests across unit, integration, and performance suites:
+`cargo test` runs 417 tests across unit, integration, and performance suites:
 
 ```shell
 cargo test                                                       # everything
 cargo test --lib -- --test-threads=1                             # 94 unit tests
-cargo test --test command_tests -- --test-threads=1              # 245 command tests
+cargo test --test command_tests -- --test-threads=1              # 246 command tests
 cargo test --test feature_integration_test                       # 38 integration tests
 cargo test --test performance_benchmarks --release               # 9 benchmarks
 cargo test --test adversarial_test -- --test-threads=1           # 6 security tests
