@@ -146,3 +146,40 @@ fn test_show_short_hash() {
     let result = lit::commands::show::execute(commit_hash);
     assert!(result.is_ok(), "Show with full hash should succeed");
 }
+
+#[test]
+fn test_show_resolves_head_branch_and_tag() {
+    let temp = init_test_repo();
+    create_file(temp.path(), "f.txt", "hi\n");
+
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
+    lit::commands::add::execute(vec!["f.txt".to_string()]).unwrap();
+    lit::commands::commit::execute("c1".to_string(), None).unwrap();
+
+    // `HEAD` previously resolved to itself — it matched no branch or tag, and
+    // the fallback treated the literal string as a hash — so `lit show HEAD`
+    // always reported the object as missing.
+    assert!(
+        lit::commands::show::execute("HEAD".to_string()).is_ok(),
+        "show should resolve HEAD"
+    );
+    assert!(
+        lit::commands::show::execute("main".to_string()).is_ok(),
+        "show should resolve a branch name"
+    );
+
+    // A literal hash must keep working; it reaches the object through the same
+    // fallback that a name misses on.
+    let head = lit::core::read_ref(temp.path(), "heads/main").unwrap();
+    assert!(
+        lit::commands::show::execute(head).is_ok(),
+        "show should resolve a literal hash"
+    );
+
+    // And all of it must still hold once gc has packed the objects away.
+    lit::commands::gc::execute().unwrap();
+    assert!(
+        lit::commands::show::execute("HEAD".to_string()).is_ok(),
+        "show should resolve HEAD after the objects are packed"
+    );
+}
