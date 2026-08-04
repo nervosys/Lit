@@ -26,6 +26,7 @@
 //! ```
 
 /// VCS command implementations (init, add, commit, status, diff, merge, etc.)
+pub mod api;
 pub mod commands;
 /// Hierarchical configuration (repo-local → user global → env vars)
 pub mod config;
@@ -35,8 +36,11 @@ pub mod core;
 pub mod crypto;
 /// Typed error system with machine-readable error codes and remediation hints
 pub mod errors;
+pub mod events;
+pub mod federation;
 /// Output formatting (JSON, human-readable, MessagePack)
 pub mod formatter;
+pub mod identity;
 /// Network transport layer: HTTPS, SSH, lit:// protocol, air-gap enforcement
 pub mod network;
 /// Machine-readable ontology and JSON Schema generation for agent discovery
