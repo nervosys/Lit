@@ -1,18 +1,11 @@
-#![allow(dead_code)]
-mod api;
-mod commands;
-mod config;
-mod core;
-mod crypto;
-mod errors;
-mod events;
-mod federation;
-mod formatter;
-mod identity;
-mod network;
-mod ontology;
-mod response;
-mod storage;
+// The CLI is a consumer of the library, not a second copy of it. Declaring
+// these as modules here would compile every one of them a second time into
+// this binary — and run their unit tests twice — so they are imported from
+// `lit` instead.
+use lit::{
+    commands, config, core, crypto, errors, events, federation, formatter, identity, network,
+    ontology, response,
+};
 
 use clap::{Parser, Subcommand};
 use formatter::Format;
@@ -752,6 +745,52 @@ enum BisectCommands {
     },
     /// End bisect session
     Reset,
+}
+
+// Translating the parsed CLI into the library's own subcommand types.
+//
+// The enums above carry clap's derive and its help text; the library's
+// counterparts are plain data, which is what keeps clap out of its public API.
+// The two sets are deliberately identical in shape, so these are mechanical —
+// and being exhaustive matches, a variant added on one side without the other
+// fails to compile rather than going unnoticed.
+//
+// These are free functions rather than `From` impls because both the trait and
+// the target type are foreign here, which the orphan rule forbids.
+
+fn to_lib_remote(command: RemoteCommands) -> lit::RemoteCommands {
+    match command {
+        RemoteCommands::Add { name, url } => lit::RemoteCommands::Add { name, url },
+        RemoteCommands::Remove { name } => lit::RemoteCommands::Remove { name },
+        RemoteCommands::List { verbose } => lit::RemoteCommands::List { verbose },
+    }
+}
+
+fn to_lib_config(command: ConfigCommands) -> lit::ConfigCommands {
+    match command {
+        ConfigCommands::Show => lit::ConfigCommands::Show,
+        ConfigCommands::Get { key } => lit::ConfigCommands::Get { key },
+        ConfigCommands::Set { key, value } => lit::ConfigCommands::Set { key, value },
+    }
+}
+
+fn to_lib_stash(command: StashCommands) -> lit::StashCommands {
+    match command {
+        StashCommands::Push { message } => lit::StashCommands::Push { message },
+        StashCommands::Pop => lit::StashCommands::Pop,
+        StashCommands::Apply { index } => lit::StashCommands::Apply { index },
+        StashCommands::List => lit::StashCommands::List,
+        StashCommands::Drop { index } => lit::StashCommands::Drop { index },
+    }
+}
+
+fn to_lib_bisect(command: BisectCommands) -> lit::BisectCommands {
+    match command {
+        BisectCommands::Start => lit::BisectCommands::Start,
+        BisectCommands::Good { commit } => lit::BisectCommands::Good { commit },
+        BisectCommands::Bad { commit } => lit::BisectCommands::Bad { commit },
+        BisectCommands::Reset => lit::BisectCommands::Reset,
+    }
 }
 
 #[derive(Subcommand)]
@@ -1528,7 +1567,7 @@ fn run() {
             finish,
         } => run!(commands::resolve::execute(file, strategy, all, finish)),
         Commands::Show { object } => run!(commands::show::execute(object)),
-        Commands::Remote { command } => run!(commands::remote::execute(command)),
+        Commands::Remote { command } => run!(commands::remote::execute(command.map(to_lib_remote))),
         Commands::Push {
             remote,
             branch,
@@ -1537,7 +1576,7 @@ fn run() {
         Commands::Pull { remote, branch } => run!(commands::pull::execute(remote, branch)),
         Commands::Fetch { remote, branch } => run!(commands::fetch::execute(remote, branch)),
         Commands::Clone { url, directory } => run!(commands::clone::execute(url, directory)),
-        Commands::Config { command } => run!(commands::config::execute(command)),
+        Commands::Config { command } => run!(commands::config::execute(command.map(to_lib_config))),
         Commands::Diff {
             staged,
             stat,
@@ -1560,7 +1599,7 @@ fn run() {
         Commands::RotateKey => run!(commands::rotate_key::rotate_key()),
 
         // Phase 1.5-1.8
-        Commands::Stash { command } => run!(commands::stash::execute(command)),
+        Commands::Stash { command } => run!(commands::stash::execute(command.map(to_lib_stash))),
         Commands::Reset { target, soft, hard } => {
             run!(commands::reset::execute(target, soft, hard))
         }
@@ -1582,7 +1621,7 @@ fn run() {
             ))
         }
         Commands::Blame { file } => run!(commands::blame::execute(file)),
-        Commands::Bisect { command } => run!(commands::bisect::execute(command)),
+        Commands::Bisect { command } => run!(commands::bisect::execute(command.map(to_lib_bisect))),
         Commands::Reflog { ref_name, count } => run!(commands::reflog::execute(ref_name, count)),
 
         // Phase 2
