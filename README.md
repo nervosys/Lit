@@ -601,12 +601,12 @@ Sandboxes combine with airgap mode automatically. See [EXAMPLES.md § Sandboxed 
 
 ## Testing
 
-`cargo test` runs 414 tests across unit, integration, and performance suites:
+`cargo test` runs 416 tests across unit, integration, and performance suites:
 
 ```shell
 cargo test                                                       # everything
 cargo test --lib -- --test-threads=1                             # 94 unit tests
-cargo test --test command_tests -- --test-threads=1              # 243 command tests
+cargo test --test command_tests -- --test-threads=1              # 245 command tests
 cargo test --test feature_integration_test                       # 38 integration tests
 cargo test --test performance_benchmarks --release               # 9 benchmarks
 cargo test --test adversarial_test -- --test-threads=1           # 6 security tests
