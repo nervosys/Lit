@@ -633,7 +633,7 @@ Two limits worth knowing:
 
 ## Testing
 
-`cargo test` runs 418 tests across unit, integration, and performance suites:
+`cargo test` runs 419 tests across unit, integration, and performance suites:
 
 ```shell
 cargo test                                                       # everything

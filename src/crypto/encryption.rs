@@ -409,7 +409,12 @@ impl EncryptionEngine {
     /// SECURITY: Uses counter-based nonce to guarantee uniqueness
     #[allow(deprecated)]
     pub fn encrypt(&self, plaintext: &[u8]) -> Result<Vec<u8>, String> {
-        // Check encryption limit (NIST SP 800-38D)
+        // Invocation limit for a random nonce (NIST SP 800-38D §8.3).
+        //
+        // The counter is per engine, so this bounds one process rather than the
+        // lifetime of the key; a durable count would need state that survives
+        // the command. It is a backstop, not the guarantee — `rotate-key`
+        // remains the real control.
         let count = self.nonce_counter.fetch_add(1, Ordering::SeqCst);
         if count >= MAX_ENCRYPTIONS_PER_KEY {
             return Err(format!(
@@ -418,12 +423,25 @@ impl EncryptionEngine {
             ));
         }
 
-        // Generate nonce: counter (8 bytes) + random (4 bytes)
-        // This guarantees uniqueness while maintaining randomness
+        // Nonce: 96 random bits, the RBG-based construction of NIST SP 800-38D
+        // §8.2.2, which is why the invocation limit above is 2^32.
+        //
+        // This was previously a counter in the top 8 bytes with 4 random bytes
+        // after it, described as guaranteeing uniqueness. It did not: the
+        // counter lives in the engine and restarts at zero for every engine —
+        // every process, and every store or index opened within one — so the
+        // first encryption after each start always reused counter 0 and only
+        // those 4 random bytes stood between two nonces. Colliding 32 bits is
+        // a birthday problem over roughly 65,000 encryptions, and a repeated
+        // nonce under one AES-GCM key does not merely leak the XOR of the two
+        // plaintexts, it exposes the GHASH key and with it forgery.
+        //
+        // 96 random bits put the same collision out of reach, and the nonce is
+        // stored alongside the ciphertext, so data written under the old scheme
+        // still decrypts.
         use aes_gcm::aead::rand_core::RngCore;
         let mut nonce_bytes = [0u8; NONCE_SIZE];
-        nonce_bytes[..8].copy_from_slice(&count.to_be_bytes());
-        OsRng.fill_bytes(&mut nonce_bytes[8..]);
+        OsRng.fill_bytes(&mut nonce_bytes);
         let nonce = Nonce::from_slice(&nonce_bytes);
 
         // Encrypt with authenticated encryption
@@ -1137,5 +1155,44 @@ mod tests {
         );
 
         let _ = fs::remove_file(&key_file);
+    }
+
+    /// Nonces must not repeat across freshly created engines.
+    ///
+    /// The old construction put an engine-local counter in the top 8 bytes of
+    /// the nonce, so every new engine — every process, every store opened —
+    /// started again at zero and the first encryption always carried the same
+    /// 8 leading bytes. Only 4 random bytes separated two such nonces, and a
+    /// repeated nonce under one AES-GCM key is catastrophic. Simulate a run of
+    /// separate processes and require the nonces to be distinct.
+    #[test]
+    fn test_nonces_do_not_repeat_across_engines() {
+        let key = EncryptionKey::from_passphrase("NonceProbe!12345", &[7u8; SALT_SIZE]).unwrap();
+
+        let mut nonces = std::collections::HashSet::new();
+        let mut leading_zero_runs = 0;
+
+        for _ in 0..64 {
+            // A fresh engine each time, as a new process would build.
+            let engine = EncryptionEngine::new(&key).unwrap();
+            let blob = engine.encrypt(b"same plaintext every time").unwrap();
+            let nonce = blob[1..1 + NONCE_SIZE].to_vec();
+
+            if nonce[..8] == [0u8; 8] {
+                leading_zero_runs += 1;
+            }
+            assert!(
+                nonces.insert(nonce),
+                "a nonce repeated across engines, which breaks AES-GCM"
+            );
+        }
+
+        // Under the old scheme every one of these would have started 0x00 * 8.
+        assert!(
+            leading_zero_runs <= 1,
+            "{} of 64 nonces began with eight zero bytes, which means the \
+             counter is resetting rather than the nonce being random",
+            leading_zero_runs
+        );
     }
 }

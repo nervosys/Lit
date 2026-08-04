@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Referential-integrity tests for both directions of Git interop, walking the converted graph from every ref and asserting that each referenced object resolves
 - Unit tests for the delta decoder, covering copy and insert instructions, the 64K zero-size encoding, and each malformed-input rejection
 
+### Security
+
+- **AES-GCM nonces could repeat across processes** — the nonce was an engine-local counter in its top 8 bytes plus 4 random bytes, documented as guaranteeing uniqueness. The counter restarted at zero for every engine, meaning every process and every store or index opened within one, so the first encryption after each start reused counter 0 and only 32 random bits separated two nonces — a birthday collision over roughly 65,000 encryptions. A repeated nonce under one AES-GCM key leaks the XOR of the plaintexts and exposes the GHASH key, permitting forgery. The nonce is now 96 random bits (NIST SP 800-38D §8.2.2). Data written under the old scheme still decrypts, since the nonce travels with the ciphertext. A regression test simulates 64 process starts and fails if the leading bytes repeat — under the old construction all 64 began with eight zero bytes
+
 ### Fixed
 
 - **`gc` no longer makes a repository unreadable** — it packed loose objects, deleted the loose copies and reported success, but nothing could read a pack back: `ObjectStore::read` looked only at the loose path, `list()` walked only the loose shards, and no pack reader was wired in. After a `gc`, `show`, `diff` and `checkout` failed and `export-git` reported "Exported 0 objects" with an ok status. `ObjectStore` now falls back to the pack indexes for reads, existence checks and listing
@@ -35,7 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Commit` and `Tag` gain an optional `timezone` field, carrying the offset of an object imported from Git. It is skipped when absent, so objects Lit created itself serialize and hash exactly as before
 - `lib.rs` now exports `identity`, `federation`, `events` and `api`, which previously existed only inside the binary — so DID identity, UCAN delegation, trust scoring, federation and event subscriptions are reachable from the published crate, not just the CLI. Purely additive; no existing path changes
 - **The CLI consumes the library instead of recompiling it** — `main.rs` declared the same modules `lib.rs` does, so every one was compiled a second time into the binary and its unit tests ran twice. It now imports from `lit::`, converting the four clap subcommand enums to their library counterparts at the call sites. This also retires the blanket `#![allow(dead_code)]` the duplication required, so dead code in the CLI is visible again
-- `cargo test` now runs **416 tests** (plus 2 ignored), up from 382 at 1.0.0, and all 416 are distinct — the same suite previously reported 508 by running 94 unit tests in both targets. Two suites that had been disabled rather than fixed are running again
+- `cargo test` now runs **419 tests** (plus 2 ignored), up from 382 at 1.0.0, and all 416 are distinct — the same suite previously reported 508 by running 94 unit tests in both targets. Two suites that had been disabled rather than fixed are running again
 
 ## [1.0.1] - 2026-06-02
 
