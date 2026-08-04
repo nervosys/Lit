@@ -11,6 +11,10 @@ use std::sync::{Arc, Mutex};
 /// Object storage - handles reading/writing objects to disk with optional encryption
 pub struct ObjectStore {
     objects_dir: PathBuf,
+    /// Where `lit gc` puts packs. Objects live loose until they are packed, and
+    /// packing removes the loose copy, so every lookup that misses on disk has
+    /// to consult the packs before concluding the object is absent.
+    packs_dir: PathBuf,
     encryption: Arc<Mutex<EncryptionManager>>,
 }
 
@@ -25,6 +29,7 @@ impl ObjectStore {
 
         ObjectStore {
             objects_dir,
+            packs_dir: crate::storage::pack::packs_dir(repo_path),
             encryption,
         }
     }
@@ -46,6 +51,7 @@ impl ObjectStore {
 
         Ok(ObjectStore {
             objects_dir,
+            packs_dir: crate::storage::pack::packs_dir(repo_path),
             encryption,
         })
     }
@@ -98,7 +104,9 @@ impl ObjectStore {
         let path = self.object_path(hash);
 
         if !path.exists() {
-            return Err(format!("Object {} not found", hash.short()));
+            // Not loose: it may have been packed by `lit gc`, which removes the
+            // loose copy once the pack is written.
+            return self.read_packed(hash);
         }
 
         // Read encrypted/compressed data
@@ -127,11 +135,29 @@ impl ObjectStore {
     /// Check if an object exists
     pub fn exists(&self, hash: &ObjectHash) -> bool {
         self.object_path(hash).exists()
+            || crate::storage::pack::load_all(&self.packs_dir).contains_key(hash.as_str())
+    }
+
+    /// Read an object that lives in a pack rather than loose on disk.
+    fn read_packed(&self, hash: &ObjectHash) -> Result<Object, String> {
+        let packed = crate::storage::pack::load_all(&self.packs_dir);
+        match packed.get(hash.as_str()) {
+            Some((pack_path, offset)) => crate::storage::pack::read_pack_object(pack_path, *offset)
+                .map_err(|e| format!("Failed to read {} from pack: {}", hash.short(), e)),
+            None => Err(format!("Object {} not found", hash.short())),
+        }
     }
 
     /// List all objects
     pub fn list(&self) -> Result<Vec<ObjectHash>, String> {
         let mut objects = Vec::new();
+
+        // Packed objects have no loose file to walk, so take them from the pack
+        // indexes. A hash can appear in both if a pack was written but the loose
+        // copy not yet removed, so the two sets are de-duplicated at the end.
+        for hash in crate::storage::pack::load_all(&self.packs_dir).into_keys() {
+            objects.push(ObjectHash::from_hex(hash));
+        }
 
         if !self.objects_dir.exists() {
             return Ok(objects);
@@ -162,6 +188,8 @@ impl ObjectStore {
             }
         }
 
+        objects.sort_by(|a, b| a.as_str().cmp(b.as_str()));
+        objects.dedup_by(|a, b| a.as_str() == b.as_str());
         Ok(objects)
     }
 }
