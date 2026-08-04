@@ -180,9 +180,19 @@ pub fn generate_want_list(repo_root: &Path) -> Result<Vec<String>, LitError> {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+    use std::sync::atomic::{AtomicU32, Ordering};
 
+    static COUNTER: AtomicU32 = AtomicU32::new(0);
+
+    /// Per-test scratch directory.
+    ///
+    /// The peer list is a file under one repo root that each test removes when
+    /// it finishes. Only one test currently writes there, but sharing a root
+    /// would make the next one that does collide with it.
     fn tmp_dir() -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("lit_fed_test_{}", std::process::id()));
+        let n = COUNTER.fetch_add(1, Ordering::SeqCst);
+        let dir = std::env::temp_dir().join(format!("lit_fed_test_{}_{}", std::process::id(), n));
+        let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir
     }

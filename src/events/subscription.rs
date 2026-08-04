@@ -225,9 +225,21 @@ pub fn read_events(
 mod tests {
     use super::*;
     use std::path::PathBuf;
+    use std::sync::atomic::{AtomicU32, Ordering};
 
+    static COUNTER: AtomicU32 = AtomicU32::new(0);
+
+    /// Per-test scratch directory.
+    ///
+    /// Subscriptions and the event log live under one repo root, and each test
+    /// removes that root when it finishes. Sharing a root across concurrently
+    /// running tests would let one test's cleanup delete another's data
+    /// mid-run, so every test gets its own.
     fn tmp_dir() -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("lit_events_test_{}", std::process::id()));
+        let n = COUNTER.fetch_add(1, Ordering::SeqCst);
+        let dir =
+            std::env::temp_dir().join(format!("lit_events_test_{}_{}", std::process::id(), n));
+        let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir
     }

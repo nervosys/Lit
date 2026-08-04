@@ -5,6 +5,44 @@
 use std::fs;
 use tempfile::TempDir;
 
+/// Installs a known `~/.lit/airgap.toml` and restores the original on drop.
+///
+/// The airgap loader reads that real path, so a test that needs a known
+/// configuration has to write it there. Restoring inline covers only the happy
+/// path: a failed assertion unwinds past it and leaves the operator's airgap
+/// mode disabled, which for this particular setting is the dangerous direction
+/// to fail in. `Drop` runs during unwind, so the original goes back either way.
+struct AirgapConfigGuard {
+    path: std::path::PathBuf,
+    original: Option<String>,
+}
+
+impl AirgapConfigGuard {
+    fn install(contents: &str) -> Self {
+        let path = dirs::home_dir()
+            .expect("home directory")
+            .join(".lit")
+            .join("airgap.toml");
+        let original = fs::read_to_string(&path).ok();
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, contents).unwrap();
+        AirgapConfigGuard { path, original }
+    }
+}
+
+impl Drop for AirgapConfigGuard {
+    fn drop(&mut self) {
+        match &self.original {
+            Some(contents) => {
+                let _ = fs::write(&self.path, contents);
+            }
+            None => {
+                let _ = fs::remove_file(&self.path);
+            }
+        }
+    }
+}
+
 mod cwd_guard {
     use std::cell::Cell;
     use std::path::Path;
@@ -195,16 +233,9 @@ fn test_push_with_network_share_remote() {
     // Ensure airgap global flag is off (after CwdGuard to avoid racing other airgap tests)
     lit::network::AirgapConfig::disable_airgap_mode();
 
-    // Save current airgap config and write a clean one
-    let home = dirs::home_dir().unwrap();
-    let airgap_path = home.join(".lit").join("airgap.toml");
-    let backup = if airgap_path.exists() {
-        Some(fs::read_to_string(&airgap_path).unwrap())
-    } else {
-        None
-    };
-    fs::create_dir_all(airgap_path.parent().unwrap()).unwrap();
-    fs::write(&airgap_path, "enabled = false\nstrict_mode = false\n").unwrap();
+    // Write a known airgap config; the guard restores the operator's own on
+    // the way out, including if an assertion below fails.
+    let _airgap = AirgapConfigGuard::install("enabled = false\nstrict_mode = false\n");
 
     // Add a UNC path remote
     lit::commands::remote::execute(Some(lit::RemoteCommands::Add {
@@ -217,23 +248,20 @@ fn test_push_with_network_share_remote() {
     assert!(result.is_err());
     let err = result.unwrap_err();
     let err = err.internal_message();
-    // Should either be "not implemented" or a transport validation issue, not a panic
+    // What matters is that an unreachable share fails cleanly rather than
+    // panicking, and says what it could not reach. How it fails is
+    // platform-dependent: Windows recognises `//server/share` as a UNC path
+    // and reports a transport problem, while Unix sees an ordinary path that
+    // does not resolve — both are sensible, so both are accepted.
     assert!(
-        err.contains("not yet fully implemented")
+        err.contains("//server/share/repo.lit")
+            || err.contains("not yet fully implemented")
             || err.contains("Push")
             || err.contains("transport")
             || err.contains("network"),
         "Should produce a sensible error, got: {}",
         err
     );
-
-    // Restore original airgap config
-    match backup {
-        Some(content) => fs::write(&airgap_path, content).unwrap(),
-        None => {
-            let _ = fs::remove_file(&airgap_path);
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------
