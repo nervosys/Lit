@@ -74,6 +74,7 @@ pub fn execute(source: String) -> Result<ImportGitResponse, crate::errors::LitEr
     }
 
     // Phase 2: Discover objects held in pack files
+    let mut packs: Vec<(PathBuf, HashMap<usize, PackEntry>)> = Vec::new();
     let pack_dir = objects_dir.join("pack");
     if pack_dir.exists() {
         for entry in
@@ -82,11 +83,19 @@ pub fn execute(source: String) -> Result<ImportGitResponse, crate::errors::LitEr
             let entry = entry.map_err(|e| format!("Pack dir entry error: {}", e))?;
             let path = entry.path();
             if path.extension().and_then(|e| e.to_str()) == Some("pack") {
-                if let Err(e) = scan_pack_file(&path, &mut discovered, &mut deltas_unresolved) {
-                    eprintln!("Warning: skipping pack {}: {}", path.display(), e);
+                match read_pack_entries(&path) {
+                    Ok(entries) => packs.push((path, entries)),
+                    Err(e) => eprintln!("Warning: skipping pack {}: {}", path.display(), e),
                 }
             }
         }
+    }
+
+    // Resolve every pack together. A REF_DELTA names its base by hash, and a
+    // thin pack leaves that base outside the file — often in a sibling pack.
+    // Resolving one pack at a time made that depend on `read_dir` order.
+    if !packs.is_empty() {
+        resolve_all_packs(&packs, &mut discovered, &mut deltas_unresolved)?;
     }
 
     // Phase 3: Convert the discovered graph, dependencies first
@@ -641,11 +650,9 @@ enum PackEntry {
 const MAX_DELTA_ROUNDS: usize = 1024;
 
 /// Discover the objects held in a Git pack file, without converting them
-fn scan_pack_file(
+fn read_pack_entries(
     pack_path: &Path,
-    discovered: &mut HashMap<String, DiscoveredObject>,
-    deltas_unresolved: &mut u64,
-) -> Result<u64, crate::errors::LitError> {
+) -> Result<HashMap<usize, PackEntry>, crate::errors::LitError> {
     let data = fs::read(pack_path).map_err(|e| format!("Failed to read pack: {}", e))?;
 
     // Validate pack header: "PACK" magic, version 2/3, object count
@@ -682,7 +689,7 @@ fn scan_pack_file(
         }
     }
 
-    resolve_pack_entries(&entries, discovered, deltas_unresolved)
+    Ok(entries)
 }
 
 /// Read one pack entry starting at `*pos`, advancing past it.
@@ -777,39 +784,50 @@ fn git_object_hash(obj_type: &str, content: &[u8]) -> String {
     hex::encode(sha1.finalize())
 }
 
-/// Resolve every delta in a pack and record the results in `discovered`.
+/// Resolve every delta across all of a repository's packs at once.
 ///
 /// Resolution runs in rounds: each round settles the entries whose base is
-/// already known, so a round resolves one more level of delta chain. Bases
-/// generally precede their deltas in a pack, but nothing requires that, and
-/// rounds make the outcome independent of the order entries appear in.
+/// already known, so a round peels one more level of delta chain. Bases
+/// generally precede their deltas, but nothing requires it, and rounds make the
+/// outcome independent of the order entries appear in.
 ///
-/// Returns the number of objects recorded; entries that never resolve (a thin
-/// pack whose bases live elsewhere) are counted in `deltas_unresolved`.
-fn resolve_pack_entries(
-    entries: &HashMap<usize, PackEntry>,
+/// All packs are resolved together rather than one at a time. A REF_DELTA names
+/// its base by hash and a thin pack leaves that base outside the file — very
+/// often in a sibling pack. Resolving each pack in isolation made that work only
+/// when `read_dir` happened to return the base's pack first, so an import could
+/// succeed or fail on directory order alone. Entries are keyed by pack and
+/// offset so a base is found wherever it lives.
+///
+/// Returns the number of objects recorded; entries that never resolve — a base
+/// that is genuinely absent from the repository — are counted in
+/// `deltas_unresolved`.
+fn resolve_all_packs(
+    packs: &[(PathBuf, HashMap<usize, PackEntry>)],
     discovered: &mut HashMap<String, DiscoveredObject>,
     deltas_unresolved: &mut u64,
 ) -> Result<u64, crate::errors::LitError> {
-    let mut offsets: Vec<usize> = entries.keys().copied().collect();
-    offsets.sort_unstable();
+    // (pack index, byte offset) — an OFS_DELTA's base offset is relative to its
+    // own pack, so the pack index travels with it.
+    let mut keys: Vec<(usize, usize)> = Vec::new();
+    for (pack, entries) in packs.iter().enumerate() {
+        let mut offsets: Vec<usize> = entries.1.keys().copied().collect();
+        offsets.sort_unstable();
+        keys.extend(offsets.into_iter().map(|offset| (pack, offset)));
+    }
 
-    // offset -> (git hash, type, content)
-    let mut resolved: HashMap<usize, (String, String, Vec<u8>)> = HashMap::new();
-    // git hash -> offset, so a REF_DELTA can find a base inside this pack
-    let mut by_hash: HashMap<String, usize> = HashMap::new();
+    let mut resolved: HashMap<(usize, usize), (String, String, Vec<u8>)> = HashMap::new();
+    // git hash -> where it resolved, so a REF_DELTA can find a base in any pack
+    let mut by_hash: HashMap<String, (usize, usize)> = HashMap::new();
 
     for _ in 0..MAX_DELTA_ROUNDS {
         let mut progressed = false;
-        for &offset in &offsets {
-            if resolved.contains_key(&offset) {
+        for &key in &keys {
+            if resolved.contains_key(&key) {
                 continue;
             }
-            if let Some(object) =
-                try_resolve_entry(offset, entries, &resolved, &by_hash, discovered)?
-            {
-                by_hash.insert(object.0.clone(), offset);
-                resolved.insert(offset, object);
+            if let Some(object) = try_resolve_entry(key, packs, &resolved, &by_hash, discovered)? {
+                by_hash.insert(object.0.clone(), key);
+                resolved.insert(key, object);
                 progressed = true;
             }
         }
@@ -819,8 +837,8 @@ fn resolve_pack_entries(
     }
 
     let mut recorded = 0u64;
-    for offset in &offsets {
-        match resolved.remove(offset) {
+    for key in &keys {
+        match resolved.remove(key) {
             Some((git_hash, obj_type, content)) => {
                 let deps = git_dependencies(&obj_type, &content)?;
                 discovered.insert(
@@ -842,29 +860,34 @@ fn resolve_pack_entries(
 
 /// Resolve one entry if its base is available, else `None` to retry next round.
 fn try_resolve_entry(
-    offset: usize,
-    entries: &HashMap<usize, PackEntry>,
-    resolved: &HashMap<usize, (String, String, Vec<u8>)>,
-    by_hash: &HashMap<String, usize>,
+    key: (usize, usize),
+    packs: &[(PathBuf, HashMap<usize, PackEntry>)],
+    resolved: &HashMap<(usize, usize), (String, String, Vec<u8>)>,
+    by_hash: &HashMap<String, (usize, usize)>,
     discovered: &HashMap<String, DiscoveredObject>,
 ) -> Result<Option<(String, String, Vec<u8>)>, crate::errors::LitError> {
-    let entry = match entries.get(&offset) {
+    let (pack, offset) = key;
+    let entry = match packs
+        .get(pack)
+        .and_then(|(_, entries)| entries.get(&offset))
+    {
         Some(entry) => entry,
         None => return Ok(None),
     };
 
     let (obj_type, content) = match entry {
         PackEntry::Whole { obj_type, content } => (obj_type.clone(), content.clone()),
-        PackEntry::OfsDelta { base_offset, delta } => match resolved.get(base_offset) {
+        // An OFS_DELTA's offset is relative to its own pack, so it stays there.
+        PackEntry::OfsDelta { base_offset, delta } => match resolved.get(&(pack, *base_offset)) {
             Some((_, base_type, base)) => (base_type.clone(), apply_delta(base, delta)?),
             None => return Ok(None),
         },
         PackEntry::RefDelta { base, delta } => {
-            // The base may sit in this pack, or have arrived with the loose
-            // objects and earlier packs already folded into `discovered`.
+            // Named by hash, so the base may be in any pack, or have arrived
+            // with the loose objects already folded into `discovered`.
             let resolved_base = by_hash
                 .get(base)
-                .and_then(|offset| resolved.get(offset))
+                .and_then(|key| resolved.get(key))
                 .map(|(_, base_type, base)| (base_type.clone(), base.clone()));
 
             match resolved_base {
@@ -1107,5 +1130,86 @@ mod tests {
         // The header claims 10 bytes; the instructions produce 5.
         let d = delta(0, 10, &[insert(b"hello")]);
         assert!(apply_delta(b"", &d).is_err());
+    }
+
+    /// A REF_DELTA whose base sits in a different pack must resolve, whichever
+    /// order the packs are handed over.
+    ///
+    /// Packs used to be resolved one at a time and folded into `discovered`
+    /// afterwards, so a base in a sibling pack was only found when `read_dir`
+    /// happened to return that pack first. Same inputs, both orders, same
+    /// result is the property that was missing.
+    #[test]
+    fn test_ref_delta_resolves_against_a_sibling_pack_in_either_order() {
+        let base_content = b"the base object contents".to_vec();
+        let base_hash = git_object_hash("blob", &base_content);
+
+        // A delta that keeps the base and appends to it.
+        let suffix = b" plus more";
+        let body = delta(
+            base_content.len() as u64,
+            (base_content.len() + suffix.len()) as u64,
+            &[copy(0, base_content.len() as u32), insert(suffix)],
+        );
+
+        // PackEntry is not Clone, so each ordering builds its own pair.
+        let build = |base_first: bool| -> Vec<(PathBuf, HashMap<usize, PackEntry>)> {
+            let base_pack: HashMap<usize, PackEntry> = [(
+                0usize,
+                PackEntry::Whole {
+                    obj_type: "blob".to_string(),
+                    content: base_content.clone(),
+                },
+            )]
+            .into_iter()
+            .collect();
+            let delta_pack: HashMap<usize, PackEntry> = [(
+                0usize,
+                PackEntry::RefDelta {
+                    base: base_hash.clone(),
+                    delta: body.clone(),
+                },
+            )]
+            .into_iter()
+            .collect();
+
+            if base_first {
+                vec![
+                    (PathBuf::from("base.pack"), base_pack),
+                    (PathBuf::from("delta.pack"), delta_pack),
+                ]
+            } else {
+                vec![
+                    (PathBuf::from("delta.pack"), delta_pack),
+                    (PathBuf::from("base.pack"), base_pack),
+                ]
+            }
+        };
+
+        let mut expected = base_content.clone();
+        expected.extend_from_slice(suffix);
+        let expected_hash = git_object_hash("blob", &expected);
+
+        for (label, packs) in [
+            ("base pack first", build(true)),
+            ("delta pack first", build(false)),
+        ] {
+            let mut discovered = HashMap::new();
+            let mut unresolved = 0u64;
+            let recorded = resolve_all_packs(&packs, &mut discovered, &mut unresolved).unwrap();
+
+            assert_eq!(
+                unresolved, 0,
+                "{}: nothing should be left unresolved",
+                label
+            );
+            assert_eq!(recorded, 2, "{}: both objects should be recorded", label);
+            assert_eq!(
+                discovered.get(&expected_hash).map(|o| o.content().unwrap()),
+                Some(expected.clone()),
+                "{}: the delta should rebuild against the sibling pack's base",
+                label
+            );
+        }
     }
 }
