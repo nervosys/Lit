@@ -130,6 +130,68 @@ impl EncryptionConfig {
     }
 }
 
+/// Keep a file readable only by its owner.
+///
+/// On Unix this is mode 0600. On Windows it is best-effort: the file is marked
+/// read-only, which stops accidental writes but does **not** stop another local
+/// user reading it. Restricting reads there needs an explicit DACL through
+/// SetNamedSecurityInfo, which is recorded as finding I-1 in
+/// docs/SECURITY_AUDIT.md and is still open — so on Windows, treat anything
+/// this protects as readable by any local account.
+fn restrict_to_owner(path: &Path) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(path)
+            .map_err(|e| format!("Failed to read permissions: {}", e))?
+            .permissions();
+        perms.set_mode(0o600);
+        fs::set_permissions(path, perms)
+            .map_err(|e| format!("Failed to restrict permissions: {}", e))?;
+    }
+
+    #[cfg(windows)]
+    {
+        let mut perms = fs::metadata(path)
+            .map_err(|e| format!("Failed to read permissions: {}", e))?
+            .permissions();
+        perms.set_readonly(true);
+        fs::set_permissions(path, perms)
+            .map_err(|e| format!("Failed to restrict permissions: {}", e))?;
+    }
+
+    Ok(())
+}
+
+/// Let a file be replaced by a rename, undoing what `restrict_to_owner` set.
+///
+/// Only Windows needs this: it refuses to rename onto a read-only file, and
+/// the restriction applied on the previous save is exactly that. A missing
+/// file is fine — there is nothing to clear.
+fn allow_replacement(path: &Path) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        if path.exists() {
+            let mut perms = fs::metadata(path)
+                .map_err(|e| format!("Failed to read permissions: {}", e))?
+                .permissions();
+            // Clippy warns because clearing read-only on Unix makes a file
+            // world-writable. This block is Windows-only, where the attribute
+            // is not a permission at all and clearing it is what allows the
+            // replacing rename.
+            #[allow(clippy::permissions_set_readonly_false)]
+            perms.set_readonly(false);
+            fs::set_permissions(path, perms)
+                .map_err(|e| format!("Failed to clear read-only attribute: {}", e))?;
+        }
+    }
+
+    #[cfg(not(windows))]
+    let _ = path;
+
+    Ok(())
+}
+
 /// Identify a derived key by the file it came from and the passphrase that
 /// unlocked it, without keeping the passphrase around.
 ///
@@ -397,6 +459,22 @@ impl EncryptionKey {
         let temp_file = key_file.with_extension("tmp");
         fs::write(&temp_file, &data)
             .map_err(|e| format!("Failed to write temp key file: {}", e))?;
+
+        // Restrict before the file takes its real name, so it is never briefly
+        // readable under the path an attacker would watch.
+        //
+        // No key material is stored here — the key is derived from the
+        // passphrase and this salt — but the verification hash lets anyone
+        // holding the file test passphrase guesses offline, without needing the
+        // repository at all. That is worth keeping to the owner.
+        restrict_to_owner(&temp_file)?;
+
+        // Windows refuses to rename onto a read-only file, and the file being
+        // replaced is one this function marked read-only last time. Clearing
+        // the attribute first is what lets `rotate-key` save a second time; a
+        // test covers it, because the failure only appears on the second save.
+        allow_replacement(key_file)?;
+
         fs::rename(&temp_file, key_file)
             .map_err(|e| format!("Failed to rename key file: {}", e))?;
 
@@ -1272,5 +1350,45 @@ mod tests {
              counter is resetting rather than the nonce being random",
             leading_zero_runs
         );
+    }
+}
+
+#[cfg(test)]
+mod key_file_permission_tests {
+    use super::*;
+
+    /// Saving over an existing key file must keep working.
+    ///
+    /// The key file is restricted to its owner before being renamed into
+    /// place. On Windows that restriction is the read-only attribute, and
+    /// `fs::rename` onto a read-only destination is exactly what `rotate-key`
+    /// does — so if it failed, rotation would break on the second save.
+    #[test]
+    fn test_key_file_can_be_saved_over() {
+        let path = std::env::temp_dir().join(format!("lit_keyperm_{}.key", std::process::id()));
+        let _ = fs::remove_file(&path);
+        let path_str = path.to_string_lossy().to_string();
+
+        let first =
+            EncryptionKey::from_passphrase("FirstPassphrase!123", &[1u8; SALT_SIZE]).unwrap();
+        first
+            .save(&path_str, "FirstPassphrase!123")
+            .expect("first save should succeed");
+
+        let second =
+            EncryptionKey::from_passphrase("SecondPassphrase!234", &[2u8; SALT_SIZE]).unwrap();
+        second
+            .save(&path_str, "SecondPassphrase!234")
+            .expect("saving over an existing key file should succeed, as rotate-key does");
+
+        // The second key's salt should be what is on disk now.
+        let stored = fs::read(&path).unwrap();
+        assert_eq!(
+            &stored[..SALT_SIZE],
+            &[2u8; SALT_SIZE],
+            "the rewrite should have taken effect"
+        );
+
+        let _ = fs::remove_file(&path);
     }
 }

@@ -1,6 +1,6 @@
 # Lit — Implementation Roadmap
 
-## Current State (v1.3.0)
+## Current State (v1.3.1)
 
 All 6 phases complete. 67 CLI commands implemented with structured JSON/human/MsgPack output.
 Full VCS feature parity with Git (diff, merge, push/pull/clone/fetch, stash, rebase, cherry-pick, blame, bisect, reflog).
