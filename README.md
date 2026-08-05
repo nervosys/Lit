@@ -619,26 +619,28 @@ commands fail rather than falling back to plaintext.
 `gc` packs through the same cipher, so packing an encrypted repository does not
 put its contents on disk in the clear.
 
-Two limits worth knowing:
+Two things worth knowing:
 
-- **No migration.** Turning encryption on for a repository that already has
-  commits leaves the existing plaintext index and objects unreadable — you get
-  `Unsupported encryption version`. Start encrypted, or re-import into a fresh
-  encrypted repository.
-- **A key derivation per command.** PBKDF2 runs with 600,000 iterations each
-  time a store is opened, which costs roughly 0.85s per command in a release
-  build and far more unoptimized. That is the intended cost of the iteration
-  count, not a bug, but caching the derived key per process would remove most
-  of it.
+- **No migration.** Encryption cannot be switched on for a repository that
+  already has commits — its existing index and objects carry no encryption
+  header. Commands fail with suggestions saying so. Start a new encrypted
+  repository and import into it.
+- **One key derivation per command.** PBKDF2 runs 600,000 iterations, which is
+  deliberate and takes a noticeable fraction of a second. A command opens
+  several stores, so the derived key is cached in memory for the life of the
+  process and the cost is paid once rather than once per store. The cache never
+  touches disk, holds only successful derivations — a wrong passphrase still
+  meets the rate limiter — and is keyed by passphrase as well as key file, so
+  rotating within a process cannot hand back a stale key.
 
 ## Testing
 
-`cargo test` runs 419 tests across unit, integration, and performance suites:
+`cargo test` runs 420 tests across unit, integration, and performance suites:
 
 ```shell
 cargo test                                                       # everything
 cargo test --lib -- --test-threads=1                             # 94 unit tests
-cargo test --test command_tests -- --test-threads=1              # 247 command tests
+cargo test --test command_tests -- --test-threads=1              # 248 command tests
 cargo test --test feature_integration_test                       # 38 integration tests
 cargo test --test performance_benchmarks --release               # 9 benchmarks
 cargo test --test adversarial_test -- --test-threads=1           # 6 security tests

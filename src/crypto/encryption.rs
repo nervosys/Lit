@@ -44,6 +44,10 @@ lazy_static! {
 
     /// Global failed attempt tracker for rate limiting
     static ref FAILED_ATTEMPTS: Mutex<HashMap<String, FailedAttemptTracker>> = Mutex::new(HashMap::new());
+
+    /// Keys already derived in this process, so a command that opens several
+    /// stores pays PBKDF2 once rather than once per store. Memory-only.
+    static ref DERIVED_KEYS: Mutex<HashMap<String, std::sync::Arc<EncryptionKey>>> = Mutex::new(HashMap::new());
 }
 
 /// Tracks failed passphrase attempts for rate limiting
@@ -123,6 +127,32 @@ impl EncryptionConfig {
 
         fs::write(&config_path, content)
             .map_err(|e| format!("Failed to write encryption config: {}", e))
+    }
+}
+
+/// Identify a derived key by the file it came from and the passphrase that
+/// unlocked it, without keeping the passphrase around.
+///
+/// Both parts matter: the file alone would hand back the wrong key after a
+/// `rotate-key` within one process.
+fn derived_key_id(key_file: &str, passphrase: &str) -> String {
+    use sha3::{Digest, Sha3_256};
+    let mut hasher = Sha3_256::new();
+    hasher.update(key_file.as_bytes());
+    hasher.update([0u8]); // keep the two fields from running together
+    hasher.update(passphrase.as_bytes());
+    hex::encode(hasher.finalize())
+}
+
+/// A key already derived in this process, if there is one.
+fn cached_derived_key(id: &str) -> Option<std::sync::Arc<EncryptionKey>> {
+    DERIVED_KEYS.lock().ok()?.get(id).cloned()
+}
+
+/// Remember a successfully derived key for the life of the process.
+fn remember_derived_key(id: String, key: std::sync::Arc<EncryptionKey>) {
+    if let Ok(mut keys) = DERIVED_KEYS.lock() {
+        keys.insert(id, key);
     }
 }
 
@@ -771,6 +801,22 @@ impl EncryptionManager {
         let expanded = shellexpand::tilde(&self.config.key_file);
         let key_file = Path::new(expanded.as_ref());
 
+        // A command opens several stores — the object store, the index, and the
+        // pack reader behind them — and each one lands here. Deriving the key
+        // every time means paying PBKDF2's 600,000 iterations several times
+        // over for a single `lit status`. Reuse a key already derived in this
+        // process for the same file and passphrase.
+        //
+        // The cache is memory-only and dies with the process, so it widens no
+        // window that holding the key for the length of one command already
+        // opens. Only successful derivations are stored, so a wrong passphrase
+        // still goes the long way round and still meets the rate limiter.
+        let cache_id = derived_key_id(expanded.as_ref(), passphrase);
+        if let Some(key) = cached_derived_key(&cache_id) {
+            self.engine = Some(EncryptionEngine::new(&key)?);
+            return Ok(());
+        }
+
         // Load or create encryption key
         let key = if key_file.exists() {
             EncryptionKey::load(key_file, passphrase)?
@@ -779,6 +825,9 @@ impl EncryptionManager {
             key.save(&self.config.key_file, passphrase)?;
             key
         };
+
+        let key = std::sync::Arc::new(key);
+        remember_derived_key(cache_id, std::sync::Arc::clone(&key));
 
         // Create encryption engine
         self.engine = Some(EncryptionEngine::new(&key)?);
@@ -840,7 +889,26 @@ impl EncryptionManager {
         }
 
         match &self.engine {
-            Some(engine) => engine.decrypt(encrypted),
+            Some(engine) => {
+                // Data written before encryption was switched on carries no
+                // header of ours, so it fails here with a version number taken
+                // from whatever byte happened to be first — 123 for the `{` of
+                // the plaintext index, which explains nothing. Encryption
+                // cannot be turned on for a repository that already has
+                // content, and this is where a user finds that out.
+                if encrypted
+                    .first()
+                    .is_some_and(|version| *version != ENCRYPTION_VERSION)
+                {
+                    return Err(
+                        "This data has no Lit encryption header. Encryption cannot be \
+                         enabled for a repository that already contains unencrypted \
+                         commits — start a new encrypted repository and import into it."
+                            .to_string(),
+                    );
+                }
+                engine.decrypt(encrypted)
+            }
             None => Err(
                 "Encryption not initialized. Call initialize() with passphrase first.".to_string(),
             ),

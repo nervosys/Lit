@@ -99,3 +99,45 @@ fn test_encrypted_repository_never_writes_plaintext() {
 
     let _ = fs::remove_file(&key);
 }
+
+#[test]
+fn test_enabling_encryption_on_an_existing_repository_explains_itself() {
+    let temp = TempDir::new().unwrap();
+    lit::commands::init::execute(false, Some(temp.path().to_str().unwrap().to_string())).unwrap();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
+
+    // Commit first, unencrypted.
+    fs::write(temp.path().join("f.txt"), b"plain").unwrap();
+    lit::commands::add::execute(vec!["f.txt".to_string()]).unwrap();
+    lit::commands::commit::execute("plain".to_string(), None).unwrap();
+
+    // Then switch encryption on, which cannot work: the existing index and
+    // objects carry no header of ours.
+    let n = COUNTER.fetch_add(1, Ordering::SeqCst);
+    let key = std::env::temp_dir().join(format!("lit_mig_{}_{}.key", std::process::id(), n));
+    let _ = fs::remove_file(&key);
+    fs::write(
+        temp.path().join(".lit").join("encryption.toml"),
+        format!(
+            "enabled = true\nkey_file = \"{}\"\nfips_mode = false\ncache_timeout_secs = 0\n",
+            key.to_string_lossy().replace(char::from(92u8), "/")
+        ),
+    )
+    .unwrap();
+    std::env::set_var("LIT_PASSPHRASE", PASSPHRASE);
+
+    let err = lit::commands::status::execute().unwrap_err();
+
+    // The rendered message is sanitized, so the suggestions are the only thing
+    // the user sees. Previously this surfaced as "Unsupported encryption
+    // version: 123" internally and a bare "Operation failed" outside.
+    let hints = err.suggestions().join(" ");
+    assert!(
+        hints.contains("already has commits"),
+        "the failure should explain that encryption cannot be switched on later, got: {}",
+        hints
+    );
+
+    std::env::remove_var("LIT_PASSPHRASE");
+    let _ = fs::remove_file(&key);
+}
