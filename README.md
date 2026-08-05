@@ -634,12 +634,13 @@ you to run it.
 
 Two things worth knowing:
 
-- **Ref names are visible, ref contents are not.** Object contents, commit
-  messages, the index, and the commit hashes inside refs and HEAD are all
-  encrypted. A branch or tag *name* is a filename under `.lit/refs/`, so it
-  stays readable on disk whatever its contents hold — encrypting file contents
-  cannot hide directory entries. Hiding names would mean storing all refs in
-  one encrypted index instead of a file per ref.
+- **Refs are held in one encrypted index.** An encrypted repository stores all
+  refs in `.lit/refs.enc` rather than a file per ref, because a ref name is a
+  filename and a directory would leak every branch and tag name however well
+  the contents were encrypted. The cost is granularity: refs are read-modify-
+  written as a unit, so two processes updating different branches at the same
+  moment can race where separate files could not. An unencrypted repository
+  keeps the directory, and its concurrency.
 - **One key derivation per command.** PBKDF2 runs 600,000 iterations, which is
   deliberate and takes a noticeable fraction of a second. A command opens
   several stores, so the derived key is cached in memory for the life of the

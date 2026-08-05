@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **Branch and tag names are no longer exposed on disk** — an encrypted repository keeps all refs in a single encrypted index (`.lit/refs.enc`) instead of one file per ref. A ref name is a filename, so the directory leaked every branch and tag name however well the contents were encrypted. The cost is granularity: refs become read-modify-write as a unit, so two processes updating different branches can race where separate files could not — which is why this applies only when encryption is on, leaving an unencrypted repository its directory and its concurrency
 - **Refs and HEAD are now encrypted** — `write_ref` and `update_head` stored them in clear text, so every commit hash a branch or tag pointed at was readable off disk even when the objects themselves were encrypted: the whole commit graph was exposed. Both sides now go through the same cipher as the object store and index. Reads stay tolerant of un-migrated refs, so a repository part-way through conversion still works, and `migrate-encryption` converts them. A branch *name* is a filename and remains visible — encrypting contents cannot hide directory entries, and hiding names would mean one encrypted index in place of a file per ref
 
 ### Fixed

@@ -100,13 +100,25 @@ pub fn execute() -> Result<MigrateEncryptionResponse, crate::errors::LitError> {
         }
     }
 
+    // Refs move into the encrypted index rather than being encrypted in place.
+    // A ref name is a filename, so leaving them loose would keep every branch
+    // and tag name readable however well the contents were encrypted.
     let mut refs_encrypted = 0usize;
-    for path in files_under(&lit.join("refs")) {
-        if encrypt_file(&path, &encryption)? {
+    for prefix in ["heads", "tags", "remotes"] {
+        for reference in crate::core::list_refs(&repo, prefix).unwrap_or_default() {
+            crate::core::write_ref(
+                &repo,
+                &format!("{}/{}", prefix, reference.name),
+                &reference.hash,
+            )?;
             refs_encrypted += 1;
-        } else {
-            already += 1;
         }
+    }
+
+    // With the index written, the loose files are what leaks the names.
+    for path in files_under(&lit.join("refs")) {
+        fs::remove_file(&path)
+            .map_err(|e| format!("Failed to remove {}: {}", path.display(), e))?;
     }
 
     let head = lit.join("HEAD");
