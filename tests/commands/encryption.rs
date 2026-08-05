@@ -224,3 +224,67 @@ fn test_migrate_encryption_rescues_a_plaintext_repository() {
     std::env::remove_var("LIT_PASSPHRASE");
     let _ = fs::remove_file(&key);
 }
+
+#[test]
+fn test_ref_contents_are_encrypted_but_names_are_not() {
+    let (temp, key) = encrypted_repo();
+    let _cwd = super::test_helpers::CwdGuard::new(temp.path());
+    std::env::set_var("LIT_PASSPHRASE", PASSPHRASE);
+
+    fs::write(temp.path().join("f.txt"), SECRET).unwrap();
+    lit::commands::add::execute(vec!["f.txt".to_string()]).unwrap();
+    lit::commands::commit::execute("encrypted".to_string(), None).unwrap();
+    lit::commands::branch::execute(Some("feature-x".to_string()), false, false).unwrap();
+
+    // The commit hash a ref points at must not be readable off disk. Refs used
+    // to be written in the clear, so the whole commit graph was visible even
+    // when every object was encrypted.
+    let head = lit::core::read_ref(temp.path(), "heads/main").unwrap();
+    for name in ["main", "feature-x"] {
+        let raw = fs::read(
+            temp.path()
+                .join(".lit")
+                .join("refs")
+                .join("heads")
+                .join(name),
+        )
+        .unwrap();
+        assert!(
+            lit::crypto::encryption::EncryptionManager::is_encrypted_payload(&raw),
+            "refs/heads/{} should be ciphertext",
+            name
+        );
+        assert!(
+            !raw.windows(head.len()).any(|w| w == head.as_bytes()),
+            "refs/heads/{} still exposes the commit hash",
+            name
+        );
+    }
+
+    // And it all still reads back.
+    assert!(lit::commands::status::execute().is_ok(), "status");
+    assert!(
+        lit::commands::branch::execute(None, false, false).is_ok(),
+        "branch"
+    );
+    assert!(
+        lit::commands::show::execute("HEAD".to_string()).is_ok(),
+        "show HEAD"
+    );
+
+    // What this does not hide: a branch name is a filename, so it stays
+    // visible whatever the contents are encrypted with. Asserted so the
+    // limitation is recorded rather than assumed away.
+    assert!(
+        temp.path()
+            .join(".lit")
+            .join("refs")
+            .join("heads")
+            .join("feature-x")
+            .exists(),
+        "branch names remain visible as directory entries"
+    );
+
+    std::env::remove_var("LIT_PASSPHRASE");
+    let _ = fs::remove_file(&key);
+}

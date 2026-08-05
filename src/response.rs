@@ -808,6 +808,7 @@ impl CommandResponse for TagResponse {
 pub struct MigrateEncryptionResponse {
     pub objects_encrypted: usize,
     pub objects_unpacked: usize,
+    pub refs_encrypted: usize,
     pub index_encrypted: bool,
     pub packs_expanded: usize,
     pub already_encrypted: usize,

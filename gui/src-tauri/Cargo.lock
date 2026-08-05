@@ -2093,8 +2093,26 @@ dependencies = [
 ]
 
 [[package]]
-name = "lit"
+name = "lit-gui"
 version = "1.0.0"
+dependencies = [
+ "litvc",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-shell",
+]
+
+[[package]]
+name = "litemap"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92daf443525c4cce67b150400bc2316076100ce0b3686209eb8cf3c31612e6f0"
+
+[[package]]
+name = "litvc"
+version = "1.2.1"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -2131,24 +2149,6 @@ dependencies = [
  "windows 0.58.0",
  "zeroize",
 ]
-
-[[package]]
-name = "lit-gui"
-version = "1.0.0"
-dependencies = [
- "lit",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-shell",
-]
-
-[[package]]
-name = "litemap"
-version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "92daf443525c4cce67b150400bc2316076100ce0b3686209eb8cf3c31612e6f0"
 
 [[package]]
 name = "lock_api"
