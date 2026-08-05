@@ -5,6 +5,12 @@ All notable changes to Lit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **CI runs the ignored test** — one test is ignored for runtime rather than correctness: it exercises the passphrase throttle, and each attempt that reaches verification costs a 600,000-iteration PBKDF2. Skipping it everywhere meant a real test that nothing ever ran. CI now runs `cargo test -- --ignored` on one platform, buying the coverage without paying for it three times
+
 ## [1.3.0] - 2026-08-05
 
 ### Security
