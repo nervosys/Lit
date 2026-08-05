@@ -5,6 +5,12 @@ All notable changes to Lit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **`lit --version` did not exist** — the clap derive carried no `version` attribute, so `--version`, `-V` and `version` were all rejected as unknown arguments, and a released binary could not report which release it was. Found by installing the published crate from crates.io and smoke-testing that, rather than testing the local build
+
 ## [1.2.0] - 2026-08-05
 
 ### Added

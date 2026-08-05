@@ -14,6 +14,10 @@ use std::process;
 #[derive(Parser)]
 #[command(name = "lit")]
 #[command(about = "Lit - The agentic-first distributed version control system", long_about = None)]
+// Takes the version from Cargo.toml, so `lit --version` and `-V` answer the
+// question every CLI is expected to answer. Without this clap rejects both as
+// unknown arguments, which left a released binary unable to say what it was.
+#[command(version)]
 struct Cli {
     /// Enable airgap mode (blocks all network protocols, allows only physical transports)
     #[arg(long, global = true)]
@@ -2773,5 +2777,39 @@ fn run() {
                 run!(commands::ai::execute_pr_description(head, base))
             }
         },
+    }
+}
+
+#[cfg(test)]
+mod cli_tests {
+    use super::*;
+
+    /// `lit --version` and `-V` must answer rather than error.
+    ///
+    /// The derive carried no `version` attribute, so clap treated both as
+    /// unknown arguments and a released binary could not report which release
+    /// it was. clap signals a version request by returning an error carrying
+    /// `DisplayVersion`, which is the success case here.
+    #[test]
+    fn test_version_flag_reports_the_crate_version() {
+        for flag in ["--version", "-V"] {
+            // `Cli` is not Debug, so unwrap the Result by hand.
+            let err = match Cli::try_parse_from(["lit", flag]) {
+                Err(err) => err,
+                Ok(_) => panic!("`lit {}` should be a version request", flag),
+            };
+            assert_eq!(
+                err.kind(),
+                clap::error::ErrorKind::DisplayVersion,
+                "`lit {}` should be a version request, not a parse failure",
+                flag
+            );
+            assert!(
+                err.to_string().contains(env!("CARGO_PKG_VERSION")),
+                "`lit {}` should name the crate version, got: {}",
+                flag,
+                err
+            );
+        }
     }
 }
