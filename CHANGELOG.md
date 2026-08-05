@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **The encryption key file is restricted to its owner** — it had no permission restriction on any platform and was written world-readable (0644), while `audit.rs` and the debug log already set 0600. It stores no key material, only the PBKDF2 salt and a verification hash, but that hash turns the 49-byte file into an offline oracle: anyone who can read it can test passphrase guesses without touching the repository. Now 0600 on Unix, applied to the temporary file before the rename so the key is never briefly readable under its real name. On Windows it is the read-only attribute, which stops writes and not reads — restricting reads there needs an explicit DACL, still open as finding I-1 in `docs/SECURITY_AUDIT.md`
+
 ### Added
 
 - **CI runs the ignored test** — one test is ignored for runtime rather than correctness: it exercises the passphrase throttle, and each attempt that reaches verification costs a 600,000-iteration PBKDF2. Skipping it everywhere meant a real test that nothing ever ran. CI now runs `cargo test -- --ignored` on one platform, buying the coverage without paying for it three times
