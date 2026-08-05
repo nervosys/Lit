@@ -262,6 +262,9 @@ enum Commands {
     /// Rotate encryption passphrase
     RotateKey,
 
+    /// Encrypt a repository created before encryption was enabled
+    MigrateEncryption,
+
     // --- Phase 1.5-1.8 ---
     /// Stash changes temporarily
     Stash {
@@ -1597,6 +1600,7 @@ fn run() {
             name, message, annotate, delete, sign, verify, list, commit
         )),
         Commands::RotateKey => run!(commands::rotate_key::rotate_key()),
+        Commands::MigrateEncryption => run!(commands::migrate_encryption::execute()),
 
         // Phase 1.5-1.8
         Commands::Stash { command } => run!(commands::stash::execute(command.map(to_lib_stash))),

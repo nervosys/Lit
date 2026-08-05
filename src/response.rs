@@ -805,6 +805,25 @@ impl CommandResponse for TagResponse {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct MigrateEncryptionResponse {
+    pub objects_encrypted: usize,
+    pub objects_unpacked: usize,
+    pub index_encrypted: bool,
+    pub packs_expanded: usize,
+    pub already_encrypted: usize,
+    pub message: String,
+}
+
+impl CommandResponse for MigrateEncryptionResponse {
+    fn command_name(&self) -> &'static str {
+        "migrate-encryption"
+    }
+    fn human_readable(&self) -> String {
+        format!("{}\n", self.message)
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct RotateKeyResponse {
     pub objects_rotated: usize,
     pub refs_rotated: usize,

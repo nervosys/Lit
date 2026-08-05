@@ -2,7 +2,7 @@
 
 **The world's first universal version control system designed for AI agents first and humans second.**
 
-Lit is a complete Git replacement written in Rust — 65+ commands, 30 MCP tools, post-quantum cryptographic security, sandboxed execution, and structured machine-readable output. Every interface is designed for autonomous agent workflows, with human-friendly output available via a single flag.
+Lit is a complete Git replacement written in Rust — 67 commands, 30 MCP tools, post-quantum cryptographic security, sandboxed execution, and structured machine-readable output. Every interface is designed for autonomous agent workflows, with human-friendly output available via a single flag.
 
 Unlike Git, Lit is not limited to source code. Its pluggable content type system versions **CAD models, EDA schematics, manuscripts, databases, scientific datasets, media assets, geospatial data**, and any other domain content — with domain-appropriate diff, merge, and storage strategies. Arbitrary agent profiles let CAD designers, EDA engineers, technical writers, DBAs, and data scientists work alongside software agents in a unified versioned workspace. Datacenter deployment features enable cluster sharding, replication, health monitoring, and Prometheus-style metrics for production-scale operation.
 
@@ -39,7 +39,7 @@ Git was designed in 2005 for human developers using terminals. Every interface �
 
 ## Features
 
-- **65+ CLI commands** — full Git-equivalent workflow plus agent-native extensions
+- **67 CLI commands** — full Git-equivalent workflow plus agent-native extensions
 - **30 MCP tools** — LLM agents interact via Model Context Protocol tool calls
 - **Decentralized identity** -- DID-based identity with Ed25519 and ML-DSA-87 post-quantum keys
 - **UCAN capability delegation** -- fine-grained, cryptographically signed permission tokens
@@ -619,12 +619,25 @@ commands fail rather than falling back to plaintext.
 `gc` packs through the same cipher, so packing an encrypted repository does not
 put its contents on disk in the clear.
 
+To switch encryption on for a repository that already has commits, write the
+config and then migrate its existing content:
+
+```bash
+lit migrate-encryption
+```
+
+That encrypts the loose objects and the index, and expands any pack into
+encrypted loose objects — `gc` will pack them again. It is idempotent, so an
+interrupted run is finished by running it a second time rather than leaving the
+repository half-converted. Without it, commands fail with suggestions telling
+you to run it.
+
 Two things worth knowing:
 
-- **No migration.** Encryption cannot be switched on for a repository that
-  already has commits — its existing index and objects carry no encryption
-  header. Commands fail with suggestions saying so. Start a new encrypted
-  repository and import into it.
+- **Refs and HEAD are not encrypted.** `write_ref` and `update_head` store them
+  in clear text, so branch and tag names and the commit hashes they point at
+  remain visible on disk even in an encrypted repository. Object contents,
+  commit messages and the index are encrypted; the shape of the history is not.
 - **One key derivation per command.** PBKDF2 runs 600,000 iterations, which is
   deliberate and takes a noticeable fraction of a second. A command opens
   several stores, so the derived key is cached in memory for the life of the
@@ -635,12 +648,12 @@ Two things worth knowing:
 
 ## Testing
 
-`cargo test` runs 420 tests across unit, integration, and performance suites:
+`cargo test` runs 421 tests across unit, integration, and performance suites:
 
 ```shell
 cargo test                                                       # everything
 cargo test --lib -- --test-threads=1                             # 94 unit tests
-cargo test --test command_tests -- --test-threads=1              # 248 command tests
+cargo test --test command_tests -- --test-threads=1              # 249 command tests
 cargo test --test feature_integration_test                       # 38 integration tests
 cargo test --test performance_benchmarks --release               # 9 benchmarks
 cargo test --test adversarial_test -- --test-threads=1           # 6 security tests

@@ -5,6 +5,16 @@ All notable changes to Lit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`lit migrate-encryption`** — encrypts a repository created before encryption was switched on. Previously this could not be done at all: the existing index and objects carry no encryption header, so setting `enabled = true` left every command failing with no way forward. The command encrypts the loose objects and the index in place, and expands any pack into encrypted loose objects for `gc` to re-pack. It is idempotent, so an interrupted run is finished by running it again rather than leaving the repository half-converted
+
+### Documentation
+
+- **Refs and HEAD are not encrypted** — `write_ref` and `update_head` store them in clear text, so branch and tag names and the commit hashes they point at stay visible on disk even in an encrypted repository. Object contents, commit messages and the index are encrypted; the shape of the history is not. The README now says so rather than leaving it to be discovered
+
 ## [1.1.0] - 2026-08-05
 
 ### Security
