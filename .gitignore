@@ -28,7 +28,11 @@ append_responses.ps1
 .env.*
 *.secret
 *.credentials
-!docs/**
+# Keep documentation tracked, but only prose — a blanket `!docs/**` would
+# re-include every pattern above for anything placed under docs/, so a
+# docs/something.key would be committable.
+!docs/**/*.md
+!docs/*.md
 
 # IDE
 .vscode/

@@ -54,11 +54,18 @@ impl Index {
         // Decrypt if encryption is enabled
         let data = {
             let encryption_config = EncryptionConfig::load(repo_path)?;
-            let mut encryption_manager = EncryptionManager::new(encryption_config);
-
-            if let Some(pass) = passphrase {
-                encryption_manager.initialize(pass)?;
-            }
+            // An explicit passphrase wins; otherwise fall back to the
+            // non-interactive sources, the same way the object store does.
+            // Without this the index stayed locked even when the caller had
+            // LIT_PASSPHRASE set, so every command that loads it failed.
+            let encryption_manager = match passphrase {
+                Some(pass) => {
+                    let mut manager = EncryptionManager::new(encryption_config);
+                    manager.initialize(pass)?;
+                    manager
+                }
+                None => EncryptionManager::new_auto(encryption_config, repo_path),
+            };
 
             encryption_manager.decrypt(&encrypted_data)?
         };
@@ -85,11 +92,14 @@ impl Index {
         // Encrypt if encryption is enabled
         let final_data = {
             let encryption_config = EncryptionConfig::load(repo_path)?;
-            let mut encryption_manager = EncryptionManager::new(encryption_config);
-
-            if let Some(pass) = passphrase {
-                encryption_manager.initialize(pass)?;
-            }
+            let encryption_manager = match passphrase {
+                Some(pass) => {
+                    let mut manager = EncryptionManager::new(encryption_config);
+                    manager.initialize(pass)?;
+                    manager
+                }
+                None => EncryptionManager::new_auto(encryption_config, repo_path),
+            };
 
             encryption_manager.encrypt(&data)?
         };

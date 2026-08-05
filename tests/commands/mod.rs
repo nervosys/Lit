@@ -9,6 +9,7 @@ mod clone;
 mod commit;
 mod config;
 mod diff;
+mod encryption;
 mod export_git;
 mod fetch;
 mod gc;

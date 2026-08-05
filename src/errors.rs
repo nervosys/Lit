@@ -199,6 +199,25 @@ impl LitError {
     /// Actionable suggestions for agents to resolve the error
     pub fn suggestions(&self) -> Vec<&'static str> {
         match self {
+            // The rendered message is deliberately sanitized, so these two
+            // encryption cases would otherwise reach the user as a bare
+            // "Operation failed" with nothing to act on.
+            LitError::General(msg) | LitError::IO(msg)
+                if msg.contains("no Lit encryption header") =>
+            {
+                vec![
+                    "Encryption cannot be enabled for a repository that already has commits",
+                    "Create a new repository with encryption enabled and import into it",
+                ]
+            }
+            LitError::General(msg) | LitError::IO(msg)
+                if msg.contains("Encryption not initialized") =>
+            {
+                vec![
+                    "Set LIT_PASSPHRASE or LIT_PASSPHRASE_FILE to unlock the repository",
+                    "Check encryption settings in .lit/encryption.toml",
+                ]
+            }
             LitError::Repository(msg)
                 if msg.contains("not found") || msg.contains("No .lit directory") =>
             {

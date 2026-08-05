@@ -44,6 +44,10 @@ lazy_static! {
 
     /// Global failed attempt tracker for rate limiting
     static ref FAILED_ATTEMPTS: Mutex<HashMap<String, FailedAttemptTracker>> = Mutex::new(HashMap::new());
+
+    /// Keys already derived in this process, so a command that opens several
+    /// stores pays PBKDF2 once rather than once per store. Memory-only.
+    static ref DERIVED_KEYS: Mutex<HashMap<String, std::sync::Arc<EncryptionKey>>> = Mutex::new(HashMap::new());
 }
 
 /// Tracks failed passphrase attempts for rate limiting
@@ -123,6 +127,32 @@ impl EncryptionConfig {
 
         fs::write(&config_path, content)
             .map_err(|e| format!("Failed to write encryption config: {}", e))
+    }
+}
+
+/// Identify a derived key by the file it came from and the passphrase that
+/// unlocked it, without keeping the passphrase around.
+///
+/// Both parts matter: the file alone would hand back the wrong key after a
+/// `rotate-key` within one process.
+fn derived_key_id(key_file: &str, passphrase: &str) -> String {
+    use sha3::{Digest, Sha3_256};
+    let mut hasher = Sha3_256::new();
+    hasher.update(key_file.as_bytes());
+    hasher.update([0u8]); // keep the two fields from running together
+    hasher.update(passphrase.as_bytes());
+    hex::encode(hasher.finalize())
+}
+
+/// A key already derived in this process, if there is one.
+fn cached_derived_key(id: &str) -> Option<std::sync::Arc<EncryptionKey>> {
+    DERIVED_KEYS.lock().ok()?.get(id).cloned()
+}
+
+/// Remember a successfully derived key for the life of the process.
+fn remember_derived_key(id: String, key: std::sync::Arc<EncryptionKey>) {
+    if let Ok(mut keys) = DERIVED_KEYS.lock() {
+        keys.insert(id, key);
     }
 }
 
@@ -409,7 +439,12 @@ impl EncryptionEngine {
     /// SECURITY: Uses counter-based nonce to guarantee uniqueness
     #[allow(deprecated)]
     pub fn encrypt(&self, plaintext: &[u8]) -> Result<Vec<u8>, String> {
-        // Check encryption limit (NIST SP 800-38D)
+        // Invocation limit for a random nonce (NIST SP 800-38D §8.3).
+        //
+        // The counter is per engine, so this bounds one process rather than the
+        // lifetime of the key; a durable count would need state that survives
+        // the command. It is a backstop, not the guarantee — `rotate-key`
+        // remains the real control.
         let count = self.nonce_counter.fetch_add(1, Ordering::SeqCst);
         if count >= MAX_ENCRYPTIONS_PER_KEY {
             return Err(format!(
@@ -418,12 +453,25 @@ impl EncryptionEngine {
             ));
         }
 
-        // Generate nonce: counter (8 bytes) + random (4 bytes)
-        // This guarantees uniqueness while maintaining randomness
+        // Nonce: 96 random bits, the RBG-based construction of NIST SP 800-38D
+        // §8.2.2, which is why the invocation limit above is 2^32.
+        //
+        // This was previously a counter in the top 8 bytes with 4 random bytes
+        // after it, described as guaranteeing uniqueness. It did not: the
+        // counter lives in the engine and restarts at zero for every engine —
+        // every process, and every store or index opened within one — so the
+        // first encryption after each start always reused counter 0 and only
+        // those 4 random bytes stood between two nonces. Colliding 32 bits is
+        // a birthday problem over roughly 65,000 encryptions, and a repeated
+        // nonce under one AES-GCM key does not merely leak the XOR of the two
+        // plaintexts, it exposes the GHASH key and with it forgery.
+        //
+        // 96 random bits put the same collision out of reach, and the nonce is
+        // stored alongside the ciphertext, so data written under the old scheme
+        // still decrypts.
         use aes_gcm::aead::rand_core::RngCore;
         let mut nonce_bytes = [0u8; NONCE_SIZE];
-        nonce_bytes[..8].copy_from_slice(&count.to_be_bytes());
-        OsRng.fill_bytes(&mut nonce_bytes[8..]);
+        OsRng.fill_bytes(&mut nonce_bytes);
         let nonce = Nonce::from_slice(&nonce_bytes);
 
         // Encrypt with authenticated encryption
@@ -707,6 +755,43 @@ impl EncryptionManager {
         }
     }
 
+    /// Build a manager, initializing it from a non-interactive passphrase
+    /// source when encryption is enabled and one is available.
+    ///
+    /// Every command builds its object store through `ObjectStore::new`, which
+    /// returns `Self` rather than a `Result` and must not prompt — Lit is
+    /// zero-prompt by design. So the passphrase comes from `LIT_PASSPHRASE`,
+    /// `LIT_PASSPHRASE_FILE` or the cache, and nothing else.
+    ///
+    /// With encryption enabled and no source available the manager stays
+    /// uninitialized on purpose: the first encrypt or decrypt then reports
+    /// that plainly, which is a better failure than a constructor that cannot
+    /// explain itself.
+    pub fn new_auto(config: EncryptionConfig, repo_path: &Path) -> Self {
+        let mut manager = EncryptionManager::new(config);
+        if !manager.config.enabled {
+            return manager;
+        }
+
+        let repo = repo_path.to_string_lossy().to_string();
+        let Some(passphrase) = get_passphrase_non_interactive(&repo, &manager.config) else {
+            return manager;
+        };
+
+        manager.repo_path = Some(repo.clone());
+        if let Err(e) = manager.initialize(&passphrase) {
+            eprintln!("Warning: encryption is enabled but could not be unlocked: {e}");
+            return manager;
+        }
+
+        if manager.config.cache_timeout_secs > 0 {
+            let timeout = Duration::from_secs(manager.config.cache_timeout_secs);
+            cache_passphrase(&repo, (*passphrase).clone(), Some(timeout));
+        }
+
+        manager
+    }
+
     /// Initialize encryption with passphrase
     pub fn initialize(&mut self, passphrase: &str) -> Result<(), String> {
         if !self.config.enabled {
@@ -716,6 +801,22 @@ impl EncryptionManager {
         let expanded = shellexpand::tilde(&self.config.key_file);
         let key_file = Path::new(expanded.as_ref());
 
+        // A command opens several stores — the object store, the index, and the
+        // pack reader behind them — and each one lands here. Deriving the key
+        // every time means paying PBKDF2's 600,000 iterations several times
+        // over for a single `lit status`. Reuse a key already derived in this
+        // process for the same file and passphrase.
+        //
+        // The cache is memory-only and dies with the process, so it widens no
+        // window that holding the key for the length of one command already
+        // opens. Only successful derivations are stored, so a wrong passphrase
+        // still goes the long way round and still meets the rate limiter.
+        let cache_id = derived_key_id(expanded.as_ref(), passphrase);
+        if let Some(key) = cached_derived_key(&cache_id) {
+            self.engine = Some(EncryptionEngine::new(&key)?);
+            return Ok(());
+        }
+
         // Load or create encryption key
         let key = if key_file.exists() {
             EncryptionKey::load(key_file, passphrase)?
@@ -724,6 +825,9 @@ impl EncryptionManager {
             key.save(&self.config.key_file, passphrase)?;
             key
         };
+
+        let key = std::sync::Arc::new(key);
+        remember_derived_key(cache_id, std::sync::Arc::clone(&key));
 
         // Create encryption engine
         self.engine = Some(EncryptionEngine::new(&key)?);
@@ -785,7 +889,26 @@ impl EncryptionManager {
         }
 
         match &self.engine {
-            Some(engine) => engine.decrypt(encrypted),
+            Some(engine) => {
+                // Data written before encryption was switched on carries no
+                // header of ours, so it fails here with a version number taken
+                // from whatever byte happened to be first — 123 for the `{` of
+                // the plaintext index, which explains nothing. Encryption
+                // cannot be turned on for a repository that already has
+                // content, and this is where a user finds that out.
+                if encrypted
+                    .first()
+                    .is_some_and(|version| *version != ENCRYPTION_VERSION)
+                {
+                    return Err(
+                        "This data has no Lit encryption header. Encryption cannot be \
+                         enabled for a repository that already contains unencrypted \
+                         commits — start a new encrypted repository and import into it."
+                            .to_string(),
+                    );
+                }
+                engine.decrypt(encrypted)
+            }
             None => Err(
                 "Encryption not initialized. Call initialize() with passphrase first.".to_string(),
             ),
@@ -1100,5 +1223,44 @@ mod tests {
         );
 
         let _ = fs::remove_file(&key_file);
+    }
+
+    /// Nonces must not repeat across freshly created engines.
+    ///
+    /// The old construction put an engine-local counter in the top 8 bytes of
+    /// the nonce, so every new engine — every process, every store opened —
+    /// started again at zero and the first encryption always carried the same
+    /// 8 leading bytes. Only 4 random bytes separated two such nonces, and a
+    /// repeated nonce under one AES-GCM key is catastrophic. Simulate a run of
+    /// separate processes and require the nonces to be distinct.
+    #[test]
+    fn test_nonces_do_not_repeat_across_engines() {
+        let key = EncryptionKey::from_passphrase("NonceProbe!12345", &[7u8; SALT_SIZE]).unwrap();
+
+        let mut nonces = std::collections::HashSet::new();
+        let mut leading_zero_runs = 0;
+
+        for _ in 0..64 {
+            // A fresh engine each time, as a new process would build.
+            let engine = EncryptionEngine::new(&key).unwrap();
+            let blob = engine.encrypt(b"same plaintext every time").unwrap();
+            let nonce = blob[1..1 + NONCE_SIZE].to_vec();
+
+            if nonce[..8] == [0u8; 8] {
+                leading_zero_runs += 1;
+            }
+            assert!(
+                nonces.insert(nonce),
+                "a nonce repeated across engines, which breaks AES-GCM"
+            );
+        }
+
+        // Under the old scheme every one of these would have started 0x00 * 8.
+        assert!(
+            leading_zero_runs <= 1,
+            "{} of 64 nonces began with eight zero bytes, which means the \
+             counter is resetting rather than the nonce being random",
+            leading_zero_runs
+        );
     }
 }
