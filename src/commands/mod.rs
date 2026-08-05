@@ -29,6 +29,7 @@ pub mod lfs;
 pub mod log;
 pub mod mcp_serve;
 pub mod merge;
+pub mod migrate_encryption;
 pub mod pr;
 pub mod pull;
 pub mod push;
