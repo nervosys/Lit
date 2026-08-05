@@ -226,7 +226,7 @@ fn test_migrate_encryption_rescues_a_plaintext_repository() {
 }
 
 #[test]
-fn test_ref_contents_are_encrypted_but_names_are_not() {
+fn test_refs_expose_neither_hash_nor_name_on_disk() {
     let (temp, key) = encrypted_repo();
     let _cwd = super::test_helpers::CwdGuard::new(temp.path());
     std::env::set_var("LIT_PASSPHRASE", PASSPHRASE);
@@ -236,30 +236,52 @@ fn test_ref_contents_are_encrypted_but_names_are_not() {
     lit::commands::commit::execute("encrypted".to_string(), None).unwrap();
     lit::commands::branch::execute(Some("feature-x".to_string()), false, false).unwrap();
 
-    // The commit hash a ref points at must not be readable off disk. Refs used
-    // to be written in the clear, so the whole commit graph was visible even
-    // when every object was encrypted.
+    // Neither the hash a ref points at nor the ref's own name may be readable
+    // off disk. Refs were once written in the clear, exposing the whole commit
+    // graph; encrypting the contents then still left every branch and tag name
+    // visible, because a name is a filename.
     let head = lit::core::read_ref(temp.path(), "heads/main").unwrap();
-    for name in ["main", "feature-x"] {
-        let raw = fs::read(
-            temp.path()
-                .join(".lit")
-                .join("refs")
-                .join("heads")
-                .join(name),
-        )
-        .unwrap();
-        assert!(
-            lit::crypto::encryption::EncryptionManager::is_encrypted_payload(&raw),
-            "refs/heads/{} should be ciphertext",
-            name
-        );
-        assert!(
-            !raw.windows(head.len()).any(|w| w == head.as_bytes()),
-            "refs/heads/{} still exposes the commit hash",
-            name
-        );
+    let lit_dir = temp.path().join(".lit");
+
+    assert!(
+        lit_dir.join("refs.enc").exists(),
+        "an encrypted repository should keep its refs in one encrypted index"
+    );
+
+    let mut loose = Vec::new();
+    let mut exposes_name = Vec::new();
+    let mut exposes_hash = Vec::new();
+    for entry in walkdir::WalkDir::new(&lit_dir).into_iter().flatten() {
+        if !entry.file_type().is_file() {
+            continue;
+        }
+        if entry.path().starts_with(lit_dir.join("refs")) {
+            loose.push(entry.path().to_path_buf());
+        }
+        if entry.path().to_string_lossy().contains("feature-x") {
+            exposes_name.push(entry.path().to_path_buf());
+        }
+        if let Ok(bytes) = fs::read(entry.path()) {
+            if bytes.windows(9).any(|w| w == b"feature-x") {
+                exposes_name.push(entry.path().to_path_buf());
+            }
+            if bytes.windows(head.len()).any(|w| w == head.as_bytes()) {
+                exposes_hash.push(entry.path().to_path_buf());
+            }
+        }
     }
+
+    assert!(loose.is_empty(), "refs left loose on disk: {:?}", loose);
+    assert!(
+        exposes_name.is_empty(),
+        "the branch name is readable on disk: {:?}",
+        exposes_name
+    );
+    assert!(
+        exposes_hash.is_empty(),
+        "the commit hash is readable on disk: {:?}",
+        exposes_hash
+    );
 
     // And it all still reads back.
     assert!(lit::commands::status::execute().is_ok(), "status");
@@ -271,18 +293,12 @@ fn test_ref_contents_are_encrypted_but_names_are_not() {
         lit::commands::show::execute("HEAD".to_string()).is_ok(),
         "show HEAD"
     );
-
-    // What this does not hide: a branch name is a filename, so it stays
-    // visible whatever the contents are encrypted with. Asserted so the
-    // limitation is recorded rather than assumed away.
     assert!(
-        temp.path()
-            .join(".lit")
-            .join("refs")
-            .join("heads")
-            .join("feature-x")
-            .exists(),
-        "branch names remain visible as directory entries"
+        lit::core::list_refs(temp.path(), "heads")
+            .unwrap()
+            .iter()
+            .any(|r| r.name == "feature-x"),
+        "the branch must still be listed even though its name is not on disk"
     );
 
     std::env::remove_var("LIT_PASSPHRASE");

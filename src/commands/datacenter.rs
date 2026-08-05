@@ -304,12 +304,17 @@ fn collect_metrics(repo_root: &Path) -> Vec<Metric> {
         }
     }
 
-    let refs_count = repo_root
-        .join(".lit")
-        .join("refs")
-        .read_dir()
-        .map(|e| e.count() as u64)
-        .unwrap_or(0);
+    // Counted through list_refs rather than by reading the directory: an
+    // encrypted repository keeps its refs in one index, so the directory is
+    // empty and a raw count would report zero.
+    let refs_count: u64 = ["heads", "tags", "remotes"]
+        .iter()
+        .map(|prefix| {
+            crate::core::list_refs(repo_root, prefix)
+                .map(|refs| refs.len() as u64)
+                .unwrap_or(0)
+        })
+        .sum();
 
     vec![
         Metric {

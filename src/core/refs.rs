@@ -1,5 +1,6 @@
 use crate::crypto::encryption::EncryptionManager;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -51,6 +52,53 @@ fn read_ref_file(path: &Path, repo_path: &Path) -> Result<String, String> {
         .map(|s| s.trim().to_string())
 }
 
+/// Where an encrypted repository keeps all of its refs.
+fn refs_index_path(repo_path: &Path) -> PathBuf {
+    get_lit_dir(repo_path).join("refs.enc")
+}
+
+/// Whether this repository encrypts at rest.
+fn encryption_enabled(repo_path: &Path) -> bool {
+    crate::crypto::encryption::EncryptionConfig::load(repo_path)
+        .map(|config| config.enabled)
+        .unwrap_or(false)
+}
+
+/// Load the encrypted ref index, empty when there is none yet.
+///
+/// A ref name is a filename, so a directory holding one file per ref leaks
+/// every branch and tag name however well the contents are encrypted.
+/// Collapsing them into a single encrypted map hides the names as well.
+///
+/// The cost is granularity: refs become read-modify-write as a unit, so two
+/// processes updating different branches at the same moment can race where
+/// separate files could not. That is why this is used only when encryption is
+/// on — an unencrypted repository keeps the directory and its concurrency.
+fn load_refs_index(repo_path: &Path) -> Result<BTreeMap<String, String>, String> {
+    let path = refs_index_path(repo_path);
+    if !path.exists() {
+        return Ok(BTreeMap::new());
+    }
+
+    let data = fs::read(&path).map_err(|e| format!("Failed to read ref index: {}", e))?;
+    let plain = if EncryptionManager::is_encrypted_payload(&data) {
+        ref_encryption(repo_path).decrypt(&data)?
+    } else {
+        data
+    };
+
+    serde_json::from_slice(&plain).map_err(|e| format!("Failed to parse ref index: {}", e))
+}
+
+/// Write the ref index back, encrypted.
+fn save_refs_index(repo_path: &Path, refs: &BTreeMap<String, String>) -> Result<(), String> {
+    let json =
+        serde_json::to_vec(refs).map_err(|e| format!("Failed to serialize ref index: {}", e))?;
+    let data = ref_encryption(repo_path).encrypt(&json)?;
+    fs::write(refs_index_path(repo_path), data)
+        .map_err(|e| format!("Failed to write ref index: {}", e))
+}
+
 /// Check if a directory is a Lit repository
 pub fn is_lit_repo(path: &Path) -> bool {
     get_lit_dir(path).exists()
@@ -74,6 +122,15 @@ pub fn find_repo_root() -> Result<PathBuf, String> {
 
 /// Read a reference file
 pub fn read_ref(repo_path: &Path, ref_name: &str) -> Result<String, String> {
+    // An encrypted repository keeps its refs in one file so the names are not
+    // exposed as directory entries. A repository that has not been migrated
+    // still has them loose, so fall through to that rather than failing.
+    if encryption_enabled(repo_path) {
+        if let Some(hash) = load_refs_index(repo_path)?.get(ref_name) {
+            return Ok(hash.clone());
+        }
+    }
+
     let ref_path = get_lit_dir(repo_path).join("refs").join(ref_name);
 
     if !ref_path.exists() {
@@ -111,6 +168,12 @@ pub fn read_ref_encrypted(
 
 /// Write a reference file
 pub fn write_ref(repo_path: &Path, ref_name: &str, hash: &str) -> Result<(), String> {
+    if encryption_enabled(repo_path) {
+        let mut refs = load_refs_index(repo_path)?;
+        refs.insert(ref_name.to_string(), hash.to_string());
+        return save_refs_index(repo_path, &refs);
+    }
+
     let ref_path = get_lit_dir(repo_path).join("refs").join(ref_name);
 
     if let Some(parent) = ref_path.parent() {
@@ -149,22 +212,54 @@ pub fn write_ref_encrypted(
 pub fn delete_ref(repo_path: &Path, ref_name: &str) -> Result<(), String> {
     let ref_path = get_lit_dir(repo_path).join("refs").join(ref_name);
 
-    if !ref_path.exists() {
-        return Err(format!("Reference '{}' not found", ref_name));
+    // Remove from both, since a part-migrated repository may hold it in either.
+    let mut removed = false;
+
+    if encryption_enabled(repo_path) {
+        let mut refs = load_refs_index(repo_path)?;
+        if refs.remove(ref_name).is_some() {
+            save_refs_index(repo_path, &refs)?;
+            removed = true;
+        }
     }
 
-    fs::remove_file(&ref_path).map_err(|e| format!("Failed to delete reference: {}", e))
+    if ref_path.exists() {
+        fs::remove_file(&ref_path).map_err(|e| format!("Failed to delete reference: {}", e))?;
+        removed = true;
+    }
+
+    if removed {
+        Ok(())
+    } else {
+        Err(format!("Reference '{}' not found", ref_name))
+    }
 }
 
 /// List all references
 pub fn list_refs(repo_path: &Path, prefix: &str) -> Result<Vec<Reference>, String> {
     let refs_dir = get_lit_dir(repo_path).join("refs").join(prefix);
+    let mut refs = Vec::new();
+    let mut seen = std::collections::HashSet::new();
 
-    if !refs_dir.exists() {
-        return Ok(Vec::new());
+    // Encrypted repositories hold their refs in the index; a repository that
+    // has not been migrated may still have loose files, so take both and let
+    // the index win.
+    if encryption_enabled(repo_path) {
+        let with_slash = format!("{}/", prefix);
+        for (name, hash) in load_refs_index(repo_path)? {
+            if let Some(short) = name.strip_prefix(&with_slash) {
+                seen.insert(short.to_string());
+                refs.push(Reference {
+                    name: short.to_string(),
+                    hash,
+                });
+            }
+        }
     }
 
-    let mut refs = Vec::new();
+    if !refs_dir.exists() {
+        return Ok(refs);
+    }
 
     for entry in walkdir::WalkDir::new(&refs_dir) {
         let entry = entry.map_err(|e| format!("Failed to read refs: {}", e))?;
@@ -176,6 +271,10 @@ pub fn list_refs(repo_path: &Path, prefix: &str) -> Result<Vec<Reference>, Strin
                 .map_err(|e| format!("Path error: {}", e))?
                 .to_string_lossy()
                 .to_string();
+
+            if seen.contains(&name) {
+                continue;
+            }
 
             let hash = read_ref_file(path, repo_path)?;
 
