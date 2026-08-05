@@ -5,6 +5,20 @@ All notable changes to Lit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+
+- **Refs and HEAD are now encrypted** — `write_ref` and `update_head` stored them in clear text, so every commit hash a branch or tag pointed at was readable off disk even when the objects themselves were encrypted: the whole commit graph was exposed. Both sides now go through the same cipher as the object store and index. Reads stay tolerant of un-migrated refs, so a repository part-way through conversion still works, and `migrate-encryption` converts them. A branch *name* is a filename and remains visible — encrypting contents cannot hide directory entries, and hiding names would mean one encrypted index in place of a file per ref
+
+### Fixed
+
+- **The GUI had not compiled for two months** — `gui/src-tauri/Cargo.toml` asked for `lit = { path = "../.." }`, but that package was renamed to `litvc` on 2026-06-01. Nothing noticed because CI built the Rust crate and nothing else
+
+### Added
+
+- **CI builds the GUI backend and the website** — 62 tracked files across `gui/` and `website/` had no verification at all, which is how the GUI stayed broken. The Tauri backend is checked on Windows so it needs no system libraries; the website runs `npm ci && npm run build`
+
 ## [1.2.1] - 2026-08-05
 
 ### Fixed

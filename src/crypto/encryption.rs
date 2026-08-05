@@ -792,6 +792,16 @@ impl EncryptionManager {
         manager
     }
 
+    /// Whether `data` carries our encryption header.
+    ///
+    /// Lets a reader tell ciphertext from content written before encryption
+    /// was switched on, so a repository part-way through migration stays
+    /// readable. Nothing we write in the clear begins with this byte: refs hold
+    /// hex or `ref: `, the index holds JSON.
+    pub fn is_encrypted_payload(data: &[u8]) -> bool {
+        data.first() == Some(&ENCRYPTION_VERSION)
+    }
+
     /// Initialize encryption with passphrase
     pub fn initialize(&mut self, passphrase: &str) -> Result<(), String> {
         if !self.config.enabled {

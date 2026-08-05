@@ -16,6 +16,41 @@ pub fn get_lit_dir(repo_path: &Path) -> PathBuf {
     repo_path.join(".lit")
 }
 
+/// The encryption manager guarding a repository's refs.
+///
+/// Built the same way the object store and index build theirs, so refs are
+/// covered by the same passphrase and the same non-interactive sources. When
+/// encryption is off the manager passes bytes through untouched.
+fn ref_encryption(repo_path: &Path) -> EncryptionManager {
+    let config = crate::crypto::encryption::EncryptionConfig::load(repo_path).unwrap_or_default();
+    EncryptionManager::new_auto(config, repo_path)
+}
+
+/// Write ref-shaped text, encrypted when the repository is.
+fn write_ref_file(path: &Path, repo_path: &Path, text: &str) -> Result<(), String> {
+    let data = ref_encryption(repo_path).encrypt(text.as_bytes())?;
+    fs::write(path, data).map_err(|e| format!("Failed to write reference: {}", e))
+}
+
+/// Read ref-shaped text, decrypting it when it was encrypted.
+///
+/// A ref written before encryption was switched on carries no header and is
+/// returned as it stands, so a repository that has not been migrated still
+/// reads. `migrate-encryption` converts them.
+fn read_ref_file(path: &Path, repo_path: &Path) -> Result<String, String> {
+    let data = fs::read(path).map_err(|e| format!("Failed to read reference: {}", e))?;
+
+    let plain = if EncryptionManager::is_encrypted_payload(&data) {
+        ref_encryption(repo_path).decrypt(&data)?
+    } else {
+        data
+    };
+
+    String::from_utf8(plain)
+        .map_err(|e| format!("Reference is not valid UTF-8: {}", e))
+        .map(|s| s.trim().to_string())
+}
+
 /// Check if a directory is a Lit repository
 pub fn is_lit_repo(path: &Path) -> bool {
     get_lit_dir(path).exists()
@@ -45,9 +80,7 @@ pub fn read_ref(repo_path: &Path, ref_name: &str) -> Result<String, String> {
         return Err(format!("Reference '{}' not found", ref_name));
     }
 
-    fs::read_to_string(&ref_path)
-        .map_err(|e| format!("Failed to read reference: {}", e))
-        .map(|s| s.trim().to_string())
+    read_ref_file(&ref_path, repo_path)
 }
 
 /// Read an encrypted reference file
@@ -84,8 +117,7 @@ pub fn write_ref(repo_path: &Path, ref_name: &str, hash: &str) -> Result<(), Str
         fs::create_dir_all(parent).map_err(|e| format!("Failed to create ref directory: {}", e))?;
     }
 
-    fs::write(&ref_path, format!("{}\n", hash))
-        .map_err(|e| format!("Failed to write reference: {}", e))
+    write_ref_file(&ref_path, repo_path, &format!("{}\n", hash))
 }
 
 /// Write an encrypted reference file
@@ -145,10 +177,7 @@ pub fn list_refs(repo_path: &Path, prefix: &str) -> Result<Vec<Reference>, Strin
                 .to_string_lossy()
                 .to_string();
 
-            let hash = fs::read_to_string(path)
-                .map_err(|e| format!("Failed to read ref: {}", e))?
-                .trim()
-                .to_string();
+            let hash = read_ref_file(path, repo_path)?;
 
             refs.push(Reference { name, hash });
         }
@@ -165,9 +194,7 @@ pub fn read_head(repo_path: &Path) -> Result<String, String> {
         return Err("HEAD not found".to_string());
     }
 
-    let content =
-        fs::read_to_string(&head_path).map_err(|e| format!("Failed to read HEAD: {}", e))?;
-
+    let content = read_ref_file(&head_path, repo_path)?;
     let content = content.trim();
 
     // Check if HEAD is symbolic (ref: refs/heads/main)
@@ -186,9 +213,7 @@ pub fn read_head(repo_path: &Path) -> Result<String, String> {
 pub fn get_current_branch(repo_path: &Path) -> Result<String, String> {
     let head_path = get_lit_dir(repo_path).join("HEAD");
 
-    let content =
-        fs::read_to_string(&head_path).map_err(|e| format!("Failed to read HEAD: {}", e))?;
-
+    let content = read_ref_file(&head_path, repo_path)?;
     let content = content.trim();
 
     if let Some(branch) = content.strip_prefix("ref: refs/heads/") {
@@ -202,8 +227,11 @@ pub fn get_current_branch(repo_path: &Path) -> Result<String, String> {
 pub fn update_head(repo_path: &Path, branch: &str) -> Result<(), String> {
     let head_path = get_lit_dir(repo_path).join("HEAD");
 
-    fs::write(&head_path, format!("ref: refs/heads/{}\n", branch))
-        .map_err(|e| format!("Failed to update HEAD: {}", e))
+    write_ref_file(
+        &head_path,
+        repo_path,
+        &format!("ref: refs/heads/{}\n", branch),
+    )
 }
 
 /// Update HEAD to point to a branch (encrypted)
@@ -230,7 +258,7 @@ pub fn update_head_encrypted(
 pub fn set_head_detached(repo_path: &Path, hash: &str) -> Result<(), String> {
     let head_path = get_lit_dir(repo_path).join("HEAD");
 
-    fs::write(&head_path, format!("{}\n", hash)).map_err(|e| format!("Failed to set HEAD: {}", e))
+    write_ref_file(&head_path, repo_path, &format!("{}\n", hash))
 }
 
 /// Set HEAD to a specific commit (detached, encrypted)

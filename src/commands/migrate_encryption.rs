@@ -85,16 +85,34 @@ pub fn execute() -> Result<MigrateEncryptionResponse, crate::errors::LitError> {
     let mut objects_encrypted = 0usize;
     let mut already = 0usize;
 
-    // Only what the normal write path encrypts: loose objects and the index.
+    // Everything the normal write path encrypts: loose objects, the index,
+    // refs and HEAD.
     //
-    // Refs and HEAD are deliberately left alone. `write_ref` and `update_head`
-    // store them in clear text — the `_encrypted` variants beside them have no
-    // callers — so encrypting them here would produce files that `read_ref` and
-    // `read_head` cannot read, and `branch` and `show` would start failing on a
-    // repository this command is supposed to repair.
+    // Refs were excluded while `write_ref` stored them in the clear —
+    // encrypting them then produced files `read_ref` could not read, and
+    // `branch` and `show` broke. Now that both sides of refs go through the
+    // cipher, they migrate with the rest.
     for path in files_under(&lit.join("objects")) {
         if encrypt_file(&path, &encryption)? {
             objects_encrypted += 1;
+        } else {
+            already += 1;
+        }
+    }
+
+    let mut refs_encrypted = 0usize;
+    for path in files_under(&lit.join("refs")) {
+        if encrypt_file(&path, &encryption)? {
+            refs_encrypted += 1;
+        } else {
+            already += 1;
+        }
+    }
+
+    let head = lit.join("HEAD");
+    if head.exists() {
+        if encrypt_file(&head, &encryption)? {
+            refs_encrypted += 1;
         } else {
             already += 1;
         }
@@ -148,15 +166,17 @@ pub fn execute() -> Result<MigrateEncryptionResponse, crate::errors::LitError> {
     Ok(MigrateEncryptionResponse {
         objects_encrypted,
         objects_unpacked,
+        refs_encrypted,
         index_encrypted,
         packs_expanded,
         already_encrypted: already,
         message: format!(
-            "Encrypted {} loose objects and {} unpacked from {} pack files; index {}; \
-             {} already encrypted",
+            "Encrypted {} loose objects, {} unpacked from {} pack files and {} refs; \
+             index {}; {} already encrypted",
             objects_encrypted,
             objects_unpacked,
             packs_expanded,
+            refs_encrypted,
             if index_encrypted {
                 "encrypted"
             } else {

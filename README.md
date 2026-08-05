@@ -634,10 +634,12 @@ you to run it.
 
 Two things worth knowing:
 
-- **Refs and HEAD are not encrypted.** `write_ref` and `update_head` store them
-  in clear text, so branch and tag names and the commit hashes they point at
-  remain visible on disk even in an encrypted repository. Object contents,
-  commit messages and the index are encrypted; the shape of the history is not.
+- **Ref names are visible, ref contents are not.** Object contents, commit
+  messages, the index, and the commit hashes inside refs and HEAD are all
+  encrypted. A branch or tag *name* is a filename under `.lit/refs/`, so it
+  stays readable on disk whatever its contents hold — encrypting file contents
+  cannot hide directory entries. Hiding names would mean storing all refs in
+  one encrypted index instead of a file per ref.
 - **One key derivation per command.** PBKDF2 runs 600,000 iterations, which is
   deliberate and takes a noticeable fraction of a second. A command opens
   several stores, so the derived key is cached in memory for the life of the
@@ -648,7 +650,7 @@ Two things worth knowing:
 
 ## Testing
 
-`cargo test` runs 423 tests across unit, integration, and performance suites:
+`cargo test` runs 424 tests across unit, integration, and performance suites:
 
 ```shell
 cargo test                                                       # everything
