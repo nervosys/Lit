@@ -54,3 +54,52 @@ jobs:
 
       - name: Generate docs
         run: cargo doc --no-deps
+
+  # The GUI and the website were built by nothing, which is how the Tauri
+  # backend went two months without compiling: its dependency still named the
+  # crate `lit` after it was renamed to `litvc`, and no job ever found out.
+  gui:
+    name: GUI backend
+    # Windows so the Tauri build needs no system libraries; the point is to
+    # catch the crate drifting away from the GUI, not to produce a bundle.
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            gui/src-tauri/target
+          key: ${{ runner.os }}-gui-${{ hashFiles('gui/src-tauri/Cargo.lock') }}
+
+      - name: Check the Tauri backend
+        run: cargo check --manifest-path gui/src-tauri/Cargo.toml
+
+  website:
+    name: Documentation website
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - name: Install dependencies
+        working-directory: website
+        run: npm ci
+
+      - name: Build
+        working-directory: website
+        run: npm run build
