@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **`lit migrate-encryption`** — encrypts a repository created before encryption was switched on. Previously this could not be done at all: the existing index and objects carry no encryption header, so setting `enabled = true` left every command failing with no way forward. The command encrypts the loose objects and the index in place, and expands any pack into encrypted loose objects for `gc` to re-pack. It is idempotent, so an interrupted run is finished by running it again rather than leaving the repository half-converted
 
+### Fixed
+
+- **Cross-pack delta bases depended on directory order** — a `REF_DELTA` names its base by hash, and a thin pack leaves that base outside the file, usually in a sibling pack. Packs were resolved one at a time and folded into the discovered set afterwards, so a base in another pack was only found when `read_dir` happened to return that pack first: the same repository could import or fail depending on filesystem order. All packs now resolve together, keyed by pack and offset, so a base is found wherever it lives. A thin pack whose bases are absent from the source entirely is still reported — there is nothing to rebuild from
+
 ### Documentation
 
 - **Refs and HEAD are not encrypted** — `write_ref` and `update_head` store them in clear text, so branch and tag names and the commit hashes they point at stay visible on disk even in an encrypted repository. Object contents, commit messages and the index are encrypted; the shape of the history is not. The README now says so rather than leaving it to be discovered

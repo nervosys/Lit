@@ -622,9 +622,18 @@ cannot be resolved.
 
 Packed repositories are read directly, including deltified entries. Both
 `OFS_DELTA` (base named by offset) and `REF_DELTA` (base named by SHA-1) are
-reconstructed, and delta chains resolve to any depth. The only case that still
-fails is a *thin* pack, whose bases deliberately live outside the file; run
-`git index-pack --fix-thin` on it first.
+reconstructed, and delta chains resolve to any depth.
+
+All packs resolve together rather than one at a time. A `REF_DELTA` names its
+base by hash, and a *thin* pack leaves that base outside the file — usually in a
+sibling pack or among the loose objects. Resolving each pack in isolation made
+that work only when the directory happened to yield the base's pack first, so an
+import could succeed or fail on `read_dir` order alone. Entries are keyed by
+pack and offset, so a base is found wherever in the repository it lives.
+
+What remains impossible is a thin pack whose bases are absent from the source
+altogether — the data is simply not there to rebuild from. That is reported
+against the object that needs it, with `git index-pack --fix-thin` as the fix.
 
 Annotated tags are converted to Lit tag objects, so they keep their own hash,
 tagger and message rather than collapsing into the commit they point at.

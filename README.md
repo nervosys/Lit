@@ -648,7 +648,7 @@ Two things worth knowing:
 
 ## Testing
 
-`cargo test` runs 421 tests across unit, integration, and performance suites:
+`cargo test` runs 422 tests across unit, integration, and performance suites:
 
 ```shell
 cargo test                                                       # everything
