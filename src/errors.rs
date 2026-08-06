@@ -210,6 +210,28 @@ impl LitError {
                     "Create a new repository with encryption enabled and import into it",
                 ]
             }
+            // A key file that has gone missing is not a missing passphrase, and
+            // the generic advice sends the user to set LIT_PASSPHRASE, which
+            // will not help and risks them "fixing" it by letting a new key be
+            // created over data the old one holds.
+            LitError::General(msg) | LitError::IO(msg) | LitError::Encryption(msg)
+                if msg.contains("its key file is missing") =>
+            {
+                vec![
+                    "The repository is encrypted and its key file is gone; a new key cannot open it",
+                    "Restore the key file from backup, or point key_file in .lit/encryption.toml at it",
+                ]
+            }
+            // A key file shared between repositories holds one passphrase, so
+            // the rejection is about which repository the key belongs to.
+            LitError::General(msg) | LitError::IO(msg) | LitError::Encryption(msg)
+                if msg.contains("shared key file") =>
+            {
+                vec![
+                    "This key file is shared between repositories and holds a single passphrase",
+                    "Remove key_file from .lit/encryption.toml to give this repository its own key",
+                ]
+            }
             LitError::General(msg) | LitError::IO(msg)
                 if msg.contains("Encryption not initialized") =>
             {

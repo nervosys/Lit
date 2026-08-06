@@ -5,6 +5,27 @@ All notable changes to Lit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-08-06
+
+### Fixed
+
+- **`lit rotate-key` could not succeed, and had never been run** — it built the manager for the new passphrase by calling `initialize`, which reads the key file; that file still held the old salt and verification hash, so rotation stopped at `Invalid passphrase` before writing anything. Each attempt also counted toward the brute-force lockout. Had it got past that, the key it derived would have used the *old* salt while the key file it then saved recorded a new one, leaving the repository unreadable by any passphrase. The new key is now derived directly and used through `EncryptionManager::from_key`, never through the file it is about to replace. The command had one test, covering the case where encryption is switched off; the path that does the work is now driven end to end by `rotate_with_passphrases`, which takes both passphrases instead of prompting
+- **Rotation now covers packed objects and the encrypted ref index** — it walked `.lit/objects` and loose `.lit/refs` only. Objects inside `.lit/packs` were left encrypted under a key that no longer existed anywhere, and `refs.enc` — the single encrypted file that holds every branch and tag once refs stop being loose — was never touched, so the whole ref namespace was lost. Packs are expanded to loose objects under the new key, as `migrate-encryption` already did; run `lit gc` afterwards to pack them again
+- **A file left in the clear no longer fails the rotation** — `lit init` writes `HEAD` before `encryption.toml` can ask for it to be encrypted, so an encrypted repository legitimately contains one plaintext file until something moves HEAD. Rotation passes it through and writes it back encrypted
+
+### Changed
+
+- **Each repository gets its own encryption key file** — `key_file` defaulted to `~/.lit/encryption.key`, and every example in the documentation named that same path, so in practice one file served every repository on the machine. A key file holds a single salt and a single verification hash, so the second repository to use it had to adopt the first one's passphrase or fail with `Invalid passphrase` for a passphrase that was perfectly correct. Leaving `key_file` unset now resolves to `~/.lit/keys/<repository>-<digest>.key`, and the path chosen is written back into `.lit/encryption.toml` so moving the repository keeps it pointing at the same key. Existing configurations name their key file explicitly and are unaffected. Key files stay outside the working tree: they carry the salt and the verification hash that make offline passphrase guessing possible, which should not travel with the data they protect
+- **A missing key file is reported rather than replaced** — `initialize` created a fresh key whenever the file was absent, which is right the first time and wrong every time after: a deleted or unreachable key file produced a new one that opened nothing, and the failure surfaced as a complaint about encryption headers. A repository that already holds encrypted content now says its key file is missing and stops. A repository still holding plaintext — what `migrate-encryption` exists to fix — is unaffected
+- **The reason a repository could not be unlocked reaches the user** — `new_auto` cannot return an error, so it printed the reason to stderr and the first read failed with `Encryption not initialized`, naming the symptom instead of the cause. The reason is now carried and reported
+
+### Security
+
+- **The agent's endpoint file is restricted before it takes its name** — `~/.lit/agent.json` was written and then restricted, leaving a window in which the token sat at a known path with whatever permissions it was created with. That token is the entire boundary between another account on the machine and a held passphrase, and an attacker watching the path does not have to be lucky to catch the window. It is now written to a temporary file, restricted, and renamed — the same shape `EncryptionKey::save` uses, and for the same reason
+- **`~/.lit` and `~/.lit/keys` are restricted to their owner** — the key files inside are named after the repositories they open, so the listing is worth keeping private even though each file is already restricted
+- **`lit agent stop` no longer orphans a live agent** — it removed the endpoint file whatever happened, including on a timeout. An agent that was merely busy would then still be running and still holding a passphrase, with nothing able to reach it again. The file is now removed when the agent confirms it stopped, or when nothing that can prove it is the agent is there; any other failure leaves it in place and says so
+- The module documentation no longer claims the agent answers nothing without a token. `Hello` is unauthenticated by necessity — it is how a client checks the server before trusting it — and any local account can use it as an HMAC oracle under the token and learn that an agent is running. Neither leads to the token or a passphrase, but the stronger claim was not true
+
 ## [1.5.1] - 2026-08-06
 
 ### Security

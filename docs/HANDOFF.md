@@ -1,8 +1,9 @@
 # Handoff
 
 State of the repository as of **2026-08-06**, after a run of security work that
-took it from 1.0.2 to 1.5.1. Written for whoever picks this up next, including a
-future me who has forgotten all of it.
+took it from 1.0.2 to 1.5.1, and a follow-up pass on the three items in §6.
+Written for whoever picks this up next, including a future me who has forgotten
+all of it.
 
 ---
 
@@ -10,13 +11,25 @@ future me who has forgotten all of it.
 
 Every claim below was verified **locally**. GitHub Actions is not running:
 
-- 14 workflow runs are **queued** and never start.
-- The ones that do start fail on `Failed to resolve action download info: Service Unavailable` — GitHub cannot fetch `actions/checkout` and friends.
+- 17 workflow runs are **queued** and never start.
+- The ones that started earlier failed on `Failed to resolve action download info: Service Unavailable` — GitHub could not fetch `actions/checkout` and friends.
 
-That is infrastructure, not code. The website job passes when it runs; the Rust
-jobs never get far enough to compile anything. **Do not read a green or red
-badge as a statement about this code** until runs actually execute. First job
-for the next person with repository admin: find out why Actions is stalled.
+**This was diagnosed, and it is not ours.** GitHub declared a *major outage* of
+Actions beginning 2026-08-06 15:22 UTC — "workflow runs are failing or delayed
+in starting, queued jobs may time out, requests to the Actions API are returning
+errors" — affecting Actions and Pages. Every run in this repository that stopped
+executing stopped after that timestamp; the last run to complete was at 15:42.
+Repository Actions permissions are `enabled: true, allowed_actions: all`, so
+there is nothing to change here.
+
+What to do: wait for the incident to clear, then re-run the queued workflows
+(`gh run rerun <id>`) and read the results. If they are still queued long after
+GitHub reports recovery, the next thing to check is the organisation's Actions
+policy and spending limit, which needs `admin:org` and was not readable from
+this account.
+
+**Do not read a green or red badge as a statement about this code** until runs
+actually execute.
 
 The local equivalent of the full CI matrix:
 
@@ -29,7 +42,8 @@ cargo check --manifest-path gui/src-tauri/Cargo.toml
 cd website && npm ci && npm run build
 ```
 
-All of the above pass on `master` at `v1.5.1`.
+All of the above pass on `master` at `v1.6.0`: 445 tests, 1 ignored, plus the
+ignored throttle test run separately. Still one person, one platform, Windows.
 
 ---
 
@@ -50,6 +64,7 @@ installing **from the registry** rather than trusting the local build.
 | 1.4.1 | The brute-force throttle lived in a process `static`, so it reset on every command |
 | 1.5.0 | `lit agent` — passphrase reuse across commands |
 | 1.5.1 | The agent client sent the passphrase to whatever answered on the recorded port |
+| 1.6.0 | `rotate-key` had never worked. One key file was shared by every repository. The agent's token file was restricted only after being written |
 
 ### The root cause behind most of it
 
@@ -103,13 +118,25 @@ Given that a same-user process can simply *ask the agent for the passphrase*,
 this is not the weakest link, and threading it was not worth the concurrency
 surface. Revisit if the agent ever grows a stronger same-user story.
 
-### One encryption key file is shared across repositories
+### ~~One encryption key file is shared across repositories~~ — decided
 
-`encryption.key` defaults to `~/.lit/encryption.key` — one file, not one per
-repository. Initialising encryption in a second repository fails if the first
-one's key exists under a different passphrase. This surfaced while testing:
-`migrate-encryption` succeeded in one repo and then failed in a fresh one for no
-obvious reason. Worth a design decision, not just a better error message.
+Resolved. `key_file` left unset now resolves to `~/.lit/keys/<repo>-<digest>.key`
+and the chosen path is written back into `.lit/encryption.toml`, so a moved
+repository keeps its key. Key files stay outside the working tree: they carry
+the salt and verification hash that make offline guessing possible, and those
+should not travel with the data they protect. Existing configs name their key
+file explicitly and are untouched — including ones pointing at the old shared
+path, where the "Invalid passphrase" now explains that the file is shared.
+
+Two things fell out of that decision and are worth knowing:
+
+- A missing key file used to be replaced with a new one, silently. That is right
+  the first time and wrong every time after. A repository that already holds
+  encrypted content now refuses and says the key file is gone.
+- `.lit/HEAD` is written in the clear by `lit init` and stays that way until
+  something moves HEAD, so an encrypted repository legitimately contains one
+  plaintext file naming the current branch. Rotation now re-writes it encrypted,
+  but a repository that has never rotated still has it.
 
 ### Thin packs with absent bases
 
@@ -164,10 +191,23 @@ running system rather than against the source that was supposed to implement it.
 
 ---
 
-## 6. If you want the next thing to do
+## 6. The three next things, and what came of them
 
-In rough order of value:
+1. **Get CI running** — diagnosed, not ours: a GitHub Actions major outage from 15:22 UTC. See §1 for what to do when it clears. Still true that everything rests on local verification on Windows, and that the Unix branches of `restrict_to_owner` and `restrict_dir_to_owner` have never executed anywhere.
+2. **Decide the shared-key-file question** — decided and implemented; see §3.
+3. **Attack the agent again** — done. Four findings, in `docs/SECURITY_AUDIT.md` §13. None is a break of the protocol: the handshake added in 1.5.1 holds up. The one worth naming is that `~/.lit/agent.json` was written and *then* restricted, leaving the token briefly readable at a known path — the same defect I-1 and I-3 were about for the key file, in a file written after those were fixed. **The lesson generalises: when a class of bug is fixed, grep for the pattern rather than fixing the instance.**
 
-1. **Get CI running.** Everything here rests on local verification by one person on one platform (Windows). The Unix permission paths in `restrict_to_owner` have never executed anywhere.
-2. **Decide the shared-key-file question** in §3 — it is the one item that is a design gap rather than a documented limit.
-3. **Attack the agent again.** The 1.5.1 hole was found by reviewing 1.5.0 an hour after publishing it, and every unit test written for 1.5.0 passed against the vulnerable code: they tested whether the *server* authenticated the client, and never asked whether the *client* authenticated the server. Assume there is another one.
+While reading that code, `lit rotate-key` turned out never to have worked — it
+derived the new key by reading the key file that still described the old
+passphrase, and stopped at "Invalid passphrase". Its one test covered the
+encryption-disabled early return, so the path that does the work had never
+executed. It also ignored `.lit/packs` and `refs.enc` entirely, which would have
+destroyed every packed object and the whole ref namespace had it got that far.
+Fixed, with an end-to-end test.
+
+### What is actually next
+
+1. **Still: get CI running**, then re-run everything and believe nothing until it is green.
+2. **Ship this as 1.6.0** and smoke-test it *from crates.io*, per §4 — `rotate-key` in particular, since it is a command that has demonstrably never run.
+3. **`.lit/HEAD` in the clear.** See §3. It names the current branch. Either encrypt it at `init` when encryption is configured, or accept it and say so in `docs/ENCRYPTION.md`.
+4. **Look for the next instance of an old pattern**, rather than the next new bug. Two of the last three findings were repeats of something already fixed elsewhere.

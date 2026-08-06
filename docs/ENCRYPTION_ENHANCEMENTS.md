@@ -38,7 +38,7 @@ Added to `EncryptionConfig`:
 ```toml
 # .lit/encryption.toml
 enabled = true
-key_file = "~/.lit/encryption.key"
+# key_file: omit for a per-repository key under ~/.lit/keys/ (since 1.6.0)
 fips_mode = true
 cache_timeout_secs = 300  # 5 minutes (0 to disable)
 ```
@@ -314,7 +314,7 @@ lazy_static = "1.4"    # Static initialization for cache
 ```toml
 # .lit/encryption.toml
 enabled = true
-key_file = "~/.lit/encryption.key"
+# key_file: omit for a per-repository key under ~/.lit/keys/ (since 1.6.0)
 fips_mode = true
 cache_timeout_secs = 300  # NEW: Passphrase cache timeout
 ```

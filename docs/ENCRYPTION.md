@@ -119,7 +119,6 @@ lit init
 
 # Edit .lit/encryption.toml to enable
 echo 'enabled = true
-key_file = "~/.lit/encryption.key"
 fips_mode = true' > .lit/encryption.toml
 
 # Set your passphrase (will be prompted)
@@ -137,8 +136,19 @@ lit commit -m "First encrypted commit"
 # Enable encryption for all repository data
 enabled = true
 
-# Path to encrypted key file (stores salt for key derivation)
-key_file = "~/.lit/encryption.key"
+# Path to the encrypted key file, which stores the salt for key derivation.
+#
+# Leave it out. Lit then gives this repository a key file of its own, under
+# ~/.lit/keys/, and writes the path it chose back into this file.
+#
+# Naming one explicitly is supported, but a path shared between repositories
+# can only ever hold one passphrase: the second repository to use it either
+# reuses the first one's passphrase or fails with "Invalid passphrase" for a
+# passphrase that is perfectly correct. `key_file = "~/.lit/encryption.key"`
+# was the documented value in every example before 1.6.0, so in practice every
+# repository on a machine collided on one file.
+#
+# key_file = "~/.lit/keys/my-project.key"
 
 # FIPS mode (strict FIPS 140-3 compliance)
 fips_mode = true
@@ -148,6 +158,38 @@ fips_mode = true
 # Set to 0 for maximum security (prompts every time)
 cache_timeout_secs = 300
 ```
+
+### Where the Key File Lives
+
+Each repository gets its own key file, under `~/.lit/keys/`, named after the
+repository directory and a digest of its path:
+
+```
+~/.lit/keys/my-project-3f9a1c7b2e40.key
+```
+
+Two properties are deliberate:
+
+- **One per repository.** A key file holds a single salt and a single
+  passphrase-verification hash, so a shared one forces every repository on the
+  machine onto one passphrase. Initialising encryption in a second repository
+  against an existing shared key fails with "Invalid passphrase" — for a
+  passphrase that is correct, just not for that key.
+- **Outside the working tree.** The file holds no key material, but it does hold
+  the salt and the verification hash, which together let anyone holding it test
+  passphrase guesses offline. Keeping it in `.lit/` would ship that with every
+  copy, backup or clone of the repository it protects.
+
+The path is chosen the first time the repository is opened and written back into
+`.lit/encryption.toml`, so moving the repository afterwards keeps it pointing at
+the same key. **Back this file up.** Without it the repository cannot be opened
+by any passphrase; Lit refuses to create a replacement over data the old key
+holds, rather than appearing to work and then failing to decrypt.
+
+Repositories created before 1.6.0 have an explicit `key_file` in their config
+and keep using it, shared or not. To move one to a key of its own, rotate the
+passphrase and then delete the `key_file` line — or set it to a new path and
+rotate.
 
 ### Passphrase Caching
 
@@ -398,6 +440,17 @@ lit rotate-key
 5. **Re-encryption**: Encrypts all data with new key
 6. **Cache Clear**: Clears old passphrase from cache
 
+> **Packs are expanded.** Objects inside a pack are encrypted individually, and
+> a pack cannot be re-keyed in place without recomputing every offset and its
+> index. Rotation therefore writes packed objects back out as loose objects
+> under the new key and removes the packs, exactly as `migrate-encryption` does.
+> Run `lit gc` afterwards to pack them again.
+
+> **Before 1.6.0 this command could not succeed.** It built the new key by
+> re-reading the key file, which still described the old passphrase, so it
+> stopped at "Invalid passphrase" — and each attempt counted toward the
+> brute-force lockout. Nothing was written, so no repository was damaged by it.
+
 **Example session**:
 ```
 $ lit rotate-key
@@ -638,13 +691,11 @@ tar -czf repo-backup-$(date +%Y%m%d).tar.gz .lit/
 # 2. Enable encryption
 cat > .lit/encryption.toml << EOF
 enabled = true
-key_file = "~/.lit/encryption.key"
 fips_mode = true
 EOF
 
-# 3. Re-write all objects (future feature)
-# For now, encryption applies to new commits only
-# Manually re-commit all data to encrypt everything
+# 3. Re-write everything already on disk under the new key
+lit migrate-encryption
 
 # 4. Verify encryption
 file .lit/objects/*/*  # Should not show "Git pack" or readable text

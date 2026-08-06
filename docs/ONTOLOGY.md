@@ -638,7 +638,7 @@ Lit follows a 7-layer architecture from CLI entry point to disk I/O:
 .lit/
 ├── HEAD                          # Current branch reference
 ├── config.toml                   # Repository configuration
-├── encryption.key                # Encrypted key file (if encryption enabled)
+├── encryption.toml               # Encryption settings (key file lives in ~/.lit/keys/)
 ├── index                         # Staging area (binary)
 ├── audit.log                     # HMAC-signed audit log
 ├── audit.key                     # Audit log HMAC key (read-only)
@@ -721,7 +721,7 @@ allowed_media = []               # Empty = all USB
 
 [encryption]
 enabled = true
-key_file = "~/.lit/encryption.key"
+# key_file is chosen per repository under ~/.lit/keys/ when left unset
 fips_mode = true
 cache_timeout_secs = 300         # Passphrase cache TTL (0 = disabled)
 ```

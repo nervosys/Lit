@@ -47,12 +47,21 @@ pub const DEFAULT_IDLE_TIMEOUT_SECS: u64 = 900;
 /// Refuse absurd request bodies rather than growing a buffer for them.
 const MAX_REQUEST_BYTES: u64 = 64 * 1024;
 
-/// What a client sends. Every variant carries the token: there is no
-/// unauthenticated operation, not even `Status`, because whether an agent holds
-/// a passphrase for a given repository is itself worth not answering.
+/// What a client sends. Every variant that reads or changes what the agent
+/// holds carries the token: there is no unauthenticated operation on the store,
+/// not even `Status`, because whether an agent holds a passphrase for a given
+/// repository is itself worth not answering.
 ///
-/// `Hello` is the exception, and carries no token — it is how the *client*
-/// checks the server, before trusting it with anything.
+/// `Hello` is the one exception and carries no token, because it is how the
+/// *client* checks the server before trusting it with anything — a check that
+/// cannot itself require the check to have happened.
+///
+/// That does make `Hello` answerable by anyone who can reach the port, which on
+/// loopback is every account on the machine. What it gives them is an HMAC over
+/// a nonce of their choosing under a 256-bit key, and the knowledge that an
+/// agent is running. Neither is a route to the token or to a passphrase, but
+/// "the port answers nothing without the token" is not true and should not be
+/// relied on as though it were.
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum Request {
@@ -179,26 +188,53 @@ pub fn endpoint_path() -> Result<PathBuf, String> {
 
 impl Endpoint {
     pub fn load() -> Result<Endpoint, String> {
-        let path = endpoint_path()?;
-        let raw = std::fs::read(&path)
+        Self::load_from(&endpoint_path()?)
+    }
+
+    pub(crate) fn load_from(path: &std::path::Path) -> Result<Endpoint, String> {
+        let raw = std::fs::read(path)
             .map_err(|_| "No agent is running (start one with `lit agent start`)".to_string())?;
         serde_json::from_slice(&raw).map_err(|e| format!("Agent endpoint file is unreadable: {e}"))
     }
 
     fn save(&self) -> Result<(), String> {
-        let path = endpoint_path()?;
+        self.save_to(&endpoint_path()?)
+    }
+
+    /// Write the endpoint so that the token in it is never readable by anyone
+    /// else, not even briefly.
+    ///
+    /// This used to write the file and restrict it afterwards, which leaves a
+    /// window in which the token — the only thing standing between another
+    /// account on this machine and the passphrase — sits at a known path with
+    /// whatever permissions it was created with. The window is short and an
+    /// attacker who watches the path does not have to be lucky to hit it.
+    ///
+    /// So the restriction goes on before the file takes the name anything would
+    /// look for. This is the same shape as `EncryptionKey::save`, and for the
+    /// same reason: the fix there was findings I-1 and I-3, and this file was
+    /// left doing what those findings were about.
+    pub(crate) fn save_to(&self, path: &std::path::Path) -> Result<(), String> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)
                 .map_err(|e| format!("Failed to create agent directory: {e}"))?;
+            // Nothing in ~/.lit is another account's business, and the key
+            // files kept there are named after the repositories they open.
+            let _ = crate::crypto::encryption::restrict_dir_to_owner(parent);
         }
+
         let raw =
             serde_json::to_vec(self).map_err(|e| format!("Failed to encode endpoint: {e}"))?;
-        std::fs::write(&path, raw).map_err(|e| format!("Failed to write endpoint: {e}"))?;
 
-        // The whole security boundary. Without this the token is readable by
-        // every account on the machine, and the token is the only thing
-        // standing between them and the passphrase.
-        restrict_to_owner(&path)?;
+        let temp = path.with_extension("tmp");
+        std::fs::write(&temp, raw).map_err(|e| format!("Failed to write endpoint: {e}"))?;
+        restrict_to_owner(&temp)?;
+
+        std::fs::rename(&temp, path).map_err(|e| {
+            let _ = std::fs::remove_file(&temp);
+            format!("Failed to write endpoint: {e}")
+        })?;
+
         Ok(())
     }
 
@@ -566,13 +602,32 @@ pub fn status() -> Result<(usize, u64), String> {
 }
 
 pub fn shutdown() -> Result<(), String> {
-    let result = request(&Request::Shutdown { token: token()? });
-    // The agent removes its own endpoint file, but if it died without doing so
-    // a stale file would keep every later command trying a dead port.
-    Endpoint::remove();
-    match result? {
-        Response::Ok => Ok(()),
-        other => Err(format!("Agent refused to stop: {other:?}")),
+    match request(&Request::Shutdown { token: token()? }) {
+        Ok(Response::Ok) => {
+            // The agent removes its own endpoint file on the way out, but only
+            // if it got that far.
+            Endpoint::remove();
+            Ok(())
+        }
+        Ok(other) => Err(format!("Agent refused to stop: {other:?}")),
+
+        // Nothing is there to stop: either no agent, or something on the port
+        // that could not prove it is one. Clearing the file is the fix, and is
+        // what stops every later command from trying a dead port.
+        Err(e) if e.contains("No agent is running") || e.contains("could not prove") => {
+            Endpoint::remove();
+            Err(e)
+        }
+
+        // Anything else — a timeout, most likely, because the agent serves one
+        // connection at a time — means an agent may well still be running.
+        // Removing its endpoint file here would leave it holding a passphrase
+        // with nothing able to reach it again, which is the opposite of what
+        // `agent stop` was asked to do.
+        Err(e) => Err(format!(
+            "{e}. The agent may still be running and holding a passphrase; \
+             its endpoint file has been left in place so it can be reached again."
+        )),
     }
 }
 
@@ -752,6 +807,67 @@ mod tests {
             store.lock().unwrap().is_empty(),
             "shutdown should clear what it held"
         );
+    }
+
+    /// The endpoint file must never exist under its real name unrestricted.
+    ///
+    /// The token in it is the whole boundary against other accounts on the
+    /// machine, and writing-then-restricting leaves a window at a path anyone
+    /// can watch. Testing the race directly is not practical; what is testable
+    /// is that the file arrives by rename and that the restriction is applied
+    /// to something other than the final path.
+    #[test]
+    fn test_endpoint_is_written_restricted_and_by_rename() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("nested").join("agent.json");
+
+        let endpoint = Endpoint {
+            port: 4242,
+            token: generate_token(),
+            idle_timeout_secs: 900,
+        };
+        endpoint.save_to(&path).unwrap();
+
+        let read_back = Endpoint::load_from(&path).unwrap();
+        assert_eq!(read_back.port, endpoint.port);
+        assert_eq!(read_back.token, endpoint.token);
+
+        assert!(
+            !path.with_extension("tmp").exists(),
+            "the temporary endpoint file was left behind"
+        );
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&path).unwrap().permissions().mode();
+            assert_eq!(mode & 0o777, 0o600, "the token file is readable by others");
+
+            let dir_mode = std::fs::metadata(path.parent().unwrap())
+                .unwrap()
+                .permissions()
+                .mode();
+            assert_eq!(dir_mode & 0o777, 0o700, "the agent directory is listable");
+        }
+    }
+
+    /// Saving twice must work: the second save renames onto a file whose
+    /// permissions were deliberately narrowed by the first.
+    #[test]
+    fn test_endpoint_can_be_replaced() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("agent.json");
+
+        for port in [1111u16, 2222] {
+            Endpoint {
+                port,
+                token: generate_token(),
+                idle_timeout_secs: 60,
+            }
+            .save_to(&path)
+            .unwrap();
+            assert_eq!(Endpoint::load_from(&path).unwrap().port, port);
+        }
     }
 
     #[test]

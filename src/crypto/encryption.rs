@@ -79,7 +79,11 @@ const ENCRYPTION_VERSION: u8 = 1;
 pub struct EncryptionConfig {
     /// Enable encryption for repository data
     pub enabled: bool,
-    /// Path to encrypted key file
+    /// Path to encrypted key file.
+    ///
+    /// Empty means "not chosen yet"; [`EncryptionConfig::load`] fills it in
+    /// with a per-repository path. Nothing downstream ever sees it empty.
+    #[serde(default)]
     pub key_file: String,
     /// FIPS 140-3 mode (strict algorithm compliance)
     pub fips_mode: bool,
@@ -96,11 +100,94 @@ impl Default for EncryptionConfig {
     fn default() -> Self {
         EncryptionConfig {
             enabled: false,
-            key_file: "~/.lit/encryption.key".to_string(),
+            // Left unset on purpose: only `load` knows which repository this
+            // belongs to, and the answer is per repository.
+            key_file: String::new(),
             fips_mode: true,
             cache_timeout_secs: default_cache_timeout(),
         }
     }
+}
+
+/// The key file a repository gets when `encryption.toml` does not name one.
+///
+/// One file per repository, under the user's home rather than inside `.lit`.
+/// Both halves of that matter:
+///
+/// - *Per repository*, because a single shared key file means the second
+///   repository to be initialised has to reuse the first one's passphrase or
+///   fail — `~/.lit/encryption.key` was the documented value everywhere, so in
+///   practice every repository collided on one file.
+/// - *Outside the working tree*, because a key file that travelled with the
+///   repository would ship the salt and the passphrase-verification hash
+///   alongside the ciphertext they protect, turning any copied or backed-up
+///   repository into a self-contained offline guessing target.
+///
+/// The name carries the repository's directory name so the files are
+/// recognisable, and a digest of its absolute path so two directories with the
+/// same name do not collide. The path is only the *starting* binding: `load`
+/// writes the result back into `encryption.toml`, so moving a repository keeps
+/// it pointed at the same key.
+pub fn default_key_file(repo_path: &Path) -> String {
+    use sha2::{Digest, Sha256};
+
+    let absolute = fs::canonicalize(repo_path).unwrap_or_else(|_| repo_path.to_path_buf());
+
+    let label: String = absolute
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "repo".to_string())
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    let label = label.trim_matches('-').to_string();
+    let label = if label.is_empty() {
+        "repo".to_string()
+    } else {
+        label
+    };
+
+    let mut hasher = Sha256::new();
+    hasher.update(absolute.to_string_lossy().as_bytes());
+    let digest = hex::encode(hasher.finalize());
+
+    format!("~/.lit/keys/{}-{}.key", label, &digest[..12])
+}
+
+/// The legacy key path every doc and example used before key files became
+/// per-repository. Still honoured when a config names it explicitly.
+const SHARED_KEY_FILE: &str = "~/.lit/encryption.key";
+
+/// Add the one explanation a rejected passphrase usually needs.
+///
+/// A key file shared between repositories can only ever hold one passphrase, so
+/// the second repository to use it reports "Invalid passphrase" for a
+/// passphrase that is perfectly correct — for the other repository. That was
+/// the whole shape of the shared-key-file problem, and it is worth naming at
+/// the point it bites rather than leaving it to be rediscovered.
+fn explain_key_failure(error: String, key_file: &Path) -> String {
+    let is_shared = fs::canonicalize(shellexpand::tilde(SHARED_KEY_FILE).as_ref())
+        .ok()
+        .zip(fs::canonicalize(key_file).ok())
+        .is_some_and(|(shared, actual)| shared == actual);
+
+    if !is_shared || !error.contains("Invalid passphrase") {
+        return error;
+    }
+
+    format!(
+        "{error}. This repository uses the shared key file {SHARED_KEY_FILE}, \
+         which holds a single passphrase for every repository configured to use \
+         it — so another repository's passphrase will be rejected here. Remove \
+         the key_file line from .lit/encryption.toml to get a key file of this \
+         repository's own."
+    )
 }
 
 impl EncryptionConfig {
@@ -109,13 +196,37 @@ impl EncryptionConfig {
         let config_path = repo_path.join(".lit").join("encryption.toml");
 
         if !config_path.exists() {
-            return Ok(Self::default());
+            return Ok(EncryptionConfig {
+                key_file: default_key_file(repo_path),
+                ..Self::default()
+            });
         }
 
         let content = fs::read_to_string(&config_path)
             .map_err(|e| format!("Failed to read encryption config: {}", e))?;
 
-        toml::from_str(&content).map_err(|e| format!("Failed to parse encryption config: {}", e))
+        let mut config: Self = toml::from_str(&content)
+            .map_err(|e| format!("Failed to parse encryption config: {}", e))?;
+
+        if config.key_file.trim().is_empty() {
+            config.key_file = default_key_file(repo_path);
+
+            // Record the choice, but only once it matters. The derivation reads
+            // the repository's absolute path, so a repository that is moved
+            // would otherwise resolve to a different file and find no key
+            // there — which is worth writing down. Doing it for a repository
+            // that has encryption switched off would mean every command
+            // rewriting a config file the user is not using.
+            //
+            // Best effort even then: a checkout on read-only media must stay
+            // usable, and the path resolves the same way as long as it stays
+            // put.
+            if config.enabled {
+                let _ = config.save(repo_path);
+            }
+        }
+
+        Ok(config)
     }
 
     /// Save configuration to repository
@@ -145,6 +256,31 @@ pub(crate) fn restrict_to_owner(path: &Path) -> Result<(), String> {
         perms.set_mode(0o600);
         fs::set_permissions(path, perms)
             .map_err(|e| format!("Failed to restrict permissions: {}", e))?;
+    }
+
+    #[cfg(windows)]
+    windows_restrict_to_owner(path)?;
+
+    Ok(())
+}
+
+/// Keep a directory listable only by its owner.
+///
+/// Same intent as [`restrict_to_owner`], but a directory needs the execute bit
+/// to be traversable at all, so 0600 would lock the owner out of their own
+/// keys. `~/.lit` and `~/.lit/keys` are created by us and hold nothing another
+/// user has any business enumerating — the key files themselves are restricted,
+/// but their *names* say which repositories exist and where.
+pub(crate) fn restrict_dir_to_owner(path: &Path) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(path)
+            .map_err(|e| format!("Failed to read directory permissions: {}", e))?
+            .permissions();
+        perms.set_mode(0o700);
+        fs::set_permissions(path, perms)
+            .map_err(|e| format!("Failed to restrict directory permissions: {}", e))?;
     }
 
     #[cfg(windows)]
@@ -301,6 +437,17 @@ fn cached_derived_key(id: &str) -> Option<std::sync::Arc<EncryptionKey>> {
 fn remember_derived_key(id: String, key: std::sync::Arc<EncryptionKey>) {
     if let Ok(mut keys) = DERIVED_KEYS.lock() {
         keys.insert(id, key);
+    }
+}
+
+/// Forget every key derived so far in this process.
+///
+/// The cache is consulted before the key file is even looked at, so anything
+/// that changes what the key file means — rotating it, moving it, losing it —
+/// has to drop the cache or the process keeps using the key it derived earlier.
+pub fn clear_derived_key_cache() {
+    if let Ok(mut keys) = DERIVED_KEYS.lock() {
+        keys.clear();
     }
 }
 
@@ -611,6 +758,10 @@ impl EncryptionKey {
         if let Some(parent) = key_file.parent() {
             fs::create_dir_all(parent)
                 .map_err(|e| format!("Failed to create key directory: {}", e))?;
+            // Key files are named after the repositories they belong to, so the
+            // listing itself is worth keeping to the owner. Best effort: a
+            // directory the user chose and does not own is their business.
+            let _ = restrict_dir_to_owner(parent);
         }
 
         // Store: salt + version + verification_hash
@@ -999,6 +1150,13 @@ pub struct EncryptionManager {
     config: EncryptionConfig,
     engine: Option<EncryptionEngine>,
     repo_path: Option<String>,
+    /// Why `new_auto` could not unlock, if it could not.
+    ///
+    /// `new_auto` cannot return an error — every store is built through it —
+    /// so the reason used to go to stderr and the user got "Encryption not
+    /// initialized" from the first read instead, which names the symptom and
+    /// not the cause. Kept here so the read reports what actually went wrong.
+    unlock_error: Option<String>,
 }
 
 impl EncryptionManager {
@@ -1008,7 +1166,24 @@ impl EncryptionManager {
             config,
             engine: None,
             repo_path: None,
+            unlock_error: None,
         }
+    }
+
+    /// Build a manager around a key that is already in hand.
+    ///
+    /// `rotate-key` is why this exists. It has to encrypt with the *new* key
+    /// while the key file on disk still describes the old one, and going
+    /// through `initialize` there reads that file: either it rejects the new
+    /// passphrase outright, or it derives the new passphrase against the old
+    /// salt and writes data that the key file it then saves cannot open.
+    pub fn from_key(config: EncryptionConfig, key: &EncryptionKey) -> Result<Self, String> {
+        Ok(EncryptionManager {
+            config,
+            engine: Some(EncryptionEngine::new(key)?),
+            repo_path: None,
+            unlock_error: None,
+        })
     }
 
     /// Build a manager, initializing it from a non-interactive passphrase
@@ -1037,6 +1212,7 @@ impl EncryptionManager {
         manager.repo_path = Some(repo.clone());
         if let Err(e) = manager.initialize(&passphrase) {
             eprintln!("Warning: encryption is enabled but could not be unlocked: {e}");
+            manager.unlock_error = Some(e);
             return manager;
         }
 
@@ -1085,8 +1261,10 @@ impl EncryptionManager {
 
         // Load or create encryption key
         let key = if key_file.exists() {
-            EncryptionKey::load(key_file, passphrase)?
+            EncryptionKey::load(key_file, passphrase)
+                .map_err(|e| explain_key_failure(e, key_file))?
         } else {
+            self.refuse_to_replace_a_lost_key(key_file)?;
             let key = EncryptionKey::from_passphrase(passphrase, &EncryptionKey::generate_salt())?;
             key.save(&self.config.key_file, passphrase)?;
             key
@@ -1099,6 +1277,43 @@ impl EncryptionManager {
         self.engine = Some(EncryptionEngine::new(&key)?);
 
         Ok(())
+    }
+
+    /// Refuse to mint a fresh key for a repository that is already encrypted.
+    ///
+    /// A missing key file is normal exactly once — the first time encryption is
+    /// switched on. Afterwards it means the key was deleted, or the repository
+    /// was moved and its config could not record the path it resolved to. In
+    /// both cases the old code quietly created a *different* key, and the
+    /// repository then failed to decrypt with an error about headers that named
+    /// nothing the user had done. Say what actually happened instead.
+    ///
+    /// Content encrypted earlier is what distinguishes the two cases, and it
+    /// has to be judged without a key: `refs.enc` only exists in an encrypted
+    /// repository, and an encrypted index starts with our version byte. A
+    /// repository still holding plaintext — the state `migrate-encryption`
+    /// exists to fix — matches neither, and is still allowed to create a key.
+    fn refuse_to_replace_a_lost_key(&self, key_file: &Path) -> Result<(), String> {
+        let Some(repo) = self.repo_path.as_deref() else {
+            return Ok(());
+        };
+        let lit = Path::new(repo).join(".lit");
+
+        let index_is_encrypted = fs::read(lit.join("index"))
+            .map(|data| Self::is_encrypted_payload(&data))
+            .unwrap_or(false);
+
+        if !lit.join("refs.enc").exists() && !index_is_encrypted {
+            return Ok(());
+        }
+
+        Err(format!(
+            "This repository is encrypted, but its key file is missing: {}. \
+             A new key would not open the existing data. Restore the key file \
+             from backup, or point key_file in .lit/encryption.toml at wherever \
+             it now lives.",
+            key_file.display()
+        ))
     }
 
     /// Initialize encryption with passphrase caching support
@@ -1142,10 +1357,15 @@ impl EncryptionManager {
 
         match &self.engine {
             Some(engine) => engine.encrypt(plaintext),
-            None => Err(
-                "Encryption not initialized. Call initialize() with passphrase first.".to_string(),
-            ),
+            None => Err(self.locked_reason()),
         }
+    }
+
+    /// What to say when there is no engine to work with.
+    fn locked_reason(&self) -> String {
+        self.unlock_error.clone().unwrap_or_else(|| {
+            "Encryption not initialized. Call initialize() with passphrase first.".to_string()
+        })
     }
 
     /// Decrypt data if encryption is enabled
@@ -1175,9 +1395,7 @@ impl EncryptionManager {
                 }
                 engine.decrypt(encrypted)
             }
-            None => Err(
-                "Encryption not initialized. Call initialize() with passphrase first.".to_string(),
-            ),
+            None => Err(self.locked_reason()),
         }
     }
 

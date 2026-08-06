@@ -59,6 +59,19 @@ impl ObjectStore {
         })
     }
 
+    /// Create an object store that uses a manager the caller already built.
+    ///
+    /// `rotate-key` needs to write objects under a key that is not the one the
+    /// key file describes yet, which no passphrase-based constructor can
+    /// express.
+    pub fn with_encryption_manager(repo_path: &Path, manager: EncryptionManager) -> Self {
+        ObjectStore {
+            objects_dir: repo_path.join(".lit").join("objects"),
+            packs_dir: crate::storage::pack::packs_dir(repo_path),
+            encryption: Arc::new(Mutex::new(manager)),
+        }
+    }
+
     /// Get the path for an object by its hash
     /// Uses first 4 chars for directory sharding (65,536 shards for better distribution)
     fn object_path(&self, hash: &ObjectHash) -> PathBuf {

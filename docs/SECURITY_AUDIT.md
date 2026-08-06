@@ -403,3 +403,78 @@ cargo build --release: OK
 
 - **keccak 0.1.5:** ARMv8 assembly unsoundness not applicable on x86_64 Windows target (transitive dep of `sha3 0.10.8`)
 - **paste:** Unmaintained transitive dependency of `pqcrypto-mldsa`; no actionable fix until upstream updates
+
+---
+
+## 13. Review of the Agent and Key Handling (2026-08-06)
+
+A second pass over `src/crypto/agent.rs` and the key-file handling, on the
+assumption stated in `docs/HANDOFF.md` §6 that the 1.5.0 hole was unlikely to be
+the last one. Four findings, none of them a break of the agent protocol itself.
+
+| Finding | Description | Severity | Status |
+| ------- | ----------- | -------- | ------ |
+| **A-1** | Endpoint file written before being restricted | LOW–MEDIUM | ✅ FIXED |
+| **A-2** | `~/.lit` and `~/.lit/keys` listable by other accounts | LOW | ✅ FIXED |
+| **A-3** | `agent stop` orphans a live agent on timeout | LOW | ✅ FIXED |
+| **A-4** | `Hello` is an unauthenticated operation | INFO | ✅ DOCUMENTED |
+
+#### A-1: Endpoint file written before being restricted
+
+- **Location:** `src/crypto/agent.rs` — `Endpoint::save`
+- **CWE:** CWE-367 (time-of-check/time-of-use), CWE-732 (incorrect permission assignment)
+- **Description:** `~/.lit/agent.json` was created with `std::fs::write` and
+  restricted afterwards. Between the two, the token — which is the entire
+  boundary between another account on the machine and a held passphrase — sat at
+  a fixed, well-known path with default permissions. The window is short, but an
+  attacker watching that path does not need luck to hit it, and this is the same
+  defect that findings I-1 and I-3 were about for `encryption.key`: the fix there
+  was to restrict the temporary file and rename it into place. The agent file
+  was left doing what those findings described.
+- **Remediation:** `Endpoint::save_to` now writes a temporary file, restricts it,
+  and renames. Covered by `test_endpoint_is_written_restricted_and_by_rename`
+  and `test_endpoint_can_be_replaced`; the Unix permission assertions in the
+  first have not executed anywhere, because CI is not running.
+
+#### A-2: Key and agent directory listable by other accounts
+
+- **Location:** `src/crypto/encryption.rs` — `EncryptionKey::save`; `src/crypto/agent.rs` — `Endpoint::save_to`
+- **Description:** `create_dir_all` leaves `~/.lit` at the process umask,
+  typically 0755. Individual files are restricted, but key files are now named
+  after the repositories they open, so the listing states which repositories
+  exist and where they live.
+- **Remediation:** `restrict_dir_to_owner` (0700 on Unix, owner-only DACL on
+  Windows) applied to `~/.lit` and `~/.lit/keys` when they are created.
+
+#### A-3: `agent stop` orphans a live agent on timeout
+
+- **Location:** `src/crypto/agent.rs` — `shutdown`
+- **Description:** The endpoint file was removed regardless of the outcome. The
+  agent serves one connection at a time, so a request can time out against an
+  agent that is merely busy — after which the agent is still running and still
+  holding a passphrase, with no client able to find it again. `agent stop` thus
+  had a failure mode that kept a secret alive longer than the user believed.
+- **Remediation:** The file is removed when the agent confirms it stopped, or
+  when nothing that can prove it is the agent is listening. Any other failure
+  leaves the file in place and says so.
+
+#### A-4: `Hello` is an unauthenticated operation
+
+- **Location:** `src/crypto/agent.rs` — `respond_to`
+- **Description:** The module claimed "there is no unauthenticated operation, not
+  even `Status`". `Hello` is one: it carries no token, and it must, since it is
+  how a client checks the server before trusting it. Any local account can
+  therefore learn that an agent is running and obtain HMAC-SHA-256 over nonces of
+  its choosing under the token. The token has 256 bits of entropy and HMAC is a
+  PRF, so this is not a route to the token or to a passphrase.
+- **Remediation:** Not fixable without removing the check that closed the 1.5.1
+  finding, and not worth removing it for. The documentation now states what
+  `Hello` exposes rather than a stronger claim that was not true.
+
+### Also fixed in this pass (correctness, not security)
+
+- `lit rotate-key` could not succeed and had never been executed by any test;
+  see `CHANGELOG.md`. Nothing was written before it failed, so no repository was
+  damaged, but a rotation that appears available and is not is worth naming.
+- One encryption key file shared across every repository — the open design
+  question from `docs/HANDOFF.md` §3 — now resolves per repository.

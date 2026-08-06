@@ -105,7 +105,6 @@ lit init
 # 2. Enable encryption
 cat > .lit/encryption.toml << EOF
 enabled = true
-key_file = "~/.lit/encryption.key"
 fips_mode = true
 cache_timeout_secs = 300
 EOF
@@ -115,7 +114,7 @@ echo "Classified data" > secret.txt
 lit add secret.txt
 lit commit -m "First encrypted commit"
 # Enter passphrase: ********
-# (creates ~/.lit/encryption.key with random salt)
+# (creates this repository's own key file under ~/.lit/keys/ with a random salt)
 
 # 4. Subsequent operations (within 5-minute cache window)
 echo "More data" > secret2.txt
