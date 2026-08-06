@@ -1858,3 +1858,22 @@ impl CommandResponse for AgentProfileResponse {
         out
     }
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AgentResponse {
+    pub action: String,
+    /// How many passphrases the agent holds. `None` when no agent is running,
+    /// which is different from an agent holding nothing.
+    pub entries: Option<usize>,
+    pub idle_timeout_secs: Option<u64>,
+    pub message: String,
+}
+
+impl CommandResponse for AgentResponse {
+    fn command_name(&self) -> &'static str {
+        "agent"
+    }
+    fn human_readable(&self) -> String {
+        format!("{}\n", self.message)
+    }
+}

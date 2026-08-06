@@ -857,6 +857,15 @@ fn get_passphrase_non_interactive(
         }
     }
 
+    // 4. Ask the agent, if one is running. This is the only source that spans
+    //    commands — the cache above cannot, since each command is a new
+    //    process. Deliberately last: an explicitly supplied passphrase should
+    //    win over a stored one, so that overriding it does not require stopping
+    //    the agent first.
+    if let Some(from_agent) = crate::crypto::agent::get(repo_path) {
+        return Some(from_agent);
+    }
+
     None
 }
 

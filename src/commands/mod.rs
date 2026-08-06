@@ -1,5 +1,6 @@
 pub mod absorb;
 pub mod add;
+pub mod agent;
 pub mod agent_profile;
 pub mod ai;
 pub mod amend;

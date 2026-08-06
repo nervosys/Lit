@@ -167,8 +167,52 @@ Lit caches your passphrase in memory for a configurable duration:
 > library — and none at all for ordinary command-line use. Set `LIT_PASSPHRASE`
 > or `LIT_PASSPHRASE_FILE` to avoid repeated prompts from the CLI, keeping in
 > mind that an environment variable is readable by other processes running as
-> you. Caching across commands would need a passphrase agent holding the key in
-> a separate long-lived process; Lit does not have one.
+> you. To reuse a passphrase across commands, run a passphrase agent — see
+> below.
+
+### Passphrase Agent
+
+The agent is one long-lived process holding a passphrase, so separate commands
+can reuse it. It is off unless started: nothing listens on a port, writes a
+token, or holds a secret until you run `lit agent start`.
+
+```bash
+# Start it, and leave it running. It blocks, so background it.
+lit agent start --timeout 900 &
+
+# Hand it this repository's passphrase, once.
+lit agent unlock
+# Passphrase: ********
+
+# Later commands find it, with no prompt and no environment variable.
+lit status
+lit log
+
+lit agent status      # is one running, and how much does it hold
+lit agent lock        # forget this repository
+lit agent lock --all  # forget everything
+lit agent stop        # stop it, clearing everything it holds
+```
+
+Entries expire after `--timeout` seconds **unused**, rather than at a fixed age,
+so a repository you are actively working in does not start prompting in the
+middle of the work.
+
+**What the agent protects, and what it does not.** It listens on loopback and
+authenticates with a token in a file only you can read. That keeps out *other
+users on this machine*: they can reach the port, but not the token, and an
+unauthenticated request is refused.
+
+It keeps out nothing running **as you**. Such a process can read the token file,
+so it can ask the agent for the passphrase. A Unix socket or a named pipe
+restricted to the owner would grant exactly the same set of processes — this is
+not a transport problem. On an ordinary operating system, "another program
+running as me" is inside the trust boundary.
+
+So against a same-user attacker the agent is no stronger than `LIT_PASSPHRASE`.
+It is better in two narrower ways: the secret is not in an environment block,
+where it shows up in process listings and is inherited by every child; and it
+expires, where an exported variable lasts as long as the shell.
 
 **Security considerations**:
 - Passphrases stored in process memory only (never on disk)
