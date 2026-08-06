@@ -5,6 +5,13 @@ All notable changes to Lit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+
+- **The agent client now verifies the agent before sending it anything** — 1.5.0 sent the request, passphrase included, to whatever was listening on the port named in `~/.lit/agent.json`. A port outlives the process that held it: if the agent was killed, crashed, or was lost to a reboot that left the endpoint file behind, that port is free for anything else to bind — on Windows, including a process belonging to another user. The next `lit agent unlock` would have handed that process the passphrase, defeating the cross-user boundary the agent is for. The client now sends a nonce and requires a MAC over it under the token before sending anything else. A peer that answers wrongly, answers with something that is not a proof, or does not answer at all gets nothing
+- The refusal says what actually happened and what to do — a failed handshake is not a wrong passphrase, and suggesting the user check their passphrase would send them to the one thing that is not the problem
+
 ## [1.5.0] - 2026-08-06
 
 ### Added

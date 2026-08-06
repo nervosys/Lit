@@ -198,6 +198,14 @@ Entries expire after `--timeout` seconds **unused**, rather than at a fixed age,
 so a repository you are actively working in does not start prompting in the
 middle of the work.
 
+The client checks the agent before trusting it. The endpoint file records a
+port, and a port outlives the process that held it: if the agent was killed or
+lost to a reboot that left the file behind, anything may be listening there. So
+the client sends a nonce and requires a MAC over it under the token before it
+sends anything else. A peer that answers wrongly, answers with something else,
+or does not answer at all gets nothing, and you are told to run
+`lit agent stop` and start a new one.
+
 **What the agent protects, and what it does not.** It listens on loopback and
 authenticates with a token in a file only you can read. That keeps out *other
 users on this machine*: they can reach the port, but not the token, and an

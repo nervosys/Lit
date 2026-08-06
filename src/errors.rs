@@ -238,6 +238,17 @@ impl LitError {
                     "Verify network/airgap settings with 'lit config show'",
                 ]
             }
+            // A refused agent handshake is not a wrong passphrase, and saying
+            // so sends the user to check the one thing that is not the problem.
+            // What actually happened is that something other than the agent is
+            // on the recorded port, usually because the agent died without
+            // clearing its endpoint file.
+            LitError::Encryption(msg) if msg.contains("could not prove it is the agent") => {
+                vec![
+                    "Stop the stale agent with 'lit agent stop', then start a new one",
+                    "Nothing was sent to the process on that port",
+                ]
+            }
             LitError::Encryption(_) => {
                 vec![
                     "Verify passphrase is correct",
