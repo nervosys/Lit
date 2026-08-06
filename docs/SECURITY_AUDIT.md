@@ -252,6 +252,14 @@ Lit VCS v1.0.0 demonstrates a **strong security posture** for a v1 release. The 
 - **Location:** `src/crypto/fips.rs`
 - **Description:** The `run_self_tests()` function exists and tests pass, but it is not automatically invoked at startup before cryptographic operations. FIPS 140-3 requires pre-operational self-tests.
 - **Remediation:** Call `run_self_tests()` in `main()` before any crypto operation. Abort on failure.
+- **Status: RESOLVED.** `main()` runs the tests at startup so the CLI fails
+  fast, but the CLI is not the only consumer: the Tauri GUI links the library
+  directly and has no startup path of its own, so every repository operation it
+  performed ran with no power-on test. The guarantee now sits on the crypto
+  entry point instead — `crypto::fips::ensure_self_tests()` runs the KATs once
+  per process behind a `OnceLock`, and `EncryptionEngine::new` calls it. Every
+  AES-GCM operation in the crate goes through an engine, so the tests precede
+  cryptographic use regardless of which binary is driving.
 
 #### I-3: Error Messages Expose Internal Paths
 
@@ -300,7 +308,7 @@ All `unsafe` blocks have documented SAFETY comments. No undefined behavior patte
 | ---------------- | ------------------------------ | ------------------------------------- | --------------------- |
 | **FIPS 140-3**   | §4.4 Cryptographic Module      | AES-256-GCM, SHA3-512, HMAC-SHA-256   | ✅ Approved algorithms |
 | **FIPS 140-3**   | §4.9 Self-Tests                | KATs present, RNG test implemented    | ✅ M-2 FIXED           |
-| **FIPS 140-3**   | §4.9.1 Power-on Self-Tests     | Available on-demand                   | ⚠️ I-2 ACCEPTED        |
+| **FIPS 140-3**   | §4.9.1 Power-on Self-Tests     | Run before first crypto use, per process | ✅ I-2 FIXED        |
 | **NIST 800-132** | KDF Requirements               | PBKDF2-HMAC-SHA512, 600K iterations   | ✅ Exceeds minimum     |
 | **NIST 800-38D** | GCM Nonce                      | Counter-based, 2^32 limit             | ✅ Proper              |
 | **NIST 800-53**  | AC-6 Least Privilege           | Sandbox env_clear, PATH restriction   | ✅                     |
@@ -368,7 +376,7 @@ All 14 findings from this audit have been addressed. Summary:
 | **L-3** | No API rate limiting                 | ✅ FIXED      | `src/commands/serve.rs`, `src/commands/mcp_serve.rs` — per-IP sliding window rate limiter (100 req/60s) on all HTTP and lit:// endpoints |
 | **L-4** | Unmaintained PQ crate names          | ✅ FIXED      | `Cargo.toml` — removed `pqcrypto-kyber`; migrated `pqcrypto-dilithium` → `pqcrypto-mldsa` 0.1.2 (RUSTSEC-2024-0380 resolved)             |
 | **I-1** | No Windows ACL on audit files        | ✅ FIXED      | `restrict_to_owner` — owner-only DACL via `SetNamedSecurityInfoW` (0600 on Unix), applied on load as well as creation, across `audit.key`, `audit.log`, `airgap_audit.log`, `encryption.key`. The `set_readonly(true)` that stood here blocked writes and left the files readable. |
-| **I-2** | FIPS self-tests not auto-invoked     | ✅ FIXED      | `src/main.rs` — `FipsModule::power_on_self_test()` auto-invoked at startup (KATs for SHA-256, SHA-512, SHA3-512, HMAC-SHA-256, RNG)      |
+| **I-2** | FIPS self-tests not auto-invoked     | ✅ FIXED      | `src/crypto/fips.rs` — `ensure_self_tests()` runs the KATs once per process behind a `OnceLock` and gates `EncryptionEngine::new`, so they precede crypto for library consumers (the GUI) as well as for `main()` |
 | **I-3** | Error messages expose internal paths | ✅ FIXED      | `src/commands/serve.rs` — error responses now use `user_message()` with internal details logged server-side only                         |
 | **I-4** | Unused pqcrypto-kyber dependency     | ✅ FIXED      | `Cargo.toml` — removed `pqcrypto-kyber` entirely                                                                                         |
 | **I-5** | shellexpand on untrusted paths       | ✅ FIXED      | `src/network/airgap.rs` — changed `shellexpand::full()` to `shellexpand::tilde()`                                                        |

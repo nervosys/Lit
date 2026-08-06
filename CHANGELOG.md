@@ -5,6 +5,12 @@ All notable changes to Lit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+
+- **FIPS power-on self-tests now precede cryptography for every consumer, not just the CLI** — closes finding I-2. `main()` ran the known-answer tests at startup, which covered the `lit` binary and nothing else. The Tauri GUI links the library directly and has no startup path of its own, so every repository operation it performed ran with no power-on test having executed — FIPS 140-3 §4.9.1 asks that the tests precede cryptographic use, not merely that they exist. The guarantee moved onto the crypto entry point: `crypto::fips::ensure_self_tests()` runs the KATs once per process behind a `OnceLock`, and `EncryptionEngine::new` gates on it. Every AES-GCM operation in the crate goes through an engine, so no consumer can skip the tests by forgetting to ask for them. Later calls read the stored result, so the cost is one run per process
+
 ## [1.3.2] - 2026-08-06
 
 ### Security

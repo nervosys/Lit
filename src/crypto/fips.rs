@@ -341,6 +341,54 @@ impl FipsHmac {
     }
 }
 
+/// Outcome of this process's power-on self-tests, run at most once.
+static SELF_TESTS: std::sync::OnceLock<Result<(), String>> = std::sync::OnceLock::new();
+
+/// Run the power-on self-tests once per process, before any cryptography.
+///
+/// `main` invokes the tests explicitly at startup so the CLI fails fast, but
+/// the CLI is not the only thing that reaches this crate — the Tauri GUI links
+/// the library directly and has no startup path of its own. FIPS 140-3 §4.9.1
+/// wants the tests to precede cryptographic use, not merely to exist, so the
+/// guarantee belongs on the crypto entry point rather than on each consumer
+/// remembering to ask.
+///
+/// Cheap enough to call on every operation: the tests run for the first caller
+/// and every later one reads the stored result.
+pub fn ensure_self_tests() -> Result<(), String> {
+    SELF_TESTS
+        .get_or_init(|| FipsModule::new().power_on_self_test())
+        .clone()
+}
+
+#[cfg(test)]
+mod self_test_gate {
+    use super::*;
+
+    #[test]
+    fn test_ensure_self_tests_passes_and_is_idempotent() {
+        assert!(ensure_self_tests().is_ok());
+        // The second call reads the stored result rather than re-running the
+        // KATs, which is what makes it cheap enough to sit on the crypto path.
+        assert!(ensure_self_tests().is_ok());
+    }
+
+    /// The gate itself is enforced at the call site in `EncryptionEngine::new`,
+    /// and `SELF_TESTS` is process-global — by the time any one test runs, some
+    /// earlier test has almost certainly populated it, so asserting it is set
+    /// would pass whether or not the engine still calls it. What is worth
+    /// asserting is that the gate returns success: it sits in front of every
+    /// AES-GCM operation in the crate, so a failure here fails everything.
+    #[test]
+    fn test_the_gate_does_not_block_encryption() {
+        assert!(
+            ensure_self_tests().is_ok(),
+            "the self-tests gate every engine construction; a failure here \
+             takes all encryption with it"
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
