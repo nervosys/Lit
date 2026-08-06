@@ -263,6 +263,12 @@ enum Commands {
         commit: Option<String>,
     },
 
+    /// Hold a passphrase between commands
+    Agent {
+        #[command(subcommand)]
+        action: AgentAction,
+    },
+
     /// Rotate encryption passphrase
     RotateKey,
 
@@ -690,6 +696,31 @@ enum RemoteCommands {
         #[arg(short, long)]
         verbose: bool,
     },
+}
+
+#[derive(Subcommand)]
+enum AgentAction {
+    /// Run the agent. Blocks until stopped, so background it.
+    Start {
+        /// Forget a passphrase after this many seconds unused
+        #[arg(long)]
+        timeout: Option<u64>,
+    },
+    /// Prompt for this repository's passphrase and hand it to the agent
+    Unlock {
+        #[arg(long)]
+        timeout: Option<u64>,
+    },
+    /// Make the agent forget this repository's passphrase
+    Lock {
+        /// Forget every repository, not just this one
+        #[arg(long)]
+        all: bool,
+    },
+    /// Report whether an agent is running and how much it holds
+    Status,
+    /// Stop the agent, clearing everything it holds
+    Stop,
 }
 
 #[derive(Subcommand)]
@@ -1603,6 +1634,13 @@ fn run() {
         } => run!(commands::tag::execute(
             name, message, annotate, delete, sign, verify, list, commit
         )),
+        Commands::Agent { action } => match action {
+            AgentAction::Start { timeout } => run!(commands::agent::start(timeout)),
+            AgentAction::Unlock { timeout } => run!(commands::agent::unlock(timeout)),
+            AgentAction::Lock { all } => run!(commands::agent::lock(all)),
+            AgentAction::Status => run!(commands::agent::status()),
+            AgentAction::Stop => run!(commands::agent::stop()),
+        },
         Commands::RotateKey => run!(commands::rotate_key::rotate_key()),
         Commands::MigrateEncryption => run!(commands::migrate_encryption::execute()),
 

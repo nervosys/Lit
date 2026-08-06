@@ -1,3 +1,4 @@
+pub mod agent;
 pub mod encryption;
 pub mod fips;
 /// Cryptographic primitives module

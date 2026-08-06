@@ -5,6 +5,14 @@ All notable changes to Lit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`lit agent` — a passphrase agent, so commands can stop asking twice** — the in-process cache cannot help the command line, because every `lit` command is a new process that starts with an empty one. The agent is a single long-lived process that holds the passphrase; `lit agent unlock` gives it one and later commands find it with no prompt and no environment variable. `start`, `unlock`, `lock [--all]`, `status` and `stop`. Entries expire after a configurable idle period rather than at a fixed age, so a repository in active use does not start prompting in the middle of the work it is being used for
+- The agent is **off unless started**: nothing listens on a port, writes a token, or holds a secret until `lit agent start` is run
+- **What it protects, stated plainly.** It listens on loopback and authenticates with a token in a file only its owner can read, which keeps out other users on the machine. It keeps out nothing running *as you* — such a process can read the token file and ask the agent for the passphrase. A Unix socket or named pipe restricted to the owner would grant exactly the same set of processes, so this is not a transport shortcoming. Against a same-user attacker the agent is no stronger than `LIT_PASSPHRASE`; it is better only in that the secret is not in an environment block, where it appears in process listings and is inherited by every child, and in that it expires
+
 ## [1.4.1] - 2026-08-06
 
 ### Security
