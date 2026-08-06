@@ -17,7 +17,17 @@ keywords = [
 ]
 readme = "README.md"
 categories = ["command-line-utilities", "development-tools"]
-exclude = ["target/", "website/", "tests/", "examples/", "docs/", ".github/"]
+exclude = [
+    "target/",
+    "website/",
+    "tests/",
+    "examples/",
+    "docs/",
+    ".github/",
+    # The README points at the banner by absolute URL, so shipping a 2.4 MB
+    # PNG in the crate tarball would buy nothing.
+    "media/",
+]
 
 [lib]
 name = "lit"

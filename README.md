@@ -1,4 +1,4 @@
-# Lit — The Agentic-First Distributed Version Control System
+# ![Lit — The Agentic-First Distributed Version Control System](https://raw.githubusercontent.com/nervosys/Lit/master/media/banner.png)
 
 **The world's first universal version control system designed for AI agents first and humans second.**
 
