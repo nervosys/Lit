@@ -132,12 +132,9 @@ impl EncryptionConfig {
 
 /// Keep a file readable only by its owner.
 ///
-/// On Unix this is mode 0600. On Windows it is best-effort: the file is marked
-/// read-only, which stops accidental writes but does **not** stop another local
-/// user reading it. Restricting reads there needs an explicit DACL through
-/// SetNamedSecurityInfo, which is recorded as finding I-1 in
-/// docs/SECURITY_AUDIT.md and is still open — so on Windows, treat anything
-/// this protects as readable by any local account.
+/// Mode 0600 on Unix; on Windows a DACL granting the current user alone, which
+/// is what closes finding I-1 in docs/SECURITY_AUDIT.md. Both are real
+/// restrictions on reading, not just writing.
 fn restrict_to_owner(path: &Path) -> Result<(), String> {
     #[cfg(unix)]
     {
@@ -151,13 +148,102 @@ fn restrict_to_owner(path: &Path) -> Result<(), String> {
     }
 
     #[cfg(windows)]
-    {
-        let mut perms = fs::metadata(path)
-            .map_err(|e| format!("Failed to read permissions: {}", e))?
-            .permissions();
-        perms.set_readonly(true);
-        fs::set_permissions(path, perms)
-            .map_err(|e| format!("Failed to restrict permissions: {}", e))?;
+    windows_restrict_to_owner(path)?;
+
+    Ok(())
+}
+
+/// Replace a file's DACL with one granting only the current user.
+///
+/// This is what closes finding I-1 in docs/SECURITY_AUDIT.md. The read-only
+/// attribute that stood here before stops writes and does nothing about reads,
+/// so any local account could read the file; Windows needs an explicit ACL.
+///
+/// The new DACL is marked protected, which detaches it from the parent
+/// directory's inherited entries — otherwise an inherited "Users: Read" would
+/// survive and the restriction would be for nothing.
+#[cfg(windows)]
+fn windows_restrict_to_owner(path: &Path) -> Result<(), String> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows::core::PWSTR;
+    use windows::Win32::Foundation::{CloseHandle, LocalFree, HANDLE, HLOCAL};
+    use windows::Win32::Security::Authorization::{
+        SetEntriesInAclW, SetNamedSecurityInfoW, EXPLICIT_ACCESS_W, SET_ACCESS, SE_FILE_OBJECT,
+        TRUSTEE_IS_SID, TRUSTEE_IS_USER, TRUSTEE_W,
+    };
+    use windows::Win32::Security::{
+        GetTokenInformation, TokenUser, ACL, DACL_SECURITY_INFORMATION, NO_INHERITANCE,
+        PROTECTED_DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, PSID, TOKEN_QUERY, TOKEN_USER,
+    };
+    use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+
+    // Win32 wants a NUL-terminated wide string.
+    let mut wide: Vec<u16> = path.as_os_str().encode_wide().collect();
+    wide.push(0);
+
+    unsafe {
+        // The SID of whoever is running this.
+        let mut token = HANDLE::default();
+        OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token)
+            .map_err(|e| format!("Failed to open process token: {}", e))?;
+
+        let mut needed = 0u32;
+        let _ = GetTokenInformation(token, TokenUser, None, 0, &mut needed);
+        let mut buffer = vec![0u8; needed as usize];
+        let info_result = GetTokenInformation(
+            token,
+            TokenUser,
+            Some(buffer.as_mut_ptr() as *mut _),
+            needed,
+            &mut needed,
+        );
+        let _ = CloseHandle(token);
+        info_result.map_err(|e| format!("Failed to read token user: {}", e))?;
+
+        let user_sid: PSID = (*(buffer.as_ptr() as *const TOKEN_USER)).User.Sid;
+
+        // One entry: this user, full control, not inherited by anything.
+        let access = EXPLICIT_ACCESS_W {
+            grfAccessPermissions: 0x001F_01FF, // FILE_ALL_ACCESS
+            grfAccessMode: SET_ACCESS,
+            grfInheritance: NO_INHERITANCE,
+            Trustee: TRUSTEE_W {
+                pMultipleTrustee: std::ptr::null_mut(),
+                MultipleTrusteeOperation: Default::default(),
+                TrusteeForm: TRUSTEE_IS_SID,
+                TrusteeType: TRUSTEE_IS_USER,
+                ptstrName: PWSTR(user_sid.0 as *mut u16),
+            },
+        };
+
+        let mut acl: *mut ACL = std::ptr::null_mut();
+        let entries = [access];
+        let status = SetEntriesInAclW(Some(&entries), None, &mut acl);
+        if status.is_err() {
+            return Err(format!("Failed to build ACL: {:?}", status));
+        }
+
+        // PROTECTED detaches the file from inherited entries; without it the
+        // parent directory's grants would remain in force.
+        let status = SetNamedSecurityInfoW(
+            PWSTR(wide.as_mut_ptr()),
+            SE_FILE_OBJECT,
+            DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
+            PSID::default(),
+            PSID::default(),
+            Some(acl),
+            None,
+        );
+
+        if !acl.is_null() {
+            let _ = LocalFree(HLOCAL(acl as *mut _));
+        }
+
+        if status.is_err() {
+            return Err(format!("Failed to set file DACL: {:?}", status));
+        }
+
+        let _ = PSECURITY_DESCRIPTOR::default();
     }
 
     Ok(())

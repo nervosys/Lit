@@ -220,6 +220,21 @@ Lit VCS v1.0.0 demonstrates a **strong security posture** for a v1 release. The 
 - **Location:** `src/network/audit.rs:49-58`
 - **Description:** File permission setting (`chmod 0o600`) is gated by `#[cfg(unix)]`. On Windows, no equivalent ACL restriction is applied to audit log or signing key files. Any local user can read the HMAC signing key.
 - **Remediation:** Use Windows ACLs via `windows-acl` or `SetSecurityInfo` to restrict read access.
+- **Status: RESOLVED for the encryption key file.** `restrict_to_owner` in
+  `src/crypto/encryption.rs` now builds a DACL granting only the current user's
+  SID and applies it with `SetNamedSecurityInfoW`, marked
+  `PROTECTED_DACL_SECURITY_INFORMATION` so the parent directory's inherited
+  entries are dropped rather than surviving alongside it. Verified with
+  `icacls`: the key file shows `<user>:(F)` alone, against
+  `SYSTEM:(I)(F) Administrators:(I)(F) <user>:(I)(F)` on an ordinary file in
+  the same directory.
+- **Note:** SYSTEM and Administrators lose access too. Administrators can still
+  take ownership, so this is not a barrier to them, but software running as
+  SYSTEM — backup agents, some scanners — will no longer be able to read the
+  file. For a key file that is the intended trade.
+- **Still open:** the audit log and its HMAC signing key in `src/network/audit.rs`
+  continue to use the read-only attribute and have not been moved onto this
+  helper.
 
 #### I-2: FIPS Self-Tests Not Auto-Invoked
 
