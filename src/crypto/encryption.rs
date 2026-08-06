@@ -304,19 +304,92 @@ fn remember_derived_key(id: String, key: std::sync::Arc<EncryptionKey>) {
     }
 }
 
-/// Check rate limit for passphrase attempts
-/// Returns Ok(()) if attempt is allowed, Err with message if rate limited
-fn check_rate_limit(repo_path: &str) -> Result<(), String> {
-    let mut attempts = FAILED_ATTEMPTS
-        .lock()
-        .map_err(|_| "Internal error: rate-limit lock poisoned".to_string())?;
-    let tracker = attempts
-        .entry(repo_path.to_string())
-        .or_insert_with(|| FailedAttemptTracker {
+/// Where the failed-attempt count for a key file is kept between runs.
+fn throttle_state_path(repo_path: &str) -> std::path::PathBuf {
+    std::path::PathBuf::from(format!("{}.throttle", repo_path))
+}
+
+/// The throttle state as it is written to disk. Times are Unix seconds; a
+/// `SystemTime` has no stable serialized form worth depending on here.
+#[derive(Serialize, Deserialize, Default)]
+struct PersistedThrottle {
+    count: u32,
+    last_attempt_secs: u64,
+    lockout_until_secs: Option<u64>,
+}
+
+fn to_unix(t: SystemTime) -> u64 {
+    t.duration_since(SystemTime::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+fn from_unix(secs: u64) -> SystemTime {
+    SystemTime::UNIX_EPOCH + Duration::from_secs(secs)
+}
+
+/// Read the stored attempt count, treating anything unreadable as a clean
+/// slate. A corrupt or missing file must not lock a legitimate user out of
+/// their own repository — the throttle exists to slow guessing, not to become
+/// a way of denying access.
+fn load_throttle(repo_path: &str) -> FailedAttemptTracker {
+    let stored: Option<PersistedThrottle> = fs::read(throttle_state_path(repo_path))
+        .ok()
+        .and_then(|raw| serde_json::from_slice(&raw).ok());
+
+    match stored {
+        Some(s) => FailedAttemptTracker {
+            count: s.count,
+            last_attempt: from_unix(s.last_attempt_secs),
+            lockout_until: s.lockout_until_secs.map(from_unix),
+        },
+        None => FailedAttemptTracker {
             count: 0,
             last_attempt: SystemTime::now(),
             lockout_until: None,
-        });
+        },
+    }
+}
+
+/// Persist the attempt count so the next process sees it.
+///
+/// Best-effort: a repository on read-only media should still be usable, and
+/// failing the operation because the throttle could not be written would turn
+/// a hardening measure into an outage.
+fn store_throttle(repo_path: &str, tracker: &FailedAttemptTracker) {
+    let state = PersistedThrottle {
+        count: tracker.count,
+        last_attempt_secs: to_unix(tracker.last_attempt),
+        lockout_until_secs: tracker.lockout_until.map(to_unix),
+    };
+
+    let path = throttle_state_path(repo_path);
+    if let Ok(raw) = serde_json::to_vec(&state) {
+        if fs::write(&path, raw).is_ok() {
+            // The file says how many times someone has recently failed to open
+            // this key, which is worth no more exposure than the key itself.
+            let _ = restrict_to_owner(&path);
+        }
+    }
+}
+
+/// Check rate limit for passphrase attempts
+/// Returns Ok(()) if attempt is allowed, Err with message if rate limited
+///
+/// The count lives on disk rather than in this process. Every `lit` command is
+/// a new process, so an in-memory counter starts at zero for each one: a script
+/// that reruns the binary was never slowed by the backoff and never reached the
+/// five-attempt lockout at all, which is the case the throttle exists for.
+///
+/// This raises the cost of guessing; it does not stop an attacker who can
+/// delete the state file. That is the same directory as the key file, so such
+/// an attacker is already inside the boundary the throttle assumes — PBKDF2 at
+/// 600k iterations remains the defence that does not depend on that assumption.
+fn check_rate_limit(repo_path: &str) -> Result<(), String> {
+    let _serialize = FAILED_ATTEMPTS
+        .lock()
+        .map_err(|_| "Internal error: rate-limit lock poisoned".to_string())?;
+    let mut tracker = load_throttle(repo_path);
 
     // Check if currently locked out
     if let Some(lockout) = tracker.lockout_until {
@@ -332,6 +405,7 @@ fn check_rate_limit(repo_path: &str) -> Result<(), String> {
         // Lockout expired, reset counter
         tracker.lockout_until = None;
         tracker.count = 0;
+        store_throttle(repo_path, &tracker);
     }
 
     // Apply exponential backoff: 2^n seconds (max 32 seconds for n=5)
@@ -353,16 +427,10 @@ fn check_rate_limit(repo_path: &str) -> Result<(), String> {
 
 /// Record a failed passphrase attempt
 fn record_failed_attempt(repo_path: &str) {
-    let Ok(mut attempts) = FAILED_ATTEMPTS.lock() else {
+    let Ok(_serialize) = FAILED_ATTEMPTS.lock() else {
         return;
     };
-    let tracker = attempts
-        .entry(repo_path.to_string())
-        .or_insert_with(|| FailedAttemptTracker {
-            count: 0,
-            last_attempt: SystemTime::now(),
-            lockout_until: None,
-        });
+    let mut tracker = load_throttle(repo_path);
 
     tracker.count += 1;
     tracker.last_attempt = SystemTime::now();
@@ -372,12 +440,16 @@ fn record_failed_attempt(repo_path: &str) {
         tracker.lockout_until = Some(SystemTime::now() + Duration::from_secs(300));
         eprintln!("Warning: Account locked due to multiple failed attempts. Locked for 5 minutes.");
     }
+
+    store_throttle(repo_path, &tracker);
 }
 
 /// Clear failed attempt counter (called on successful authentication)
 fn clear_failed_attempts(repo_path: &str) {
-    if let Ok(mut attempts) = FAILED_ATTEMPTS.lock() {
-        attempts.remove(repo_path);
+    if let Ok(_serialize) = FAILED_ATTEMPTS.lock() {
+        // A correct passphrase clears the record, so an ordinary typo costs a
+        // few seconds and nothing more once the user gets it right.
+        let _ = fs::remove_file(throttle_state_path(repo_path));
     }
 }
 
@@ -1343,6 +1415,58 @@ mod tests {
         // Clear cache for cleanup
         clear_passphrase_cache();
         let _ = fs::remove_file(&key_file);
+    }
+
+    /// The throttle has to outlive the process that recorded the attempts.
+    ///
+    /// Every `lit` command is a new process. While the counter lived in a
+    /// `static`, each one started at zero: the exponential backoff never grew
+    /// past its first step and the five-attempt lockout could not be reached at
+    /// all by a script that reran the binary, which is the case it exists for.
+    /// Reading the state back from disk is what a second process does, so that
+    /// is what this asserts.
+    #[test]
+    fn test_throttle_state_outlives_the_process() {
+        let dir = tempfile::tempdir().unwrap();
+        let key_path = dir.path().join("outlives.key");
+        let key = key_path.to_string_lossy().into_owned();
+
+        for _ in 0..5 {
+            record_failed_attempt(&key);
+        }
+
+        // What a freshly started process would see.
+        let seen = load_throttle(&key);
+        assert_eq!(seen.count, 5, "the count should have survived on disk");
+        assert!(
+            seen.lockout_until.is_some(),
+            "five failures should have produced a lockout a new process can see"
+        );
+
+        // And it should actually refuse, rather than merely recording a number.
+        assert!(
+            check_rate_limit(&key).is_err(),
+            "a locked-out key should be refused"
+        );
+
+        // A correct passphrase clears it, so an ordinary typo is not sticky.
+        clear_failed_attempts(&key);
+        assert_eq!(load_throttle(&key).count, 0);
+        assert!(check_rate_limit(&key).is_ok());
+    }
+
+    /// Corrupt or unreadable state must not lock the owner out of their own
+    /// repository — the throttle slows guessing, it is not an access control.
+    #[test]
+    fn test_unreadable_throttle_state_is_treated_as_a_clean_slate() {
+        let dir = tempfile::tempdir().unwrap();
+        let key_path = dir.path().join("corrupt.key");
+        let key = key_path.to_string_lossy().into_owned();
+
+        fs::write(throttle_state_path(&key), b"this is not json").unwrap();
+
+        assert_eq!(load_throttle(&key).count, 0);
+        assert!(check_rate_limit(&key).is_ok());
     }
 
     /// Exercises the brute-force throttle on `EncryptionKey::load`.
