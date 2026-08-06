@@ -594,6 +594,11 @@ pub struct EncryptionEngine {
 impl EncryptionEngine {
     /// Create new encryption engine with key
     pub fn new(key: &EncryptionKey) -> Result<Self, String> {
+        // Every AES-GCM operation in the crate goes through an engine, so this
+        // is the one place that can promise the self-tests ran first no matter
+        // which binary is driving. Runs once per process.
+        crate::crypto::fips::ensure_self_tests()?;
+
         let cipher = Aes256Gcm::new_from_slice(key.as_bytes())
             .map_err(|e| format!("Failed to create cipher: {}", e))?;
 
