@@ -50,9 +50,15 @@ const MAX_REQUEST_BYTES: u64 = 64 * 1024;
 /// What a client sends. Every variant carries the token: there is no
 /// unauthenticated operation, not even `Status`, because whether an agent holds
 /// a passphrase for a given repository is itself worth not answering.
+///
+/// `Hello` is the exception, and carries no token — it is how the *client*
+/// checks the server, before trusting it with anything.
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum Request {
+    /// Ask the peer to prove it holds the token, by returning a MAC over a
+    /// nonce the client chose.
+    Hello { nonce: String },
     /// Store a passphrase for `repo`.
     Put {
         token: String,
@@ -73,6 +79,10 @@ pub enum Request {
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "result", rename_all = "snake_case")]
 pub enum Response {
+    /// Proof that the responder holds the token: a MAC over the client's nonce.
+    Hello {
+        proof: String,
+    },
     Passphrase {
         passphrase: String,
     },
@@ -220,14 +230,36 @@ fn token_matches(presented: &str, expected: &str) -> bool {
     a.ct_eq(b).into()
 }
 
-fn token_of(req: &Request) -> &str {
+fn token_of(req: &Request) -> Option<&str> {
     match req {
         Request::Put { token, .. }
         | Request::Get { token, .. }
         | Request::Drop { token, .. }
         | Request::Status { token }
-        | Request::Shutdown { token } => token,
+        | Request::Shutdown { token } => Some(token),
+        // Carries no token by design: it is the client checking the server.
+        Request::Hello { .. } => None,
     }
+}
+
+/// Proof that whoever computes it holds the token.
+///
+/// A client must not send a passphrase to a port merely because a file said an
+/// agent was there. If the agent has died — killed, crashed, or lost to a
+/// reboot that left the endpoint file behind — the port is free for anything
+/// else to bind, including a process belonging to another user. Without this,
+/// the next `lit agent unlock` would hand that process the passphrase.
+///
+/// So the client picks a nonce, the server returns this MAC over it, and the
+/// client checks it before sending anything worth stealing.
+fn proof_for(token: &str, nonce: &str) -> String {
+    use hmac::{Hmac, Mac};
+    use sha2::Sha256;
+
+    let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(token.as_bytes())
+        .expect("HMAC accepts keys of any length");
+    mac.update(nonce.as_bytes());
+    hex::encode(mac.finalize().into_bytes())
 }
 
 /// Apply a request that has already been authenticated.
@@ -247,6 +279,8 @@ fn apply(req: Request, store: &Arc<Mutex<Store>>) -> (Response, bool) {
     };
 
     match req {
+        // Handled before authentication, in `respond_to`; it never reaches here.
+        Request::Hello { .. } => (Response::Denied, false),
         Request::Put {
             repo, passphrase, ..
         } => {
@@ -283,7 +317,26 @@ fn apply(req: Request, store: &Arc<Mutex<Store>>) -> (Response, bool) {
     }
 }
 
-/// Read one request, act on it, write one response.
+/// Decide what one request deserves, without touching the connection.
+fn respond_to(req: Request, expected_token: &str, store: &Arc<Mutex<Store>>) -> (Response, bool) {
+    match req {
+        Request::Hello { nonce } => (
+            Response::Hello {
+                proof: proof_for(expected_token, &nonce),
+            },
+            false,
+        ),
+        other => match token_of(&other) {
+            // Say only that it was refused. Which field was wrong, or whether
+            // the repository is known, is not the caller's business until they
+            // have proven who they are.
+            Some(t) if token_matches(t, expected_token) => apply(other, store),
+            _ => (Response::Denied, false),
+        },
+    }
+}
+
+/// Serve one connection: a handshake, then a request.
 ///
 /// Returns true when the agent has been asked to stop.
 fn handle_connection(
@@ -301,40 +354,44 @@ fn handle_connection(
 
     // Bounded: a client that never sends a newline would otherwise grow this
     // buffer until the agent runs out of memory.
-    let mut line = String::new();
-    if BufReader::new(peer.take(MAX_REQUEST_BYTES))
-        .read_line(&mut line)
-        .is_err()
-    {
-        return false;
-    }
+    let mut reader = BufReader::new(peer.take(MAX_REQUEST_BYTES));
 
-    let (response, shutdown) = match serde_json::from_str::<Request>(line.trim()) {
-        Ok(req) => {
-            if token_matches(token_of(&req), expected_token) {
-                apply(req, store)
-            } else {
-                // Say only that it was refused. Which field was wrong, or
-                // whether the repository is known, is not the caller's business
-                // until they have proven who they are.
-                (Response::Denied, false)
-            }
+    // Two messages at most — the handshake and the request it protects. A
+    // connection is not a session to be held open.
+    for _ in 0..2 {
+        let mut line = String::new();
+        match reader.read_line(&mut line) {
+            Ok(0) | Err(_) => return false,
+            Ok(_) => {}
         }
-        Err(e) => (
-            Response::Malformed {
-                message: e.to_string(),
-            },
-            false,
-        ),
-    };
 
-    if let Ok(mut body) = serde_json::to_vec(&response) {
-        body.push(b'\n');
-        let _ = stream.write_all(&body);
-        let _ = stream.flush();
+        let (response, shutdown) = match serde_json::from_str::<Request>(line.trim()) {
+            Ok(req) => respond_to(req, expected_token, store),
+            Err(e) => (
+                Response::Malformed {
+                    message: e.to_string(),
+                },
+                false,
+            ),
+        };
+
+        let closing = !matches!(response, Response::Hello { .. });
+
+        if let Ok(mut body) = serde_json::to_vec(&response) {
+            body.push(b'\n');
+            if stream.write_all(&body).is_err() {
+                return false;
+            }
+            let _ = stream.flush();
+        }
+
+        // Only the handshake earns a second message.
+        if closing {
+            return shutdown;
+        }
     }
 
-    shutdown
+    false
 }
 
 /// Run an agent until it is asked to stop. Blocks.
@@ -379,7 +436,29 @@ pub fn serve(idle_timeout: Duration) -> Result<(), String> {
     Ok(())
 }
 
+fn write_line(stream: &mut TcpStream, req: &Request) -> Result<(), String> {
+    let mut body = serde_json::to_vec(req).map_err(|e| format!("Failed to encode request: {e}"))?;
+    body.push(b'\n');
+    stream
+        .write_all(&body)
+        .map_err(|e| format!("Failed to reach agent: {e}"))
+}
+
+fn read_response(reader: &mut impl BufRead) -> Result<Response, String> {
+    let mut line = String::new();
+    reader
+        .read_line(&mut line)
+        .map_err(|e| format!("Failed to read agent reply: {e}"))?;
+    serde_json::from_str(line.trim()).map_err(|e| format!("Agent sent an unreadable reply: {e}"))
+}
+
 /// Send one request to a running agent and read its reply.
+///
+/// The peer proves it holds the token before anything else is sent. The
+/// endpoint file records a port, and a port outlives the process that held it:
+/// if the agent was killed or lost to a reboot, that port is free for anything
+/// to bind — including a process belonging to another user. Sending first and
+/// checking later would mean handing a passphrase to whatever answered.
 fn request(req: &Request) -> Result<Response, String> {
     let endpoint = Endpoint::load()?;
     let mut stream = TcpStream::connect(SocketAddr::from((Ipv4Addr::LOCALHOST, endpoint.port)))
@@ -387,19 +466,44 @@ fn request(req: &Request) -> Result<Response, String> {
     stream
         .set_read_timeout(Some(Duration::from_secs(5)))
         .map_err(|e| format!("Failed to configure agent socket: {e}"))?;
-
-    let mut body = serde_json::to_vec(req).map_err(|e| format!("Failed to encode request: {e}"))?;
-    body.push(b'\n');
     stream
-        .write_all(&body)
-        .map_err(|e| format!("Failed to reach agent: {e}"))?;
+        .set_write_timeout(Some(Duration::from_secs(5)))
+        .map_err(|e| format!("Failed to configure agent socket: {e}"))?;
 
-    let mut line = String::new();
-    BufReader::new(&stream)
-        .read_line(&mut line)
-        .map_err(|e| format!("Failed to read agent reply: {e}"))?;
+    let peer = stream
+        .try_clone()
+        .map_err(|e| format!("Failed to read from agent: {e}"))?;
+    let mut reader = BufReader::new(peer.take(MAX_REQUEST_BYTES));
 
-    serde_json::from_str(line.trim()).map_err(|e| format!("Agent sent an unreadable reply: {e}"))
+    let nonce = generate_token();
+    write_line(
+        &mut stream,
+        &Request::Hello {
+            nonce: nonce.clone(),
+        },
+    )?;
+
+    // Any failure at this stage means the same thing, and deserves the same
+    // answer: a wrong proof, no proof, a reply that is not a proof at all, or
+    // silence until the timeout. None of them is the agent, so none of them
+    // gets the passphrase.
+    let proved = matches!(
+        read_response(&mut reader),
+        Ok(Response::Hello { ref proof }) if token_matches(proof, &proof_for(&endpoint.token, &nonce))
+    );
+
+    if !proved {
+        return Err(
+            "Whatever is listening on the agent's port could not prove it is the agent; \
+             refusing to send anything to it. Run `lit agent stop` and start a new one."
+                .to_string(),
+        );
+    }
+
+    // Same reader throughout: a fresh one would drop whatever the handshake
+    // left buffered.
+    write_line(&mut stream, req)?;
+    read_response(&mut reader)
 }
 
 fn token() -> Result<String, String> {
@@ -541,15 +645,73 @@ mod tests {
         let store = Arc::new(Mutex::new(Store::new(Duration::from_secs(60))));
         let real = generate_token();
 
-        let req = Request::Put {
-            token: "not-the-token".to_string(),
-            repo: "repo".to_string(),
-            passphrase: "hunter2".to_string(),
-        };
-        assert!(!token_matches(token_of(&req), &real));
+        let (resp, stop) = respond_to(
+            Request::Put {
+                token: "not-the-token".to_string(),
+                repo: "repo".to_string(),
+                passphrase: "hunter2".to_string(),
+            },
+            &real,
+            &store,
+        );
 
-        // The server applies nothing it has not authenticated.
-        assert!(store.lock().unwrap().is_empty());
+        assert!(matches!(resp, Response::Denied));
+        assert!(!stop);
+        assert!(
+            store.lock().unwrap().is_empty(),
+            "an unauthenticated Put must store nothing"
+        );
+    }
+
+    /// The client has to be able to tell the agent from anything else that
+    /// happened to bind the port, *before* it sends a passphrase.
+    #[test]
+    fn test_handshake_proves_the_peer_holds_the_token() {
+        let store = Arc::new(Mutex::new(Store::new(Duration::from_secs(60))));
+        let real = generate_token();
+        let nonce = generate_token();
+
+        let (resp, _) = respond_to(
+            Request::Hello {
+                nonce: nonce.clone(),
+            },
+            &real,
+            &store,
+        );
+
+        let proof = match resp {
+            Response::Hello { proof } => proof,
+            other => panic!("expected a proof, got {other:?}"),
+        };
+        assert!(token_matches(&proof, &proof_for(&real, &nonce)));
+
+        // An impostor holding a different token cannot produce it.
+        let impostor = generate_token();
+        assert!(!token_matches(&proof, &proof_for(&impostor, &nonce)));
+
+        // Nor can a proof for one nonce be replayed against another.
+        let other_nonce = generate_token();
+        assert!(!token_matches(&proof, &proof_for(&real, &other_nonce)));
+    }
+
+    /// The handshake needs no token, which is the point — but it must not
+    /// become a way to reach anything else unauthenticated.
+    #[test]
+    fn test_hello_carries_no_token_but_grants_nothing() {
+        assert!(token_of(&Request::Hello {
+            nonce: "n".to_string()
+        })
+        .is_none());
+
+        let store = Arc::new(Mutex::new(Store::new(Duration::from_secs(60))));
+        let (resp, stop) = apply(
+            Request::Hello {
+                nonce: "n".to_string(),
+            },
+            &store,
+        );
+        assert!(matches!(resp, Response::Denied));
+        assert!(!stop);
     }
 
     #[test]
