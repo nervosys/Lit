@@ -5,6 +5,14 @@ All notable changes to Lit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+
+- **Owner-only permissions on Windows, and on files that already exist** — closes finding I-1. The Windows path used the read-only attribute, which stops writes and does nothing about reads: the HMAC signing key that makes the audit log tamper-evident was readable by any local account, and anyone who could read it could forge entries. `restrict_to_owner` now builds a DACL granting only the current user's SID and applies it with `SetNamedSecurityInfoW`, marked `PROTECTED_DACL_SECURITY_INFORMATION` so the parent directory's inherited entries are dropped rather than surviving alongside it. SYSTEM and Administrators lose access too; Administrators can still take ownership, so this is not a barrier to them, but software running as SYSTEM will no longer be able to read these files
+- **The restriction is applied on load, not only at creation** — restricting at creation is no help to a key already sitting on disk from an earlier version, which keeps its original permissions for the life of the installation. On the machine this was developed on, `~/.lit/audit.key` dated from October 2025 and `~/.lit/encryption.key` from March, both still carrying the directory's inherited ACL. The load paths now re-apply the restriction, so an upgrade corrects them
+- **The airgap transport log is restricted too** — `~/.lit/airgap_audit.log` had no permission handling at any point and had grown to 162 KB world-readable. Every line is a filesystem path the user moved data through, which is a record of what they have and where they keep it
+
 ## [1.3.1] - 2026-08-05
 
 ### Security

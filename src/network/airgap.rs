@@ -1,3 +1,4 @@
+use crate::crypto::encryption::restrict_to_owner;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -436,6 +437,15 @@ impl AirgapValidator {
 
             file.write_all(log_entry.as_bytes())
                 .map_err(|e| format!("Failed to write to log: {}", e))?;
+            drop(file);
+
+            // Every line here is a filesystem path the user moved data through,
+            // which is a record of what they have and where they keep it. The
+            // file was created at the process umask — 0644 on this machine —
+            // leaving that history readable by any other local account. Applied
+            // on each append rather than at creation so logs written by earlier
+            // versions are corrected too.
+            restrict_to_owner(&log_path)?;
         }
 
         Ok(())

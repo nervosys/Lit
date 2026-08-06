@@ -1,5 +1,6 @@
 /// Audit Log with HMAC Integrity Protection
 /// Provides tamper-evident logging for security events
+use crate::crypto::encryption::restrict_to_owner;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 use std::fs;
@@ -33,16 +34,11 @@ impl AuditLog {
         // Load or generate signing key
         let signing_key = Self::get_or_create_signing_key()?;
 
-        // Set restrictive permissions on log file
-        #[cfg(unix)]
+        // Owner-only on both platforms: 0600 on Unix, an explicit DACL on
+        // Windows. This used to be Unix-only, leaving the log readable by any
+        // local account there.
         if log_path.exists() {
-            use std::os::unix::fs::PermissionsExt;
-            let mut perms = fs::metadata(&log_path)
-                .map_err(|e| format!("Failed to get log file metadata: {}", e))?
-                .permissions();
-            perms.set_mode(0o600); // Owner read/write only
-            fs::set_permissions(&log_path, perms)
-                .map_err(|e| format!("Failed to set log file permissions: {}", e))?;
+            restrict_to_owner(&log_path)?;
         }
 
         Ok(AuditLog {
@@ -156,6 +152,12 @@ impl AuditLog {
         let key_path = Self::signing_key_path()?;
 
         if key_path.exists() {
+            // Re-apply the restriction on load, not only at creation. A key
+            // written by an older version is still sitting there with whatever
+            // permissions it was given — on this machine, 0644 from 2025 — and
+            // would otherwise keep them for the life of the installation.
+            restrict_to_owner(&key_path)?;
+
             // Load existing key
             let key_data =
                 fs::read(&key_path).map_err(|e| format!("Failed to read signing key: {}", e))?;
@@ -172,32 +174,12 @@ impl AuditLog {
             fs::write(&key_path, &key)
                 .map_err(|e| format!("Failed to write signing key: {}", e))?;
 
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                let mut perms = fs::metadata(&key_path)
-                    .map_err(|e| format!("Failed to get key file metadata: {}", e))?
-                    .permissions();
-                perms.set_mode(0o600); // Owner read/write only
-                fs::set_permissions(&key_path, perms)
-                    .map_err(|e| format!("Failed to set key file permissions: {}", e))?;
-            }
-
-            #[cfg(windows)]
-            {
-                // SECURITY (FINDING-006): On Windows, mark file as read-only for the owner.
-                // Full DACL restriction (denying other users read access) would require
-                // the windows-acl crate or raw Win32 SetNamedSecurityInfo. Read-only
-                // prevents accidental writes but other local users may still read the key.
-                // Risk: Low — requires local access, and the key protects audit log integrity
-                // (not confidential data). Future: integrate DACL with windows-acl crate.
-                let mut perms = fs::metadata(&key_path)
-                    .map_err(|e| format!("Failed to get key file metadata: {}", e))?
-                    .permissions();
-                perms.set_readonly(true);
-                fs::set_permissions(&key_path, perms)
-                    .map_err(|e| format!("Failed to set key file permissions: {}", e))?;
-            }
+            // The HMAC key is what makes the audit log tamper-evident, so
+            // anyone who can read it can forge entries. Owner-only on both
+            // platforms now: 0600 on Unix, an explicit DACL on Windows. The
+            // read-only attribute that stood here stopped writes and left the
+            // key readable by any local account — finding I-1.
+            restrict_to_owner(&key_path)?;
 
             Ok(Zeroizing::new(key))
         }
