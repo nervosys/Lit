@@ -135,7 +135,7 @@ impl EncryptionConfig {
 /// Mode 0600 on Unix; on Windows a DACL granting the current user alone, which
 /// is what closes finding I-1 in docs/SECURITY_AUDIT.md. Both are real
 /// restrictions on reading, not just writing.
-fn restrict_to_owner(path: &Path) -> Result<(), String> {
+pub(crate) fn restrict_to_owner(path: &Path) -> Result<(), String> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -454,6 +454,12 @@ impl EncryptionKey {
                     .to_string(),
             );
         }
+
+        // Re-apply on load, not only at creation. The salt in this file is what
+        // an offline brute force of the passphrase needs, and a key file written
+        // before the restriction existed keeps its inherited ACL for the life of
+        // the installation otherwise — the one on this machine dates to March.
+        restrict_to_owner(key_file)?;
 
         let encrypted_data =
             fs::read(key_file).map_err(|e| format!("Failed to read key file: {}", e))?;
@@ -1476,5 +1482,36 @@ mod key_file_permission_tests {
         );
 
         let _ = fs::remove_file(&path);
+    }
+
+    /// The restriction has to tighten a file that already exists, not only one
+    /// this version created. Keys written before the restriction existed sit on
+    /// disk with whatever the umask gave them, and only a call on the load path
+    /// ever corrects them.
+    #[test]
+    fn test_restrict_to_owner_tightens_an_existing_permissive_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("preexisting.key");
+        fs::write(&path, b"secret").unwrap();
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs::metadata(&path).unwrap().permissions();
+            perms.set_mode(0o644);
+            fs::set_permissions(&path, perms).unwrap();
+
+            restrict_to_owner(&path).unwrap();
+
+            let mode = fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode, 0o600, "group and other should have lost all access");
+        }
+
+        #[cfg(windows)]
+        restrict_to_owner(&path).unwrap();
+
+        // Whatever the platform, the owner must still be able to read it back —
+        // a restriction that locks out the process that applied it is a bug.
+        assert_eq!(fs::read(&path).unwrap(), b"secret");
     }
 }

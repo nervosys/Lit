@@ -220,7 +220,7 @@ Lit VCS v1.0.0 demonstrates a **strong security posture** for a v1 release. The 
 - **Location:** `src/network/audit.rs:49-58`
 - **Description:** File permission setting (`chmod 0o600`) is gated by `#[cfg(unix)]`. On Windows, no equivalent ACL restriction is applied to audit log or signing key files. Any local user can read the HMAC signing key.
 - **Remediation:** Use Windows ACLs via `windows-acl` or `SetSecurityInfo` to restrict read access.
-- **Status: RESOLVED for the encryption key file.** `restrict_to_owner` in
+- **Status: RESOLVED.** `restrict_to_owner` in
   `src/crypto/encryption.rs` now builds a DACL granting only the current user's
   SID and applies it with `SetNamedSecurityInfoW`, marked
   `PROTECTED_DACL_SECURITY_INFORMATION` so the parent directory's inherited
@@ -232,9 +232,18 @@ Lit VCS v1.0.0 demonstrates a **strong security posture** for a v1 release. The 
   take ownership, so this is not a barrier to them, but software running as
   SYSTEM — backup agents, some scanners — will no longer be able to read the
   file. For a key file that is the intended trade.
-- **Still open:** the audit log and its HMAC signing key in `src/network/audit.rs`
-  continue to use the read-only attribute and have not been moved onto this
-  helper.
+- **Coverage:** every file the finding names is now on this helper — the audit
+  log and HMAC signing key in `src/network/audit.rs`, the airgap transport log
+  in `src/network/airgap.rs` (each line is a filesystem path the user moved data
+  through), and the encryption key file.
+- **Applied on load, not only at creation.** Restricting at creation leaves keys
+  written by earlier versions permissive for the life of the installation. On
+  the audit machine `~/.lit/audit.key` dated from October 2025 and
+  `~/.lit/encryption.key` from March, both still carrying the directory's
+  inherited ACL. The load paths now re-apply the restriction, and `icacls`
+  confirms all four files went from `SYSTEM:(I)(F) Administrators:(I)(F)
+  <user>:(I)(F)` to `<user>:(F)` alone. Regression test:
+  `test_restrict_to_owner_tightens_an_existing_permissive_file`.
 
 #### I-2: FIPS Self-Tests Not Auto-Invoked
 
@@ -358,7 +367,7 @@ All 14 findings from this audit have been addressed. Summary:
 | **L-2** | MCP HTTP no auth                     | ✅ DOCUMENTED | `src/commands/mcp_serve.rs` — added security comment noting localhost binding as implicit auth per MCP spec                              |
 | **L-3** | No API rate limiting                 | ✅ FIXED      | `src/commands/serve.rs`, `src/commands/mcp_serve.rs` — per-IP sliding window rate limiter (100 req/60s) on all HTTP and lit:// endpoints |
 | **L-4** | Unmaintained PQ crate names          | ✅ FIXED      | `Cargo.toml` — removed `pqcrypto-kyber`; migrated `pqcrypto-dilithium` → `pqcrypto-mldsa` 0.1.2 (RUSTSEC-2024-0380 resolved)             |
-| **I-1** | No Windows ACL on audit files        | ✅ FIXED      | `src/network/audit.rs` — added `set_readonly(true)` on Windows for `audit.key`                                                           |
+| **I-1** | No Windows ACL on audit files        | ✅ FIXED      | `restrict_to_owner` — owner-only DACL via `SetNamedSecurityInfoW` (0600 on Unix), applied on load as well as creation, across `audit.key`, `audit.log`, `airgap_audit.log`, `encryption.key`. The `set_readonly(true)` that stood here blocked writes and left the files readable. |
 | **I-2** | FIPS self-tests not auto-invoked     | ✅ FIXED      | `src/main.rs` — `FipsModule::power_on_self_test()` auto-invoked at startup (KATs for SHA-256, SHA-512, SHA3-512, HMAC-SHA-256, RNG)      |
 | **I-3** | Error messages expose internal paths | ✅ FIXED      | `src/commands/serve.rs` — error responses now use `user_message()` with internal details logged server-side only                         |
 | **I-4** | Unused pqcrypto-kyber dependency     | ✅ FIXED      | `Cargo.toml` — removed `pqcrypto-kyber` entirely                                                                                         |
