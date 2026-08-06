@@ -5,6 +5,16 @@ All notable changes to Lit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+
+- **The brute-force throttle now survives between commands** — the failed-attempt counter lived in a process `static`, and every `lit` command is a new process, so each one started from zero. The exponential backoff never grew past its first step and the five-attempt lockout could not be reached at all by a script that reran the binary, which is precisely the case it was written for. The count is now kept next to the key file as `<key_file>.throttle`, restricted to its owner, and read back on each attempt. This raises the cost of guessing rather than ending it: an attacker who can delete the state file is already inside the same directory as the key, and PBKDF2 at 600,000 iterations remains the defence that does not depend on that assumption. Corrupt or unreadable state is treated as a clean slate, so a damaged file cannot lock you out of your own repository
+
+### Fixed
+
+- **`docs/ENCRYPTION.md` no longer documents passphrase caching that cannot happen** — it showed `lit commit` followed by `lit status` answering `✓ Using cached passphrase`. The cache is process-local, and those are two processes, so the second command always prompted. `cache_timeout_secs` has effect where one process performs several operations — the GUI, the daemon, an embedder using the library — and none at all for ordinary command-line use. The page now says so, and points at `LIT_PASSPHRASE_FILE` for the case the example was reaching for
+
 ## [1.4.0] - 2026-08-06
 
 Renumbering only — identical in content to 1.3.3, which was published as a

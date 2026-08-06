@@ -151,13 +151,24 @@ cache_timeout_secs = 300
 
 ### Passphrase Caching
 
-To improve usability, Lit can cache your passphrase in memory for a configurable duration:
+Lit caches your passphrase in memory for a configurable duration:
 
 - **Default timeout**: 5 minutes (300 seconds)
 - **Disable caching**: Set `cache_timeout_secs = 0`
 - **Extend timeout**: Set `cache_timeout_secs = 1800` (30 minutes)
 - **Per-repository**: Each repository has separate cache entry
 - **Automatic expiration**: Cached passphrases automatically removed after timeout
+
+> **The cache lives inside a single process, and does not span CLI commands.**
+> Each `lit` invocation is a new process that starts with an empty cache, so
+> running `lit commit` and then `lit status` prompts twice however
+> `cache_timeout_secs` is set. The setting has effect where one process performs
+> several operations — the GUI, the daemon, a long-running embedder using the
+> library — and none at all for ordinary command-line use. Set `LIT_PASSPHRASE`
+> or `LIT_PASSPHRASE_FILE` to avoid repeated prompts from the CLI, keeping in
+> mind that an environment variable is readable by other processes running as
+> you. Caching across commands would need a passphrase agent holding the key in
+> a separate long-lived process; Lit does not have one.
 
 **Security considerations**:
 - Passphrases stored in process memory only (never on disk)
@@ -213,21 +224,25 @@ All repository data is automatically encrypted when encryption is enabled:
 Once encryption is enabled, **all operations require your passphrase**:
 
 ```bash
-# First operation (will prompt for passphrase)
+# Each command is its own process, so each one prompts.
 lit commit -m "Add feature"
 # Enter passphrase: ********
 
-# Subsequent operations within cache timeout (no prompt)
 lit status
-# ✓ Using cached passphrase
+# Enter passphrase: ********
 
 lit log
-# ✓ Using cached passphrase
-
-# After cache timeout (will prompt again)
-# (Default: 5 minutes, configurable in encryption.toml)
-lit add newfile.txt
 # Enter passphrase: ********
+
+# To avoid the repeated prompts, supply the passphrase from the environment.
+export LIT_PASSPHRASE='...'
+lit status
+lit log
+
+# Or keep it out of the environment, where other processes running as you can
+# read it, by pointing at a file only you can read.
+export LIT_PASSPHRASE_FILE=~/.lit/passphrase
+lit status
 
 # Clone encrypted repository
 lit clone file:///path/to/encrypted/repo.lit
@@ -235,10 +250,10 @@ lit clone file:///path/to/encrypted/repo.lit
 ```
 
 **Passphrase Caching Behavior**:
-- First operation: Prompts for passphrase and caches it
-- Subsequent operations: Uses cached passphrase (no prompt)
-- After timeout: Prompts again and refreshes cache
-- Manual clear: Use `lit rotate-key` to clear cache immediately
+- Within one process: the first operation caches, later ones reuse it until the timeout
+- Across CLI commands: no reuse — a new process starts with an empty cache
+- After timeout: the next operation in that process derives the key again
+- Manual clear: `lit rotate-key` clears the cache
 
 ### CLI Passphrase Prompting
 
