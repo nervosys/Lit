@@ -138,6 +138,18 @@ Two things fell out of that decision and are worth knowing:
   plaintext file naming the current branch. Rotation now re-writes it encrypted,
   but a repository that has never rotated still has it.
 
+### `rotate-key` cannot change the passphrase without a terminal
+
+Found while smoke-testing 1.6.0 from crates.io. Both prompts — the current
+passphrase and the new one — read `LIT_PASSPHRASE` first, and there is only one
+such variable, so a non-interactive run rotates to the passphrase it already
+had. That is still a real re-key, since the salt changes, but it is not what a
+script asking for a rotation means. Changing the passphrase needs a TTY.
+
+Fixing it needs a second source for the new passphrase — `LIT_NEW_PASSPHRASE`,
+or flags — which is a small design decision nobody has made. The library call
+`rotate_with_passphrases(old, new)` takes both and has no such limit.
+
 ### Thin packs with absent bases
 
 A thin pack whose delta bases are not present in the source cannot be resolved.
@@ -207,7 +219,17 @@ Fixed, with an end-to-end test.
 
 ### What is actually next
 
-1. **Still: get CI running**, then re-run everything and believe nothing until it is green.
-2. **Ship this as 1.6.0** and smoke-test it *from crates.io*, per §4 — `rotate-key` in particular, since it is a command that has demonstrably never run.
-3. **`.lit/HEAD` in the clear.** See §3. It names the current branch. Either encrypt it at `init` when encryption is configured, or accept it and say so in `docs/ENCRYPTION.md`.
+1. **Still: get CI running**, then re-run everything and believe nothing until it is green. The Actions outage was still unresolved when 1.6.0 shipped, so 1.6.0 has never been built on Linux or macOS by anything.
+2. **`.lit/HEAD` in the clear.** See §3. It names the current branch. Either encrypt it at `init` when encryption is configured, or accept it and say so in `docs/ENCRYPTION.md`.
+3. **Give `rotate-key` a non-interactive path.** See §3 — it currently cannot change a passphrase without a TTY.
 4. **Look for the next instance of an old pattern**, rather than the next new bug. Two of the last three findings were repeats of something already fixed elsewhere.
+
+**1.6.0 is published.** Tagged: no — `v1.6.0` does not exist, so the Release
+workflow has not built binaries or cut a GitHub release for it. That is the one
+piece of the usual release sequence still outstanding.
+
+The registry build was smoke-tested per §4: `cargo install litvc` → 1.6.0, an
+encrypted repository resolved its own key file under `~/.lit/keys/`, and
+`lit rotate-key` completed — 3 objects, 2 refs, both pack files expanded, the
+repository readable afterwards and still refusing the wrong passphrase. That is
+the first time that command has ever run to completion.
