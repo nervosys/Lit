@@ -1,0 +1,78 @@
+{
+  "ironstack": "1",
+  "id": "lit",
+  "product": "Lit",
+  "layer": "tools",
+  "role": "Agentic-first distributed version control; a Git replacement with pluggable content types beyond source code.",
+  "surfaces": ["cli", "mcp"],
+  "ontology": {
+    "command": "lit ontology --json",
+    "schema": 1
+  },
+  "capabilities": [
+    {
+      "name": "repo.read",
+      "description": "Inspect without changing anything: log, diff, status, show, search, verify. The 20 commands Lit declares `safe`.",
+      "requires_grant": false,
+      "budgeted": false,
+      "surfaces": ["cli", "mcp"]
+    },
+    {
+      "name": "repo.write",
+      "description": "Record new history: commit, add, snapshot, tag, branch creation. Creates objects and moves refs, but supersedes nothing.",
+      "requires_grant": true,
+      "budgeted": false,
+      "surfaces": ["cli", "mcp"]
+    },
+    {
+      "name": "repo.rewrite",
+      "description": "Change what history says: reset, revert, stash, merge, conflict resolution. Six of the eight history commands are declared unsafe, and these are the ones that can discard work an agent did not create.",
+      "requires_grant": true,
+      "budgeted": false,
+      "surfaces": ["cli", "mcp"]
+    },
+    {
+      "name": "repo.collaborate",
+      "description": "Exchange with a remote: push, pull, clone. The only capability here that leaves the machine, which makes it the one where a mistake becomes someone else's.",
+      "requires_grant": true,
+      "budgeted": false,
+      "surfaces": ["cli", "mcp"]
+    },
+    {
+      "name": "repo.maintain",
+      "description": "Garbage collection and LFS migration. Reclaims space by deleting what it judges unreachable, so it is destructive in a way that reads as routine.",
+      "requires_grant": true,
+      "budgeted": false,
+      "surfaces": ["cli"]
+    },
+    {
+      "name": "repo.interop",
+      "description": "Import from or export to Git. Both declared unsafe: each writes a whole repository.",
+      "requires_grant": true,
+      "budgeted": false,
+      "surfaces": ["cli"]
+    },
+    {
+      "name": "security.rotate_key",
+      "description": "Rotate the encryption key. One command, declared unsafe, and the one whose failure mode is losing access to the repository rather than corrupting it.",
+      "requires_grant": true,
+      "budgeted": false,
+      "surfaces": ["cli"]
+    },
+    {
+      "name": "swarm.coordinate",
+      "description": "Register an agent, acquire and release file leases. How concurrent agents avoid working over each other.",
+      "requires_grant": true,
+      "budgeted": false,
+      "surfaces": ["cli", "mcp"]
+    },
+    {
+      "name": "server.serve",
+      "description": "Run the REST or MCP server. Declared unsafe because it exposes the repository to whatever can reach the port.",
+      "requires_grant": true,
+      "budgeted": false,
+      "surfaces": ["cli"]
+    }
+  ],
+  "note": "requires_grant is not hand-assigned: it follows the `safe` flag Lit already publishes for each of its 48 commands in `lit ontology --json`. Capabilities group those commands by what kind of authority they need, so this manifest and the ontology are derived from one source rather than maintained twice. Nothing is budgeted, deliberately: no operation here scales with a caller-supplied quantity, and the risk is an unauthorised rewrite rather than too many of them — a budget on `reset` would let the first one through, which is the one that matters."
+}
