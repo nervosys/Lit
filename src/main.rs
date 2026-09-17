@@ -9,6 +9,7 @@ use lit::{
 
 use clap::{Parser, Subcommand};
 use formatter::Format;
+use std::path::PathBuf;
 use std::process;
 
 #[derive(Parser)]
@@ -49,6 +50,193 @@ struct Cli {
 
     #[command(subcommand)]
     command: Commands,
+}
+
+
+/// Read a server account password without putting it on the command line.
+///
+/// Lit is a zero-prompt tool, so there is no interactive fallback: the password
+/// comes from a file, from stdin, or from `LIT_SERVER_PASSWORD`. There is
+/// deliberately no `--password` flag — an argument is visible in the process
+/// table to every other account on the host, which would undo the point of
+/// having accounts at all.
+fn read_server_password(
+    password_file: Option<PathBuf>,
+    password_stdin: bool,
+) -> Result<String, lit::errors::LitError> {
+    use std::io::Read;
+
+    if let Some(path) = password_file {
+        let raw = std::fs::read_to_string(&path).map_err(|e| {
+            lit::errors::LitError::Config(format!(
+                "Failed to read password file {}: {}",
+                path.display(),
+                e
+            ))
+        })?;
+        return Ok(raw.trim_end_matches(['\n', '\r']).to_string());
+    }
+
+    if password_stdin {
+        let mut raw = String::new();
+        std::io::stdin().read_to_string(&mut raw).map_err(|e| {
+            lit::errors::LitError::Config(format!("Failed to read password from stdin: {}", e))
+        })?;
+        return Ok(raw.trim_end_matches(['\n', '\r']).to_string());
+    }
+
+    if let Ok(value) = std::env::var("LIT_SERVER_PASSWORD") {
+        if !value.is_empty() {
+            return Ok(value);
+        }
+    }
+
+    Err(lit::errors::LitError::Config(
+        "No password supplied. Use --password-file <path>, --password-stdin,          or set LIT_SERVER_PASSWORD."
+            .to_string(),
+    ))
+}
+
+#[derive(Subcommand, Clone, Debug)]
+enum ServerCommands {
+    /// Run the hardened server
+    Serve {
+        /// Address to bind. Binding a routable address requires TLS.
+        #[arg(long, default_value = "127.0.0.1")]
+        bind: String,
+
+        /// Port to listen on
+        #[arg(short, long, default_value = "3000")]
+        port: u16,
+
+        /// PEM certificate chain
+        #[arg(long, requires = "tls_key")]
+        tls_cert: Option<PathBuf>,
+
+        /// PEM private key, unencrypted, owner-readable only
+        #[arg(long, requires = "tls_cert")]
+        tls_key: Option<PathBuf>,
+
+        /// System use notification shown before authentication (03.01.09)
+        #[arg(long)]
+        banner: Option<PathBuf>,
+
+        /// Account store (default: ~/.lit/server/users.json)
+        #[arg(long)]
+        users: Option<PathBuf>,
+
+        /// Audit log path (default: ~/.lit/audit.log)
+        #[arg(long)]
+        audit_log: Option<String>,
+
+        /// Disable audit logging. Recorded at startup when used.
+        #[arg(long)]
+        no_audit: bool,
+
+        /// Serve plaintext on a routable address anyway
+        #[arg(long)]
+        allow_plaintext: bool,
+
+        /// Terminate a session after this many seconds idle
+        #[arg(long, default_value = "900")]
+        idle_timeout: u64,
+
+        /// Terminate a session this many seconds after it was created
+        #[arg(long, default_value = "28800")]
+        max_lifetime: u64,
+
+        /// Consecutive failed logons before an account locks
+        #[arg(long, default_value = "5")]
+        max_attempts: u32,
+
+        /// Seconds an account stays locked; 0 means until an admin unlocks it
+        #[arg(long, default_value = "900")]
+        lockout_secs: i64,
+    },
+
+    /// Manage server accounts
+    User {
+        #[command(subcommand)]
+        command: ServerUserCommands,
+    },
+}
+
+#[derive(Subcommand, Clone, Debug)]
+enum ServerUserCommands {
+    /// Create an account
+    Add {
+        username: String,
+
+        /// Role: reader, contributor, maintainer, or admin
+        #[arg(long, default_value = "reader")]
+        role: String,
+
+        /// File containing the password
+        #[arg(long)]
+        password_file: Option<PathBuf>,
+
+        /// Read the password from stdin
+        #[arg(long)]
+        password_stdin: bool,
+
+        /// Account store (default: ~/.lit/server/users.json)
+        #[arg(long)]
+        users: Option<PathBuf>,
+    },
+
+    /// List accounts
+    List {
+        #[arg(long)]
+        users: Option<PathBuf>,
+    },
+
+    /// Change an account's role
+    Role {
+        username: String,
+        /// Role: reader, contributor, maintainer, or admin
+        role: String,
+        #[arg(long)]
+        users: Option<PathBuf>,
+    },
+
+    /// Change an account's password
+    Password {
+        username: String,
+        #[arg(long)]
+        password_file: Option<PathBuf>,
+        #[arg(long)]
+        password_stdin: bool,
+        #[arg(long)]
+        users: Option<PathBuf>,
+    },
+
+    /// Disable an account without removing it
+    Disable {
+        username: String,
+        #[arg(long)]
+        users: Option<PathBuf>,
+    },
+
+    /// Re-enable a disabled account
+    Enable {
+        username: String,
+        #[arg(long)]
+        users: Option<PathBuf>,
+    },
+
+    /// Remove an account
+    Remove {
+        username: String,
+        #[arg(long)]
+        users: Option<PathBuf>,
+    },
+
+    /// Clear an account lockout
+    Unlock {
+        username: String,
+        #[arg(long)]
+        users: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -436,6 +624,15 @@ enum Commands {
         /// Run as lit:// protocol daemon (TCP, port 9418 default)
         #[arg(long)]
         daemon: bool,
+    },
+
+    /// Self-hosted server: accounts, roles, sessions, TLS, and audit
+    ///
+    /// Unlike `lit serve`, which is a loopback development server, this is the
+    /// command intended to be hosted. See docs/SELF_HOSTING.md.
+    Server {
+        #[command(subcommand)]
+        command: ServerCommands,
     },
 
     /// Start the MCP (Model Context Protocol) tool server
@@ -1730,6 +1927,128 @@ fn run() {
                 run!(commands::serve::execute(port, token))
             }
         }
+        Commands::Server { command } => match command {
+            ServerCommands::Serve {
+                bind,
+                port,
+                tls_cert,
+                tls_key,
+                banner,
+                users,
+                audit_log,
+                no_audit,
+                allow_plaintext,
+                idle_timeout,
+                max_lifetime,
+                max_attempts,
+                lockout_secs,
+            } => {
+                let mut options = match lit::server::ServerOptions::local(port) {
+                    Ok(o) => o,
+                    Err(e) => {
+                        let err = lit::errors::LitError::Config(e);
+                        let output = formatter::format_error(&err, err.error_code(), format);
+                        use std::io::Write;
+                        let _ = std::io::stderr().write_all(&output);
+                        let _ = std::io::stderr().write_all(b"
+");
+                        process::exit(1);
+                    }
+                };
+                options.bind = format!("{}:{}", bind, port);
+                options.tls = match (tls_cert, tls_key) {
+                    (Some(certificate), Some(private_key)) => {
+                        Some(lit::server::tls::TlsPaths {
+                            certificate,
+                            private_key,
+                        })
+                    }
+                    // clap's `requires` makes the mixed cases unreachable.
+                    _ => None,
+                };
+                options.banner_path = banner;
+                if let Some(path) = users {
+                    options.users_path = path;
+                }
+                options.audit_path = audit_log;
+                options.audit_enabled = !no_audit;
+                options.allow_plaintext = allow_plaintext;
+                options.session_policy = lit::server::session::SessionPolicy {
+                    idle_timeout: std::time::Duration::from_secs(idle_timeout),
+                    max_lifetime: std::time::Duration::from_secs(max_lifetime),
+                    ..lit::server::session::SessionPolicy::default()
+                };
+                options.lockout_policy = lit::server::auth::LockoutPolicy {
+                    max_attempts,
+                    lockout_secs,
+                    ..lit::server::auth::LockoutPolicy::default()
+                };
+                run!(commands::server::execute_serve(options))
+            }
+
+            ServerCommands::User { command } => match command {
+                ServerUserCommands::Add {
+                    username,
+                    role,
+                    password_file,
+                    password_stdin,
+                    users,
+                } => {
+                    let password = match read_server_password(password_file, password_stdin) {
+                        Ok(p) => p,
+                        Err(e) => {
+                            let output = formatter::format_error(&e, e.error_code(), format);
+                            use std::io::Write;
+                            let _ = std::io::stderr().write_all(&output);
+                            let _ = std::io::stderr().write_all(b"
+");
+                            process::exit(1);
+                        }
+                    };
+                    run!(commands::server::user_add(username, password, role, users))
+                }
+                ServerUserCommands::List { users } => {
+                    run!(commands::server::user_list(users))
+                }
+                ServerUserCommands::Role {
+                    username,
+                    role,
+                    users,
+                } => run!(commands::server::user_role(username, role, users)),
+                ServerUserCommands::Password {
+                    username,
+                    password_file,
+                    password_stdin,
+                    users,
+                } => {
+                    let password = match read_server_password(password_file, password_stdin) {
+                        Ok(p) => p,
+                        Err(e) => {
+                            let output = formatter::format_error(&e, e.error_code(), format);
+                            use std::io::Write;
+                            let _ = std::io::stderr().write_all(&output);
+                            let _ = std::io::stderr().write_all(b"
+");
+                            process::exit(1);
+                        }
+                    };
+                    run!(commands::server::user_password(username, password, users))
+                }
+                ServerUserCommands::Disable { username, users } => {
+                    run!(commands::server::user_set_disabled(username, true, users))
+                }
+                ServerUserCommands::Enable { username, users } => {
+                    run!(commands::server::user_set_disabled(username, false, users))
+                }
+                ServerUserCommands::Remove { username, users } => {
+                    run!(commands::server::user_remove(username, users))
+                }
+                ServerUserCommands::Unlock { username, users } => {
+                    run!(commands::server::user_unlock(username, users))
+                }
+            },
+        },
+
         Commands::McpServe { stdio, port } => {
             if let Some(p) = port {
                 run!(commands::mcp_serve::execute_http(p))

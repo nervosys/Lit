@@ -18,6 +18,14 @@ const RATE_LIMIT_MAX_REQUESTS: u32 = 100;
 /// Rate limit window duration in seconds
 const RATE_LIMIT_WINDOW_SECS: u64 = 60;
 
+/// Point at which the rate limiter prunes addresses whose window has closed.
+///
+/// Without this the table grows once per distinct source address and is never
+/// trimmed, so traffic from many addresses exhausts memory — the rate limiter
+/// becoming the denial of service it exists to prevent. Harmless on loopback,
+/// which is why it survived; `lit server serve` is exposed.
+const RATE_LIMIT_PRUNE_AT: usize = 10_000;
+
 /// Per-IP rate limiter using a sliding window counter
 pub(crate) struct RateLimiter {
     clients: HashMap<IpAddr, (Instant, u32)>,
@@ -35,6 +43,15 @@ impl RateLimiter {
     pub(crate) fn check(&mut self, ip: IpAddr) -> bool {
         let now = Instant::now();
         let window = std::time::Duration::from_secs(RATE_LIMIT_WINDOW_SECS);
+
+        // Drop addresses whose window has closed before admitting a new one.
+        // Entries still inside their window are kept, so this bounds the table
+        // by the number of genuinely active clients rather than by total
+        // addresses ever seen.
+        if self.clients.len() >= RATE_LIMIT_PRUNE_AT && !self.clients.contains_key(&ip) {
+            self.clients
+                .retain(|_, entry| now.duration_since(entry.0) < window);
+        }
 
         let entry = self.clients.entry(ip).or_insert((now, 0));
         if now.duration_since(entry.0) >= window {
@@ -332,24 +349,36 @@ fn handle_daemon_connection(stream: std::net::TcpStream, repo_root: &std::path::
     }
 }
 
-fn json_content_type() -> Header {
+pub(crate) fn json_content_type() -> Header {
     Header::from_bytes("Content-Type", "application/json").unwrap()
 }
 
-fn read_body(request: &mut tiny_http::Request) -> Result<String, crate::errors::LitError> {
-    let content_length = request.body_length().unwrap_or(0);
-    if content_length > MAX_BODY_SIZE {
+pub(crate) fn read_body(request: &mut tiny_http::Request) -> Result<String, crate::errors::LitError> {
+    // `body_length()` reports the declared Content-Length, and is `None` for a
+    // chunked request. Trusting it alone — as this did, via `unwrap_or(0)` —
+    // let a chunked body skip the cap entirely and be read into memory without
+    // limit, unauthenticated. The declared length is now only an early reject;
+    // the real bound is on the read itself.
+    if let Some(declared) = request.body_length() {
+        if declared > MAX_BODY_SIZE {
+            return Err("Request body too large".into());
+        }
+    }
+
+    // Read at most one byte past the cap, so that overshoot is detectable
+    // without buffering it. Fully-qualified so this does not depend on `Read`
+    // being imported at module scope.
+    let mut body = String::new();
+    let mut limited = std::io::Read::take(request.as_reader(), MAX_BODY_SIZE as u64 + 1);
+    std::io::Read::read_to_string(&mut limited, &mut body)
+        .map_err(|e| format!("Failed to read request body: {}", e))?;
+    if body.len() > MAX_BODY_SIZE {
         return Err("Request body too large".into());
     }
-    let mut body = String::new();
-    request
-        .as_reader()
-        .read_to_string(&mut body)
-        .map_err(|e| format!("Failed to read request body: {}", e))?;
     Ok(body)
 }
 
-fn route_request(
+pub(crate) fn route_request(
     method: Method,
     url: &str,
     body: &str,
@@ -844,4 +873,53 @@ fn base64_decode(input: &str) -> Result<Vec<u8>, crate::errors::LitError> {
         }
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ip(n: u32) -> IpAddr {
+        IpAddr::V4(std::net::Ipv4Addr::from(n))
+    }
+
+    #[test]
+    fn a_client_is_allowed_up_to_the_limit_and_refused_after() {
+        let mut limiter = RateLimiter::new();
+        let client = ip(0x0a000001);
+        for i in 0..RATE_LIMIT_MAX_REQUESTS {
+            assert!(limiter.check(client), "request {} should be allowed", i);
+        }
+        assert!(!limiter.check(client), "the request past the limit is refused");
+    }
+
+    #[test]
+    fn one_client_exhausting_its_budget_does_not_affect_another() {
+        let mut limiter = RateLimiter::new();
+        let noisy = ip(0x0a000001);
+        let quiet = ip(0x0a000002);
+        for _ in 0..=RATE_LIMIT_MAX_REQUESTS {
+            let _ = limiter.check(noisy);
+        }
+        assert!(!limiter.check(noisy));
+        assert!(limiter.check(quiet));
+    }
+
+    #[test]
+    fn the_client_table_does_not_grow_without_bound() {
+        // Every address here is distinct and within its window, so nothing is
+        // prunable: the table is expected to track them. What this pins down is
+        // that crossing the prune threshold neither panics nor drops a client
+        // that is still inside its window.
+        let mut limiter = RateLimiter::new();
+        for n in 0..(RATE_LIMIT_PRUNE_AT as u32 + 50) {
+            assert!(limiter.check(ip(n)));
+        }
+        // A previously seen address is still rate-limited, not reset.
+        let seen = ip(7);
+        for _ in 1..RATE_LIMIT_MAX_REQUESTS {
+            assert!(limiter.check(seen));
+        }
+        assert!(!limiter.check(seen));
+    }
 }

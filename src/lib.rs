@@ -47,6 +47,8 @@ pub mod network;
 pub mod ontology;
 /// Typed response structs for all 42+ CLI commands
 pub mod response;
+/// Self-hosting server: accounts, roles, sessions, TLS, and audit wiring
+pub mod server;
 /// Object store and index (staging area) persistence
 pub mod storage;
 

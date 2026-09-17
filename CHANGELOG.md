@@ -5,6 +5,36 @@ All notable changes to Lit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+> **Partly validated.** `cargo test --lib` passes in full (167 tests). The
+> end-to-end walkthrough in `docs/SELF_HOSTING.md` §6 has **not** been run — no
+> server started by this code has ever served a request. See `docs/HANDOFF.md` §0.
+
+### Added
+
+- **`lit server serve` — a server actually meant to be hosted** — `lit serve` binds loopback, speaks plaintext HTTP, and accepts one shared bearer token. A shared token cannot say *who* acted, which means no audit record it produces can satisfy NIST SP 800-171r3 03.03.02, and audit is what every investigation rests on. The new command is a separate one rather than flags on the old: named accounts with four ordered roles (`reader`, `contributor`, `maintainer`, `admin`), authorization decided in exactly one place so an unlisted route fails closed, sessions with idle and absolute lifetime limits, windowed account lockout, TLS termination, an operator-supplied system use notification served before authentication, and an HMAC-chained audit record for every authentication and authorization decision. Two commands, not one flag, because conflating them is how a development server ends up on a routable address
+- **`lit server user`** — `add`, `list`, `role`, `password`, `disable`, `enable`, `remove`, `unlock`. There is deliberately no `--password` flag: a command-line argument is visible in the process table to every other account on the host, which would undo the point of having accounts. Passwords come from `--password-file`, `--password-stdin`, or `LIT_SERVER_PASSWORD`, are held to 15 characters minimum, and are stored as PBKDF2-HMAC-SHA512 at the same 600,000 iterations the repository key derivation uses
+- **The server refuses to start serving plaintext on a non-loopback address** unless `--allow-plaintext` is passed, and records that override in the audit log. The failure it prevents — a server working perfectly while publishing every session token to the network — is silent, and by the time it is noticed the credentials are already out
+- **`docs/NIST_800-171.md`** — a requirement-by-requirement mapping across all 17 families, with an explicit gap list. It states up front that no software is "800-171 compliant", that Lit's TLS is *not* FIPS-validated, and that Lit implements neither multi-factor authentication nor CUI marking. **`docs/SELF_HOSTING.md`** covers deployment, including the validated-proxy pattern for both of those gaps
+
+### Fixed
+
+- **The request body size cap could be bypassed entirely** — `read_body` took the declared `Content-Length` via `body_length().unwrap_or(0)`, and that is `None` for a chunked request, so a chunked body was treated as zero-length, passed the 1 MB check, and was then read into memory without any limit — unauthenticated, since the body is read before the caller is identified. The declared length is now only an early reject; the real bound is on the read itself. Present in `lit serve` too, where loopback-only binding kept it harmless, which is why it survived
+- **The account store's atomic replace repeated two bugs the repository had already fixed elsewhere** — `UserStore::save` used a fixed `users.json.tmp`, so two processes administering one store (a case the refresh work above deliberately supports) would overwrite each other's half-written file and race on the rename; the name now carries the process id. It also never called `allow_replacement` before renaming, though that helper exists for precisely this and `EncryptionKey::save` calls it — Windows refuses to rename onto a file it considers read-only, which is exactly what the previous save's restriction leaves. A failed rename now also removes the temporary file rather than leaving every password verifier sitting in it
+- **The rate limiter grew without bound** — one `HashMap` entry per distinct source address, never trimmed, so traffic from many addresses exhausted memory: the rate limiter becoming the denial of service it exists to prevent. Entries whose window has closed are now pruned once the table crosses a threshold. `serve.rs` had no tests at all; it now has three
+- **Account changes made while the server ran were invisible to it, and were then erased** — the server loaded the account store once at startup and wrote its in-memory copy back on every successful login, to update `last_login`. A `lit server user disable bob` run against a running server therefore reported success, left Bob logging in, and was overwritten the next time anyone authenticated. The store now re-reads whenever the file's modification time or length has changed — before authenticating, before listing, and before every mutation. Length is checked alongside the timestamp because filesystem timestamp granularity is coarse enough that two edits in one tick can look identical. A store that has been *deleted* keeps the accounts in memory rather than emptying them, so losing the file cannot become a way to switch authentication off
+
+### Security
+
+- **A session no longer outlives the authority it was issued under** — a session carried the role it was minted with and was never re-checked against the account behind it, so an account disabled, demoted, or removed kept its open session working until that session happened to expire: up to eight hours on the defaults. Revocation has to bite now rather than eventually, so every request re-checks that account against the store. A session whose account has gone or been disabled is terminated on the spot and the request refused; a demoted account's session drops to its current role rather than the one it was minted with. The cost is a `stat` and a map lookup per request
+
+### Known open
+
+- `disable`, `enable`, `role`, `password`, and `unlock` have no API equivalent; only create, list, and delete are exposed. The CLI covers them and now works against a running server
+- A residual lost-update race remains between two processes administering the same store simultaneously. Closing it needs file locking
+- The server handles one request at a time
+
 ## [1.6.0] - 2026-08-06
 
 ### Fixed

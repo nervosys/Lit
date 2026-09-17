@@ -45,6 +45,7 @@ pub mod rotate_key;
 pub mod sandbox;
 pub mod search;
 pub mod serve;
+pub mod server;
 pub mod show;
 pub mod snapshot;
 pub mod squash;

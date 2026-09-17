@@ -5,6 +5,111 @@ took it from 1.0.2 to 1.5.1, and a follow-up pass on the three items in §6.
 Written for whoever picks this up next, including a future me who has forgotten
 all of it.
 
+§0 was added **2026-09-17** and is about work that came after all of that.
+
+---
+
+## 0. Self-hosting (2026-09-17)
+
+### What has been verified, and what has not
+
+| | |
+| --- | --- |
+| `cargo test --lib` | **all pass** (167 tests), run by hand outside the harness |
+| `clippy` | not run |
+| The end-to-end walkthrough, `docs/SELF_HOSTING.md` §6 | **not run** — no server has ever been started |
+
+So: the units hold. **Nothing has ever served a request.** The §6 walkthrough is
+the first thing to do, and step 11 — revoking an account that holds an open
+session — is the one to trust least, because it is the newest logic and the only
+place where the request loop, the account store and the session store all have to
+agree.
+
+The session that wrote this lost its shell partway through: every `Bash` and
+`PowerShell` call, including `echo`, failed with `EEXIST` on the harness's tasks
+directory and never recovered. The last stretch of work was therefore written
+blind and verified by reading. It compiled first time, but that is luck as much
+as care, and it is why the §6 walkthrough matters more than usual here.
+
+One thing that run exposed, worth keeping: the first full test run had 15
+failures, 11 of them mine and 4 in `core::refs`, all Windows permission or
+already-exists errors. They were **contention**, not logic — the suite runs 167
+tests in parallel and several PBKDF2 tests pin cores for a minute. If this suite
+starts failing in that pattern again, suspect the environment before the code,
+and re-run with `--test-threads=1` to tell them apart.
+
+### What was added
+
+`src/server/` (`auth`, `session`, `banner`, `audit`, `tls`) and
+`src/commands/server.rs`, behind a new `lit server` CLI. `lit serve` is
+untouched and still the loopback development server. The control mapping is
+`docs/NIST_800-171.md`; deployment is `docs/SELF_HOSTING.md`.
+
+Six defects were found and fixed along the way, the first three in code that was
+harmless while `serve` bound loopback only and stopped being harmless the moment
+it could be hosted:
+
+1. The body size cap was bypassable with chunked transfer encoding, before
+   authentication.
+2. The rate limiter's client table grew without bound.
+3. The account store was read once at startup and written back on every login,
+   so a CLI `disable` against a running server reported success, did nothing,
+   and was then erased.
+4. Even once (3) was fixed, a session still carried the role it was minted with
+   and was never re-checked, so a revoked account kept its open session for up
+   to eight hours. Every request now re-checks the account behind its session.
+5. `UserStore::save` used a fixed `users.json.tmp`. Two processes administering
+   one store — a case (3) deliberately added support for — would overwrite each
+   other's half-written file and race on the rename. The name now carries the pid.
+6. `UserStore::save` never called `allow_replacement` before its rename, though
+   that helper exists in `crypto::encryption` for exactly this and
+   `EncryptionKey::save` calls it: Windows refuses to rename onto a file it
+   considers read-only, which is what the previous save's restriction leaves.
+
+**§6's lesson held up four separate times, which is the real finding here.**
+That lesson was: when a class of bug is fixed, grep for the pattern rather than
+fixing the instance.
+
+- (3): the store had a careful write-temp-restrict-rename `save` and no notion
+  that anyone else might write the same file.
+- (4): fixing (3) made revocation *recorded*; it took a second look to notice
+  that recorded is not *enforced*.
+- (5) and (6) are the sharpest, because the pattern was **already written down
+  in this repository**. `EncryptionKey::save` does the atomic-replace dance
+  correctly and calls `allow_replacement`; `crypto::agent` was fixed in 1.6.0 to
+  write-restrict-rename for the same reason. A new `save` was then written from
+  scratch, next to both of them, repeating the bug they had each already fixed.
+
+The generalisation for whoever is next: when you write a function whose shape
+matches one that already exists here — anything that writes a secret to disk,
+restricts it, and renames it into place — go and read the existing one first.
+There are at least three now, and they did not converge on their own.
+
+### What is known-open
+
+- `disable`, `enable`, `role`, `password`, `unlock` have no API route. The CLI
+  covers them and works against a running server.
+- Lit's TLS is `rustls`, **not FIPS-validated**. The at-rest cryptography is.
+  Both serve `https://`, so the difference is invisible from outside — which is
+  why it is stated in `src/server/tls.rs` as well as in the docs.
+- No MFA, no CUI marking. Both are documented as customer responsibility.
+- A residual lost-update race between two processes administering one store.
+- `route_request` still resolves the repository from the process's working
+  directory rather than the `repo_root` it is handed. Pre-existing, inherited
+  from `lit serve`, and it matters more now that the server is long-lived.
+
+### The next three things
+
+1. **Run the tests.** Then the walkthrough in `docs/SELF_HOSTING.md` §6 — step
+   11 is the revocation check, and it is the one to trust least until it has
+   actually been run.
+2. **Decide about the per-request `stat`.** Re-checking the account on every
+   request costs a `fs::metadata` call. That is the right default, but under
+   real load it may want a short cache with an explicit bound.
+3. **Look for the next instance of the old pattern**, per §6 — the account store
+   bug was found by asking who else writes this file. Ask the same of the audit
+   log and the session store.
+
 ---
 
 ## 1. Read this first: CI has not validated any of this

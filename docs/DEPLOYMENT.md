@@ -479,11 +479,21 @@ lit <command> --help    # Command-specific help
 
 ## Future Considerations
 
-### Server Deployment (Planned)
-- lit server software (future release)
-- Repository hosting capabilities
-- Push/pull protocol implementation
-- User authentication/authorization
+### Server Deployment (Implemented)
+
+Self-hosting shipped with `lit server serve`. See **`docs/SELF_HOSTING.md`** for
+the deployment guide and **`docs/NIST_800-171.md`** for the control mapping.
+
+- Named accounts with four roles, PBKDF2-HMAC-SHA512 stored credentials
+- Sessions with idle and absolute lifetime limits
+- Account lockout on consecutive failed logons
+- TLS termination, refused-by-default plaintext on routable addresses
+- System use notification served before authentication
+- An HMAC-chained audit record for every authentication and authorization decision
+
+Note that `lit serve` — the command documented elsewhere in this guide — remains
+a loopback-only development server with no account system. It is not the one to
+host.
 
 ### Advanced Features (Implemented)
 - Merge functionality with 3-way merge

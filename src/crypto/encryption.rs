@@ -390,7 +390,7 @@ fn windows_restrict_to_owner(path: &Path) -> Result<(), String> {
 /// Only Windows needs this: it refuses to rename onto a read-only file, and
 /// the restriction applied on the previous save is exactly that. A missing
 /// file is fine — there is nothing to clear.
-fn allow_replacement(path: &Path) -> Result<(), String> {
+pub(crate) fn allow_replacement(path: &Path) -> Result<(), String> {
     #[cfg(windows)]
     {
         if path.exists() {

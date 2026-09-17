@@ -1294,6 +1294,62 @@ impl CommandResponse for VerifyResponse {
 // ============================================================================
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct ServerAdminResponse {
+    /// The administrative action performed, e.g. "user-add".
+    pub action: String,
+    pub message: String,
+    /// Account listing, present for the list action.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub users: Option<serde_json::Value>,
+}
+
+impl CommandResponse for ServerAdminResponse {
+    fn command_name(&self) -> &'static str {
+        "server"
+    }
+    fn human_readable(&self) -> String {
+        match &self.users {
+            None => self.message.clone(),
+            Some(users) => {
+                let mut out = String::new();
+                if let Some(rows) = users.as_array() {
+                    out.push_str(&format!(
+                        "{:<20} {:<12} {:<8} {}
+",
+                        "USERNAME", "ROLE", "STATUS", "LAST LOGIN"
+                    ));
+                    for row in rows {
+                        let get = |k: &str| {
+                            row.get(k)
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("-")
+                                .to_string()
+                        };
+                        let status = if row.get("disabled").and_then(|v| v.as_bool()) == Some(true) {
+                            "disabled"
+                        } else if row.get("locked").and_then(|v| v.as_bool()) == Some(true) {
+                            "locked"
+                        } else {
+                            "active"
+                        };
+                        out.push_str(&format!(
+                            "{:<20} {:<12} {:<8} {}
+",
+                            get("username"),
+                            get("role"),
+                            status,
+                            get("last_login")
+                        ));
+                    }
+                }
+                out.push_str(&self.message);
+                out
+            }
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ServeResponse {
     pub message: String,
 }

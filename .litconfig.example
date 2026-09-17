@@ -36,6 +36,15 @@ audit_log_path = "~/.lit/audit.log"
 #   LIT_PASSPHRASE          Encryption passphrase (sensitive)
 #   LIT_PASSPHRASE_FILE     Path to file containing passphrase
 #   LIT_API_TOKEN           Bearer token for lit serve (sensitive)
+#   LIT_SERVER_PASSWORD     Account password for `lit server user add|password`
+#                           (sensitive). There is no --password flag: a command
+#                           argument is visible in the process table. Prefer
+#                           --password-file or --password-stdin.
+#
+# Self-hosted server (`lit server serve`) is configured by CLI flags, not by
+# this file — see docs/SELF_HOSTING.md. Its state lives at:
+#   ~/.lit/server/users.json   Account store (owner-only)
+#   ~/.lit/audit.log           Audit log, unless --audit-log overrides it
 #
 # OpenTelemetry (configured during installation, stored user-scoped):
 #   OTEL_EXPORTER_OTLP_ENDPOINT    OTLP collector endpoint
