@@ -7,9 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-> **Partly validated.** `cargo test --lib` passes in full (167 tests). The
-> end-to-end walkthrough in `docs/SELF_HOSTING.md` §6 has **not** been run — no
-> server started by this code has ever served a request. See `docs/HANDOFF.md` §0.
+> **Validated by test, not by clippy.** `cargo test --lib` passes in full (167
+> tests), and `cargo test --test command_tests -- server::` passes (21 tests
+> driving a real server over a real socket). Clippy has not been run. See
+> `docs/HANDOFF.md` §0.
 
 ### Added
 
@@ -28,6 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - **A session no longer outlives the authority it was issued under** — a session carried the role it was minted with and was never re-checked against the account behind it, so an account disabled, demoted, or removed kept its open session working until that session happened to expire: up to eight hours on the defaults. Revocation has to bite now rather than eventually, so every request re-checks that account against the store. A session whose account has gone or been disabled is terminated on the spot and the request refused; a demoted account's session drops to its current role rather than the one it was minted with. The cost is a `stat` and a map lookup per request
+
+### Testing
+
+- **The hardened server is now driven over a real socket** — its security surface had unit tests for the pieces and nothing that made a request, which is a gap that matters: every control in `docs/NIST_800-171.md` is a claim about what happens to a request, and a route wired to the wrong check would have passed everything. Binding is now split from serving, so a test can bind port 0, learn the port, drive real HTTP and stop the server cleanly; `execute_serve` is three lines on top of it, and the same split is what a supervisor needs to report readiness rather than guess. 21 tests in `tests/commands/server.rs` cover the banner, forged and expired tokens, role enforcement, fail-closed routes, lockout, the account lifecycle and audit attribution. Revocation is asserted by both routes it can travel, with their distinct status codes: an API delete runs in-process and terminates the session (401 thereafter), while a CLI revocation is caught by the per-request re-check (403)
 
 ### Known open
 

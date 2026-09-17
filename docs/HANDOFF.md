@@ -15,15 +15,22 @@ all of it.
 
 | | |
 | --- | --- |
-| `cargo test --lib` | **all pass** (167 tests), run by hand outside the harness |
-| `clippy` | not run |
-| The end-to-end walkthrough, `docs/SELF_HOSTING.md` §6 | **not run** — no server has ever been started |
+| `cargo test --lib` | **all pass** (167 tests) |
+| `cargo test --test command_tests -- server::` | **all pass** (21 tests, real server on a real socket) |
+| `clippy` | **not run** |
+| The manual walkthrough, `docs/SELF_HOSTING.md` §6 | not run by hand — but §6's substance is now covered by the integration tests |
 
-So: the units hold. **Nothing has ever served a request.** The §6 walkthrough is
-the first thing to do, and step 11 — revoking an account that holds an open
-session — is the one to trust least, because it is the newest logic and the only
-place where the request loop, the account store and the session store all have to
-agree.
+The security surface is exercised end to end: the banner before authentication,
+forged and expired tokens, role enforcement, routes that fail closed, lockout,
+the account lifecycle, revocation by both routes it can travel, and the audit
+log's attribution. Those tests are in `tests/commands/server.rs`, and they are
+the thing to keep honest — they are the only place a route wired to the wrong
+check would be caught.
+
+What is *not* covered, deliberately: the routes that touch the repository. They
+reach `route_request`, which resolves the repository from the process's working
+directory rather than from the `repo_root` it is handed. That is pre-existing,
+inherited from `lit serve`, and it is the next real thing to fix in this area.
 
 The session that wrote this lost its shell partway through: every `Bash` and
 `PowerShell` call, including `echo`, failed with `EEXIST` on the harness's tasks
@@ -100,15 +107,19 @@ There are at least three now, and they did not converge on their own.
 
 ### The next three things
 
-1. **Run the tests.** Then the walkthrough in `docs/SELF_HOSTING.md` §6 — step
-   11 is the revocation check, and it is the one to trust least until it has
-   actually been run.
-2. **Decide about the per-request `stat`.** Re-checking the account on every
-   request costs a `fs::metadata` call. That is the right default, but under
-   real load it may want a short cache with an explicit bound.
-3. **Look for the next instance of the old pattern**, per §6 — the account store
-   bug was found by asking who else writes this file. Ask the same of the audit
-   log and the session store.
+1. **Run clippy.** It is the one gate nothing here has passed through.
+2. **Fix `route_request`'s working-directory assumption.** It is why the
+   repository routes have no integration coverage, and it is a genuine bug for a
+   long-lived server, not just a testing inconvenience. Fixing it makes those
+   routes testable in the same file, which is how it should be paid for.
+3. **Decide about the per-request `stat`.** Re-checking the account on every
+   request costs a `fs::metadata` call. That is the right default — revocation
+   should be immediate — but under real load it may want a short cache with an
+   explicit bound.
+
+And the standing one, per §6: **look for the next instance of an old pattern**
+rather than the next new bug. That has now paid out four times in this section
+alone.
 
 ---
 

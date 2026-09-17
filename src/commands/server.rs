@@ -21,8 +21,9 @@ use crate::server::auth::{AuthOutcome, LockoutPolicy, Role, UserStore};
 use crate::server::session::SessionError;
 use crate::server::tls::TlsMaterial;
 use crate::server::{default_server_dir, is_public_route, required_role, Caller, ServerContext, ServerOptions};
-use std::net::IpAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
+use std::sync::Arc;
 use tiny_http::{Method, Response, Server, StatusCode};
 
 /// Reply helper: a JSON body with a status code.
@@ -42,9 +43,85 @@ fn error_body(message: &str) -> String {
     .to_string()
 }
 
-/// Start the hardened server.
+/// Stops a running server. Cloneable, and safe to call from another thread.
+///
+/// The loop ends after the request it is currently serving, so a shutdown is
+/// not a connection reset for whoever is mid-request.
+#[derive(Clone)]
+pub struct ShutdownHandle(Arc<Server>);
+
+impl ShutdownHandle {
+    pub fn shutdown(&self) {
+        self.0.unblock();
+    }
+}
+
+/// A server that has bound its port but is not yet serving.
+///
+/// Binding and running are separate because the bind is the part that fails —
+/// a taken port, unreadable TLS material, an empty account store — and a caller
+/// needs to hear about that before anything claims to be listening. It is also
+/// what makes the server testable: bind port 0, ask which port you got, drive
+/// real requests, then stop it.
+pub struct BoundServer {
+    server: Arc<Server>,
+    context: ServerContext,
+    repo_root: PathBuf,
+}
+
+impl BoundServer {
+    /// The address actually bound, which is how a caller learns the port when
+    /// it asked for 0.
+    pub fn local_addr(&self) -> Option<SocketAddr> {
+        self.server.server_addr().to_ip()
+    }
+
+    /// A handle that stops [`BoundServer::run`].
+    pub fn shutdown_handle(&self) -> ShutdownHandle {
+        ShutdownHandle(Arc::clone(&self.server))
+    }
+
+    /// Tell the operator what was started, and what about it is weak.
+    pub fn announce(&self) {
+        let context = &self.context;
+        let scheme = if context.options.tls.is_some() {
+            "https"
+        } else {
+            "http"
+        };
+        eprintln!("Lit server listening on {}://{}", scheme, context.options.bind);
+        eprintln!("Repository: {}", self.repo_root.display());
+        eprintln!(
+            "Accounts:   {} ({} configured)",
+            context.options.users_path.display(),
+            context.users.lock().map(|u| u.len()).unwrap_or(0)
+        );
+        if context.options.tls.is_none() {
+            eprintln!("WARNING: TLS is off. Credentials cross the wire in the clear.");
+        }
+        if !context.banner.customized {
+            eprintln!(
+                "WARNING: serving the default placeholder system use notification. \
+                 Set server.banner_path (NIST SP 800-171r3 03.01.09)."
+            );
+        }
+        if !context.recorder.is_enabled() {
+            eprintln!("WARNING: audit logging is disabled (NIST SP 800-171r3 03.03.01).");
+        }
+        eprintln!("Press Ctrl+C to stop");
+    }
+}
+
+/// Start the hardened server, serving until it is stopped.
 pub fn execute_serve(options: ServerOptions) -> Result<ServeResponse, LitError> {
     let repo_root = find_repo_root()?;
+    let bound = bind(options, repo_root)?;
+    bound.announce();
+    bound.run()
+}
+
+/// Bind the server's port and build its state, without serving anything yet.
+pub fn bind(options: ServerOptions, repo_root: PathBuf) -> Result<BoundServer, LitError> {
     let context = ServerContext::new(options).map_err(LitError::Config)?;
 
     // Bind before announcing anything, so a port conflict is not reported as a
@@ -74,40 +151,27 @@ pub fn execute_serve(options: ServerOptions) -> Result<ServeResponse, LitError> 
         })?,
     };
 
-    let scheme = if context.options.tls.is_some() {
-        "https"
-    } else {
-        "http"
-    };
-    eprintln!("Lit server listening on {}://{}", scheme, context.options.bind);
-    eprintln!("Repository: {}", repo_root.display());
-    eprintln!(
-        "Accounts:   {} ({} configured)",
-        context.options.users_path.display(),
-        context
-            .users
-            .lock()
-            .map(|u| u.len())
-            .unwrap_or(0)
-    );
-    if context.options.tls.is_none() {
-        eprintln!("WARNING: TLS is off. Credentials cross the wire in the clear.");
-    }
-    if !context.banner.customized {
-        eprintln!(
-            "WARNING: serving the default placeholder system use notification. \
-             Set server.banner_path (NIST SP 800-171r3 03.01.09)."
-        );
-    }
-    if !context.recorder.is_enabled() {
-        eprintln!("WARNING: audit logging is disabled (NIST SP 800-171r3 03.03.01).");
-    }
-    eprintln!("Press Ctrl+C to stop");
+    Ok(BoundServer {
+        server: Arc::new(server),
+        context,
+        repo_root,
+    })
+}
 
-    context.record_startup();
-    let mut rate_limiter = RateLimiter::new();
+impl BoundServer {
+    /// Serve until [`ShutdownHandle::shutdown`] is called.
+    pub fn run(self) -> Result<ServeResponse, LitError> {
+        // Destructured so the request loop below reads against plain locals.
+        let BoundServer {
+            server,
+            context,
+            repo_root,
+        } = self;
 
-    for mut request in server.incoming_requests() {
+        context.record_startup();
+        let mut rate_limiter = RateLimiter::new();
+
+        for mut request in server.incoming_requests() {
         let remote: Option<IpAddr> = request.remote_addr().map(|a| a.ip());
         let method = request.method().clone();
         let url = request.url().to_string();
@@ -298,12 +362,13 @@ pub fn execute_serve(options: ServerOptions) -> Result<ServeResponse, LitError> 
         let _ = request.respond(response);
     }
 
-    context
-        .recorder
-        .record(ServerEvent::ServerStop, AuditRecord::success());
-    Ok(ServeResponse {
-        message: "Server stopped".to_string(),
-    })
+        context
+            .recorder
+            .record(ServerEvent::ServerStop, AuditRecord::success());
+        Ok(ServeResponse {
+            message: "Server stopped".to_string(),
+        })
+    }
 }
 
 /// Extract a bearer token from the Authorization header.

@@ -33,6 +33,7 @@ mod revert;
 mod rotate_key;
 mod search;
 mod serve;
+mod server;
 mod show;
 mod snapshot;
 mod ssh_transport;
