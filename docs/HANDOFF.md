@@ -15,10 +15,11 @@ all of it.
 
 | | |
 | --- | --- |
-| `cargo test --lib` | **all pass** (167 tests) |
+| `cargo test --lib` | **all pass** (181 tests) |
 | `cargo test --test command_tests -- server::` | **all pass** (21 tests, real server on a real socket) |
-| `clippy` | **not run** |
-| The manual walkthrough, `docs/SELF_HOSTING.md` §6 | not run by hand — but §6's substance is now covered by the integration tests |
+| `cargo clippy --all-targets` | **clean**, no warnings |
+| `cargo fmt --check` | clean |
+| The manual walkthrough, `docs/SELF_HOSTING.md` §6 | not run by hand — but §6's substance is covered by the integration tests |
 
 The security surface is exercised end to end: the banner before authentication,
 forged and expired tokens, role enforcement, routes that fail closed, lockout,
@@ -32,17 +33,23 @@ reach `route_request`, which resolves the repository from the process's working
 directory rather than from the `repo_root` it is handed. That is pre-existing,
 inherited from `lit serve`, and it is the next real thing to fix in this area.
 
-The session that wrote this lost its shell partway through: every `Bash` and
-`PowerShell` call, including `echo`, failed with `EEXIST` on the harness's tasks
-directory and never recovered. The last stretch of work was therefore written
-blind and verified by reading. It compiled first time, but that is luck as much
-as care, and it is why the §6 walkthrough matters more than usual here.
+Two environment traps cost most of a day here and will cost it again:
 
-One thing that run exposed, worth keeping: the first full test run had 15
-failures, 11 of them mine and 4 in `core::refs`, all Windows permission or
-already-exists errors. They were **contention**, not logic — the suite runs 167
-tests in parallel and several PBKDF2 tests pin cores for a minute. If this suite
-starts failing in that pattern again, suspect the environment before the code,
+- **`Access is denied. (os error 5)` across unrelated modules, and `LNK1104:
+  cannot open file 'C:\...\Temp\lnk{...}.tmp'` from the linker.** Both are one
+  cause: a sandboxed shell that can create directories under `%TEMP%` but not
+  files. Point `TMP` and `TEMP` at a writable directory and both go away —
+  `cargo test --lib` went from 44 failures to zero on that change alone. Read
+  the *full* linker message before concluding anything; `LNK1104` was misread
+  here as a held file lock, and build processes were killed for nothing.
+- **`Blocking waiting for file lock on build directory`.** rust-analyzer runs
+  `cargo check` continuously against the same target directory. Retry, or run in
+  the background. Do not kill its processes; a separate `CARGO_TARGET_DIR` does
+  not help either, because a cold build needs MSVC `cl.exe` for the C build
+  scripts in `ring` and `pqcrypto-internals`.
+
+If this suite starts failing in a broad permission-shaped pattern again,
+suspect the environment before the code,
 and re-run with `--test-threads=1` to tell them apart.
 
 ### What was added
@@ -105,14 +112,13 @@ There are at least three now, and they did not converge on their own.
   directory rather than the `repo_root` it is handed. Pre-existing, inherited
   from `lit serve`, and it matters more now that the server is long-lived.
 
-### The next three things
+### The next things
 
-1. **Run clippy.** It is the one gate nothing here has passed through.
-2. **Fix `route_request`'s working-directory assumption.** It is why the
+1. **Fix `route_request`'s working-directory assumption.** It is why the
    repository routes have no integration coverage, and it is a genuine bug for a
    long-lived server, not just a testing inconvenience. Fixing it makes those
    routes testable in the same file, which is how it should be paid for.
-3. **Decide about the per-request `stat`.** Re-checking the account on every
+2. **Decide about the per-request `stat`.** Re-checking the account on every
    request costs a `fs::metadata` call. That is the right default — revocation
    should be immediate — but under real load it may want a short cache with an
    explicit bound.
