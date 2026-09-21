@@ -35,6 +35,42 @@ fn json_response(status: u16, body: String) -> Response<std::io::Cursor<Vec<u8>>
         .with_header(json_content_type())
 }
 
+/// Longest username accepted at the login route.
+///
+/// Anything longer cannot be an account, because `UserStore::add_user` would
+/// never have created it — so hashing it is wasted work, and recording it is
+/// worse than wasted. See [`audit_subject`].
+const MAX_LOGIN_USERNAME: usize = 64;
+
+/// What to record as the subject of a failed login.
+///
+/// The attempted username belongs in the record: `03.03.02` is about knowing
+/// who tried, and a failed-login trail without names is not worth keeping. But
+/// this string is caller-supplied, and the commonest way for it to be wrong is
+/// a password typed into the username field — which would then sit in a log
+/// that is retained, forwarded to a SIEM, and read by administrators.
+///
+/// Anything not shaped like an account name cannot be one, so it is recorded as
+/// a marker rather than verbatim. That covers the mistyped-password case for
+/// any password containing a space or a symbol outside the account charset, and
+/// bounds what an anonymous caller can write into the log.
+///
+/// Line-format injection is separately impossible: records are serialized with
+/// `serde_json`, which escapes newlines and quotes, so a crafted username
+/// cannot forge a second `timestamp | event | json | hmac` line.
+fn audit_subject(username: &str) -> String {
+    let shaped = !username.is_empty()
+        && username.len() <= MAX_LOGIN_USERNAME
+        && username
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '@'));
+    if shaped {
+        username.to_string()
+    } else {
+        "<malformed-username>".to_string()
+    }
+}
+
 /// A structured error body. Messages here are deliberately terse: they go to
 /// unauthenticated callers, so they say what to do without saying why it failed.
 fn error_body(message: &str) -> String {
@@ -423,6 +459,22 @@ fn handle_login(
         );
     }
 
+    // Reject oversized credentials before doing any work on them. Neither can
+    // belong to a real account, and without this an anonymous caller could
+    // write close to the 1 MB body cap into the audit log on every failed
+    // attempt — filling the disk that the audit trail depends on, one rejected
+    // login at a time.
+    if username.len() > MAX_LOGIN_USERNAME || password.len() > crate::server::auth::MAX_PASSWORD_LEN
+    {
+        context.recorder.record(
+            ServerEvent::AuthFailure,
+            AuditRecord::failure("oversized_credential")
+                .source(remote)
+                .object("/api/v1/auth/login"),
+        );
+        return json_response(400, error_body("Invalid credentials"));
+    }
+
     let outcome = {
         let mut users = match context.users.lock() {
             Ok(u) => u,
@@ -466,7 +518,7 @@ fn handle_login(
             context.recorder.record(
                 ServerEvent::AuthLockout,
                 AuditRecord::failure(format!("locked_until={}", until))
-                    .subject(username)
+                    .subject(audit_subject(&username))
                     .source(remote)
                     .object("/api/v1/auth/login"),
             );
@@ -479,7 +531,7 @@ fn handle_login(
             context.recorder.record(
                 ServerEvent::AuthFailure,
                 AuditRecord::failure("account_disabled")
-                    .subject(username)
+                    .subject(audit_subject(&username))
                     .source(remote)
                     .object("/api/v1/auth/login"),
             );
@@ -489,7 +541,7 @@ fn handle_login(
             context.recorder.record(
                 ServerEvent::AuthFailure,
                 AuditRecord::failure("invalid_credentials")
-                    .subject(username)
+                    .subject(audit_subject(&username))
                     .source(remote)
                     .object("/api/v1/auth/login"),
             );
@@ -878,6 +930,57 @@ mod tests {
         )
         .is_err());
         assert!(!dir.path().join("users.json").exists());
+    }
+
+    #[test]
+    fn a_well_formed_username_is_audited_verbatim() {
+        assert_eq!(audit_subject("alice"), "alice");
+        assert_eq!(audit_subject("ci-bot_1.x@example"), "ci-bot_1.x@example");
+    }
+
+    #[test]
+    fn a_password_typed_into_the_username_field_is_not_stored() {
+        // The case this exists for: most passwords carry a space or a symbol
+        // outside the account charset, and an audit log is retained and
+        // forwarded.
+        assert_eq!(
+            audit_subject("correct horse battery staple"),
+            "<malformed-username>"
+        );
+        assert_eq!(audit_subject("hunter2!"), "<malformed-username>");
+    }
+
+    #[test]
+    fn an_oversized_or_empty_username_is_not_stored() {
+        assert_eq!(audit_subject(""), "<malformed-username>");
+        assert_eq!(
+            audit_subject(&"a".repeat(MAX_LOGIN_USERNAME + 1)),
+            "<malformed-username>"
+        );
+        // The boundary itself is still a plausible account name.
+        let at_limit = "a".repeat(MAX_LOGIN_USERNAME);
+        assert_eq!(audit_subject(&at_limit), at_limit);
+    }
+
+    #[test]
+    fn a_username_cannot_forge_a_second_audit_line() {
+        // Serialization is what protects the `ts | event | json | hmac` format.
+        // A crafted username must come back escaped, on one line.
+        let crafted = "a\n2099-01-01T00:00:00Z | AUTH_SUCCESS | {} | deadbeef";
+        let record = AuditRecord::failure("invalid_credentials").subject(audit_subject(crafted));
+        let json = serde_json::to_string(&record).unwrap();
+        assert!(
+            !json.contains('\n'),
+            "record must stay on one line: {}",
+            json
+        );
+        // This particular input is malformed anyway, so it never reaches the log.
+        assert!(json.contains("<malformed-username>"));
+
+        // Even a shaped name is escaped rather than trusted.
+        let record = AuditRecord::failure("invalid_credentials").subject("alice");
+        let json = serde_json::to_string(&record).unwrap();
+        assert!(!json.contains('\n'));
     }
 
     #[test]
