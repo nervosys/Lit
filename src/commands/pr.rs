@@ -213,23 +213,25 @@ fn save_pr(repo_root: &Path, pr: &PullRequest) -> Result<(), LitError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
-    use std::sync::atomic::{AtomicU32, Ordering};
+    use tempfile::TempDir;
 
-    static COUNTER: AtomicU32 = AtomicU32::new(0);
-
-    fn tmp_dir() -> PathBuf {
-        let n = COUNTER.fetch_add(1, Ordering::SeqCst);
-        let dir = std::env::temp_dir().join(format!("lit_pr_test_{}_{}", std::process::id(), n));
-        fs::create_dir_all(&dir).unwrap();
-        dir
+    /// A scratch repository root that cleans itself up.
+    ///
+    /// This used to build a path from the process id and delete it at the end of
+    /// each test. Process ids are reused, so a directory left by an earlier run
+    /// could be adopted by a later one; and because the cleanup was the last
+    /// statement, a test that failed never reached it and left the directory
+    /// behind for exactly that to happen. `TempDir` is randomly named and drops
+    /// during unwind, so neither does.
+    fn tmp_dir() -> TempDir {
+        TempDir::new().unwrap()
     }
 
     #[test]
     fn test_create_and_list() {
         let dir = tmp_dir();
         let pr = create_pr(
-            &dir,
+            dir.path(),
             "Add DID support",
             "Implements DIDs",
             "did:lit:user1",
@@ -241,22 +243,27 @@ mod tests {
         assert_eq!(pr.id, 1);
         assert_eq!(pr.state, PrState::Open);
 
-        let prs = list_prs(&dir, None).unwrap();
+        let prs = list_prs(dir.path(), None).unwrap();
         assert_eq!(prs.len(), 1);
-
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn test_merge_pr() {
         let dir = tmp_dir();
-        create_pr(&dir, "Test", "Body", "user1", "feature", "main", vec![]).unwrap();
-        let merged = merge_pr(&dir, 1).unwrap();
+        create_pr(
+            dir.path(),
+            "Test",
+            "Body",
+            "user1",
+            "feature",
+            "main",
+            vec![],
+        )
+        .unwrap();
+        let merged = merge_pr(dir.path(), 1).unwrap();
         assert_eq!(merged.state, PrState::Merged);
 
         // Can't merge twice
-        assert!(merge_pr(&dir, 1).is_err());
-
-        let _ = fs::remove_dir_all(&dir);
+        assert!(merge_pr(dir.path(), 1).is_err());
     }
 }

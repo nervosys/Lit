@@ -241,24 +241,25 @@ fn save_task(repo_root: &Path, task: &DelegatedTask) -> Result<(), LitError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
-    use std::sync::atomic::{AtomicU32, Ordering};
+    use tempfile::TempDir;
 
-    static COUNTER: AtomicU32 = AtomicU32::new(0);
-
-    fn tmp_dir() -> PathBuf {
-        let n = COUNTER.fetch_add(1, Ordering::SeqCst);
-        let dir =
-            std::env::temp_dir().join(format!("lit_delegate_test_{}_{}", std::process::id(), n));
-        fs::create_dir_all(&dir).unwrap();
-        dir
+    /// A scratch repository root that cleans itself up.
+    ///
+    /// This used to build a path from the process id and delete it at the end of
+    /// each test. Process ids are reused, so a directory left by an earlier run
+    /// could be adopted by a later one; and because the cleanup was the last
+    /// statement, a test that failed never reached it and left the directory
+    /// behind for exactly that to happen. `TempDir` is randomly named and drops
+    /// during unwind, so neither does.
+    fn tmp_dir() -> TempDir {
+        TempDir::new().unwrap()
     }
 
     #[test]
     fn test_create_and_list_tasks() {
         let dir = tmp_dir();
         let task = create_task(
-            &dir,
+            dir.path(),
             "did:lit:manager",
             "did:lit:agent1",
             "Fix merge bug",
@@ -273,17 +274,15 @@ mod tests {
         assert_eq!(task.status, TaskStatus::Pending);
         assert_eq!(task.delegatee, "did:lit:agent1");
 
-        let tasks = list_tasks(&dir, Some("did:lit:agent1"), None).unwrap();
+        let tasks = list_tasks(dir.path(), Some("did:lit:agent1"), None).unwrap();
         assert_eq!(tasks.len(), 1);
-
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn test_task_lifecycle() {
         let dir = tmp_dir();
         let task = create_task(
-            &dir,
+            dir.path(),
             "did:lit:a",
             "did:lit:b",
             "Task",
@@ -295,14 +294,17 @@ mod tests {
         )
         .unwrap();
 
-        let task =
-            update_task_status(&dir, &task.id, TaskStatus::Accepted, Some("On it".into())).unwrap();
+        let task = update_task_status(
+            dir.path(),
+            &task.id,
+            TaskStatus::Accepted,
+            Some("On it".into()),
+        )
+        .unwrap();
         assert_eq!(task.status, TaskStatus::Accepted);
 
-        let task = complete_task(&dir, &task.id, "Fixed in commit abc123").unwrap();
+        let task = complete_task(dir.path(), &task.id, "Fixed in commit abc123").unwrap();
         assert_eq!(task.status, TaskStatus::Completed);
         assert_eq!(task.history.len(), 3);
-
-        let _ = fs::remove_dir_all(&dir);
     }
 }

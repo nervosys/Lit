@@ -33,7 +33,7 @@ fn read_capped_line<R: BufRead>(
         }
         saw_any = true;
         let newline = available.iter().position(|&b| b == b'\n');
-        let chunk_len = newline.map_or(available.len(), |idx| idx);
+        let chunk_len = newline.unwrap_or(available.len());
         let room = max_bytes.saturating_sub(buf.len());
         let take = room.min(chunk_len);
         buf.extend_from_slice(&available[..take]);

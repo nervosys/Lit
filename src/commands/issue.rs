@@ -172,23 +172,25 @@ fn save_issue(repo_root: &Path, issue: &Issue) -> Result<(), LitError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
-    use std::sync::atomic::{AtomicU32, Ordering};
+    use tempfile::TempDir;
 
-    static COUNTER: AtomicU32 = AtomicU32::new(0);
-
-    fn tmp_dir() -> PathBuf {
-        let n = COUNTER.fetch_add(1, Ordering::SeqCst);
-        let dir = std::env::temp_dir().join(format!("lit_issue_test_{}_{}", std::process::id(), n));
-        fs::create_dir_all(&dir).unwrap();
-        dir
+    /// A scratch repository root that cleans itself up.
+    ///
+    /// This used to build a path from the process id and delete it at the end of
+    /// each test. Process ids are reused, so a directory left by an earlier run
+    /// could be adopted by a later one; and because the cleanup was the last
+    /// statement, a test that failed never reached it and left the directory
+    /// behind for exactly that to happen. `TempDir` is randomly named and drops
+    /// during unwind, so neither does.
+    fn tmp_dir() -> TempDir {
+        TempDir::new().unwrap()
     }
 
     #[test]
     fn test_create_and_list_issues() {
         let dir = tmp_dir();
         let issue = create_issue(
-            &dir,
+            dir.path(),
             "Bug: crash on merge",
             "Merging fails with panic",
             "did:lit:user1",
@@ -198,33 +200,27 @@ mod tests {
         assert_eq!(issue.id, 1);
         assert_eq!(issue.state, IssueState::Open);
 
-        let issues = list_issues(&dir, None).unwrap();
+        let issues = list_issues(dir.path(), None).unwrap();
         assert_eq!(issues.len(), 1);
-
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn test_close_issue() {
         let dir = tmp_dir();
-        create_issue(&dir, "Test", "Body", "user1", vec![]).unwrap();
-        let closed = close_issue(&dir, 1).unwrap();
+        create_issue(dir.path(), "Test", "Body", "user1", vec![]).unwrap();
+        let closed = close_issue(dir.path(), 1).unwrap();
         assert_eq!(closed.state, IssueState::Closed);
 
-        let open = list_issues(&dir, Some(IssueState::Open)).unwrap();
+        let open = list_issues(dir.path(), Some(IssueState::Open)).unwrap();
         assert_eq!(open.len(), 0);
-
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn test_comment_issue() {
         let dir = tmp_dir();
-        create_issue(&dir, "Test", "Body", "user1", vec![]).unwrap();
-        let issue = comment_issue(&dir, 1, "user2", "This needs fixing").unwrap();
+        create_issue(dir.path(), "Test", "Body", "user1", vec![]).unwrap();
+        let issue = comment_issue(dir.path(), 1, "user2", "This needs fixing").unwrap();
         assert_eq!(issue.comments.len(), 1);
         assert_eq!(issue.comments[0].author, "user2");
-
-        let _ = fs::remove_dir_all(&dir);
     }
 }

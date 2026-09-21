@@ -179,22 +179,18 @@ pub fn generate_want_list(repo_root: &Path) -> Result<Vec<String>, LitError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
-    use std::sync::atomic::{AtomicU32, Ordering};
+    use tempfile::TempDir;
 
-    static COUNTER: AtomicU32 = AtomicU32::new(0);
-
-    /// Per-test scratch directory.
+    /// A scratch repository root that cleans itself up.
     ///
-    /// The peer list is a file under one repo root that each test removes when
-    /// it finishes. Only one test currently writes there, but sharing a root
-    /// would make the next one that does collide with it.
-    fn tmp_dir() -> PathBuf {
-        let n = COUNTER.fetch_add(1, Ordering::SeqCst);
-        let dir = std::env::temp_dir().join(format!("lit_fed_test_{}_{}", std::process::id(), n));
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).unwrap();
-        dir
+    /// This used to build a path from the process id and delete it at the end of
+    /// each test. Process ids are reused, so a directory left by an earlier run
+    /// could be adopted by a later one; and because the cleanup was the last
+    /// statement, a test that failed never reached it and left the directory
+    /// behind for exactly that to happen. `TempDir` is randomly named and drops
+    /// during unwind, so neither does.
+    fn tmp_dir() -> TempDir {
+        TempDir::new().unwrap()
     }
 
     #[test]
@@ -210,13 +206,11 @@ mod tests {
             reachable: false,
             added: chrono::Utc::now().to_rfc3339(),
         };
-        add_peer(&dir, &peer).unwrap();
+        add_peer(dir.path(), &peer).unwrap();
 
-        let peers = list_peers(&dir).unwrap();
+        let peers = list_peers(dir.path()).unwrap();
         assert_eq!(peers.len(), 1);
         assert_eq!(peers[0].did, "did:lit:peer1");
-
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
