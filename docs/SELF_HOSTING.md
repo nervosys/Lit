@@ -172,8 +172,37 @@ The supported arrangement is to terminate TLS in a validated module:
 lit server serve --bind 127.0.0.1 --port 3000 --banner /etc/lit/banner.txt
 ```
 
-Nothing else changes: Lit still authenticates, authorizes, expires sessions, and
-audits. Only the TLS moves.
+Lit still authenticates, authorizes, expires sessions and audits. Only the TLS
+moves — but two things behind a proxy do not work the way they look.
+
+### What a proxy costs you, and what to do about it
+
+Lit identifies a client by the peer address of the TCP connection. Behind a
+proxy, every connection comes from the proxy, so:
+
+1. **Rate limiting collapses into one bucket.** The limit is 100 requests per
+   minute *per address*, and behind a proxy there is only one address. All your
+   users share it, and one noisy client starves everyone else.
+2. **The audit `source` field records the proxy, not the client.** For
+   `03.03.02` — a record that says where the request came from — that is a
+   material loss. Your failed-login trail will name accounts correctly and
+   locations uselessly.
+
+Lit does **not** read `X-Forwarded-For`, deliberately: a forwarded header is
+caller-supplied, and honouring it by default would let anyone spoof their source
+address in your audit log and sidestep the rate limiter entirely. That is worse
+than the problem it solves.
+
+So until Lit grows an explicit trusted-proxy setting, do the following:
+
+- **Rate limit at the proxy**, per real client address, and treat Lit's limiter
+  as a backstop rather than the control. `limit_req` in nginx, `stick-table` in
+  HAProxy.
+- **Log the real client address at the proxy**, and correlate with Lit's audit
+  log on timestamp and account name. Note this correlation step in your SSP —
+  an assessor testing `03.03.02` will ask where the source address comes from,
+  and "the proxy's access log, joined on timestamp" is a defensible answer that
+  needs to be written down in advance.
 
 This is also where **multi-factor authentication** goes (`03.05.03`). Lit does
 not implement MFA. An authenticating proxy doing OIDC/SAML with MFA in front of
