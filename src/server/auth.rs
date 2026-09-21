@@ -165,7 +165,10 @@ pub struct User {
 
 impl User {
     /// Whether the account is locked as of `now`.
-    fn is_locked(&self, now: chrono::DateTime<chrono::Utc>) -> Option<chrono::DateTime<chrono::Utc>> {
+    fn is_locked(
+        &self,
+        now: chrono::DateTime<chrono::Utc>,
+    ) -> Option<chrono::DateTime<chrono::Utc>> {
         let until = self.locked_until.as_ref()?;
         let parsed = chrono::DateTime::parse_from_rfc3339(until).ok()?;
         let until_utc = parsed.with_timezone(&chrono::Utc);
@@ -336,7 +339,9 @@ impl UserStore {
         // administering one store is a case this deliberately supports: a fixed
         // `users.json.tmp` would have them overwrite each other's half-written
         // file and race on the rename.
-        let tmp = self.path.with_extension(format!("{}.tmp", std::process::id()));
+        let tmp = self
+            .path
+            .with_extension(format!("{}.tmp", std::process::id()));
         fs::write(&tmp, json.as_bytes())
             .map_err(|e| format!("Failed to write account store: {}", e))?;
         restrict_to_owner(&tmp)?;
@@ -371,10 +376,18 @@ impl UserStore {
                 MAX_PASSWORD_LEN
             ));
         }
-        if password.to_ascii_lowercase().contains(&username.to_ascii_lowercase()) {
+        if password
+            .to_ascii_lowercase()
+            .contains(&username.to_ascii_lowercase())
+        {
             return Err("Password must not contain the username".to_string());
         }
-        if password.chars().collect::<std::collections::HashSet<_>>().len() < 5 {
+        if password
+            .chars()
+            .collect::<std::collections::HashSet<_>>()
+            .len()
+            < 5
+        {
             return Err("Password must not be a short repeated sequence".to_string());
         }
         Ok(())
@@ -720,8 +733,14 @@ mod tests {
         s.add_user("bob", "correct horse battery staple", Role::Reader)
             .unwrap();
 
-        assert_eq!(s.authenticate("bob", "wrong"), AuthOutcome::InvalidCredentials);
-        assert_eq!(s.authenticate("bob", "wrong"), AuthOutcome::InvalidCredentials);
+        assert_eq!(
+            s.authenticate("bob", "wrong"),
+            AuthOutcome::InvalidCredentials
+        );
+        assert_eq!(
+            s.authenticate("bob", "wrong"),
+            AuthOutcome::InvalidCredentials
+        );
         assert!(matches!(
             s.authenticate("bob", "wrong"),
             AuthOutcome::Locked { .. }
@@ -752,7 +771,10 @@ mod tests {
         assert_eq!(reopened.len(), 1);
         assert!(matches!(
             reopened.authenticate("carol", "correct horse battery staple"),
-            AuthOutcome::Success { role: Role::Admin, .. }
+            AuthOutcome::Success {
+                role: Role::Admin,
+                ..
+            }
         ));
     }
 
@@ -939,7 +961,8 @@ mod tests {
             s.authenticate("frank", "wrong"),
             AuthOutcome::Locked { .. }
         ));
-        s.set_password("frank", "a different long passphrase").unwrap();
+        s.set_password("frank", "a different long passphrase")
+            .unwrap();
         assert!(matches!(
             s.authenticate("frank", "a different long passphrase"),
             AuthOutcome::Success { .. }

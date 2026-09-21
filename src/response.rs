@@ -1325,7 +1325,8 @@ impl CommandResponse for ServerAdminResponse {
                                 .unwrap_or("-")
                                 .to_string()
                         };
-                        let status = if row.get("disabled").and_then(|v| v.as_bool()) == Some(true) {
+                        let status = if row.get("disabled").and_then(|v| v.as_bool()) == Some(true)
+                        {
                             "disabled"
                         } else if row.get("locked").and_then(|v| v.as_bool()) == Some(true) {
                             "locked"

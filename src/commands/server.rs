@@ -20,7 +20,9 @@ use crate::server::audit::{AuditRecord, ServerEvent};
 use crate::server::auth::{AuthOutcome, LockoutPolicy, Role, UserStore};
 use crate::server::session::SessionError;
 use crate::server::tls::TlsMaterial;
-use crate::server::{default_server_dir, is_public_route, required_role, Caller, ServerContext, ServerOptions};
+use crate::server::{
+    default_server_dir, is_public_route, required_role, Caller, ServerContext, ServerOptions,
+};
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -89,7 +91,10 @@ impl BoundServer {
         } else {
             "http"
         };
-        eprintln!("Lit server listening on {}://{}", scheme, context.options.bind);
+        eprintln!(
+            "Lit server listening on {}://{}",
+            scheme, context.options.bind
+        );
         eprintln!("Repository: {}", self.repo_root.display());
         eprintln!(
             "Accounts:   {} ({} configured)",
@@ -172,195 +177,198 @@ impl BoundServer {
         let mut rate_limiter = RateLimiter::new();
 
         for mut request in server.incoming_requests() {
-        let remote: Option<IpAddr> = request.remote_addr().map(|a| a.ip());
-        let method = request.method().clone();
-        let url = request.url().to_string();
-        let path = url.split('?').next().unwrap_or(&url).to_string();
+            let remote: Option<IpAddr> = request.remote_addr().map(|a| a.ip());
+            let method = request.method().clone();
+            let url = request.url().to_string();
+            let path = url.split('?').next().unwrap_or(&url).to_string();
 
-        // 1. Rate limiting, before any work is done on the caller's behalf.
-        if let Some(ip) = remote {
-            if !rate_limiter.check(ip) {
-                context.recorder.record(
-                    ServerEvent::RateLimited,
-                    AuditRecord::failure("rate_limit_exceeded")
-                        .source(remote)
-                        .object(path.clone()),
-                );
-                let _ = request.respond(json_response(429, error_body("Rate limit exceeded")));
-                continue;
-            }
-        }
-
-        // 2. Body, subject to the size cap.
-        let body = match read_body(&mut request) {
-            Ok(b) => b,
-            Err(e) => {
-                context.recorder.record(
-                    ServerEvent::RequestRejected,
-                    AuditRecord::failure(e.to_string())
-                        .source(remote)
-                        .object(path.clone()),
-                );
-                let _ = request.respond(json_response(413, error_body("Request rejected")));
-                continue;
-            }
-        };
-
-        // 3. Public routes: the banner, and login itself.
-        if is_public_route(&method, &path) {
-            let response = if method == Method::Get {
-                json_response(200, context.banner.to_json())
-            } else {
-                handle_login(&context, &body, remote)
-            };
-            let _ = request.respond(response);
-            continue;
-        }
-
-        // 4. Everything else needs a live session.
-        let token = match bearer_token(&request) {
-            Some(t) => t,
-            None => {
-                context.recorder.record(
-                    ServerEvent::SessionInvalid,
-                    AuditRecord::failure("missing_bearer_token")
-                        .source(remote)
-                        .object(path.clone()),
-                );
-                let _ = request.respond(json_response(401, error_body("Authentication required")));
-                continue;
-            }
-        };
-
-        let caller = {
-            let mut sessions = match context.sessions.lock() {
-                Ok(s) => s,
-                Err(poisoned) => poisoned.into_inner(),
-            };
-            match sessions.validate(&token) {
-                Ok(session) => Caller {
-                    username: session.username,
-                    role: session.role,
-                },
-                Err(e) => {
-                    drop(sessions);
+            // 1. Rate limiting, before any work is done on the caller's behalf.
+            if let Some(ip) = remote {
+                if !rate_limiter.check(ip) {
                     context.recorder.record(
-                        ServerEvent::SessionInvalid,
-                        AuditRecord::failure(e.as_str())
+                        ServerEvent::RateLimited,
+                        AuditRecord::failure("rate_limit_exceeded")
                             .source(remote)
                             .object(path.clone()),
                     );
-                    let message = match e {
-                        SessionError::IdleTimeout | SessionError::LifetimeExceeded => {
-                            "Session expired; authenticate again"
-                        }
-                        SessionError::Unknown => "Authentication required",
-                    };
-                    let _ = request.respond(json_response(401, error_body(message)));
+                    let _ = request.respond(json_response(429, error_body("Rate limit exceeded")));
                     continue;
                 }
             }
-        };
 
-        // 4b. Re-check the account behind the session, every request.
-        //
-        // A session carries the role it was issued with. Without consulting the
-        // store again, an account disabled, demoted, or removed from the CLI
-        // kept its open session working until that session happened to expire —
-        // up to the absolute lifetime, eight hours on the defaults. Revocation
-        // has to bite now, not eventually, so the current role wins over the
-        // one the session was minted with.
-        let caller = {
-            let state = {
-                let mut users = match context.users.lock() {
-                    Ok(u) => u,
+            // 2. Body, subject to the size cap.
+            let body = match read_body(&mut request) {
+                Ok(b) => b,
+                Err(e) => {
+                    context.recorder.record(
+                        ServerEvent::RequestRejected,
+                        AuditRecord::failure(e.to_string())
+                            .source(remote)
+                            .object(path.clone()),
+                    );
+                    let _ = request.respond(json_response(413, error_body("Request rejected")));
+                    continue;
+                }
+            };
+
+            // 3. Public routes: the banner, and login itself.
+            if is_public_route(&method, &path) {
+                let response = if method == Method::Get {
+                    json_response(200, context.banner.to_json())
+                } else {
+                    handle_login(&context, &body, remote)
+                };
+                let _ = request.respond(response);
+                continue;
+            }
+
+            // 4. Everything else needs a live session.
+            let token = match bearer_token(&request) {
+                Some(t) => t,
+                None => {
+                    context.recorder.record(
+                        ServerEvent::SessionInvalid,
+                        AuditRecord::failure("missing_bearer_token")
+                            .source(remote)
+                            .object(path.clone()),
+                    );
+                    let _ =
+                        request.respond(json_response(401, error_body("Authentication required")));
+                    continue;
+                }
+            };
+
+            let caller = {
+                let mut sessions = match context.sessions.lock() {
+                    Ok(s) => s,
                     Err(poisoned) => poisoned.into_inner(),
                 };
-                users.account_state(&caller.username)
-            };
-            match state {
-                Some((role, true)) => Caller {
-                    username: caller.username,
-                    role,
-                },
-                other => {
-                    let reason = if other.is_none() {
-                        "account_removed"
-                    } else {
-                        "account_disabled"
-                    };
-                    {
-                        let mut sessions = match context.sessions.lock() {
-                            Ok(s) => s,
-                            Err(poisoned) => poisoned.into_inner(),
+                match sessions.validate(&token) {
+                    Ok(session) => Caller {
+                        username: session.username,
+                        role: session.role,
+                    },
+                    Err(e) => {
+                        drop(sessions);
+                        context.recorder.record(
+                            ServerEvent::SessionInvalid,
+                            AuditRecord::failure(e.as_str())
+                                .source(remote)
+                                .object(path.clone()),
+                        );
+                        let message = match e {
+                            SessionError::IdleTimeout | SessionError::LifetimeExceeded => {
+                                "Session expired; authenticate again"
+                            }
+                            SessionError::Unknown => "Authentication required",
                         };
-                        sessions.terminate_user(&caller.username);
+                        let _ = request.respond(json_response(401, error_body(message)));
+                        continue;
                     }
-                    context.recorder.record(
-                        ServerEvent::AccessDenied,
-                        AuditRecord::failure(reason)
-                            .subject(caller.username.clone())
-                            .source(remote)
-                            .object(format!("{:?} {}", method, path)),
-                    );
-                    let _ = request
-                        .respond(json_response(403, error_body("Account is no longer authorized")));
-                    continue;
                 }
-            }
-        };
+            };
 
-        // 5. Authorization, decided in one place for every route.
-        let needed = required_role(&method, &path);
-        if caller.role < needed {
-            context.recorder.record(
-                ServerEvent::AccessDenied,
-                AuditRecord::failure(format!("requires_{}", needed))
-                    .subject(caller.username.clone())
-                    .source(remote)
-                    .object(format!("{:?} {}", method, path)),
-            );
-            let _ = request.respond(json_response(403, error_body("Insufficient privilege")));
-            continue;
+            // 4b. Re-check the account behind the session, every request.
+            //
+            // A session carries the role it was issued with. Without consulting the
+            // store again, an account disabled, demoted, or removed from the CLI
+            // kept its open session working until that session happened to expire —
+            // up to the absolute lifetime, eight hours on the defaults. Revocation
+            // has to bite now, not eventually, so the current role wins over the
+            // one the session was minted with.
+            let caller = {
+                let state = {
+                    let mut users = match context.users.lock() {
+                        Ok(u) => u,
+                        Err(poisoned) => poisoned.into_inner(),
+                    };
+                    users.account_state(&caller.username)
+                };
+                match state {
+                    Some((role, true)) => Caller {
+                        username: caller.username,
+                        role,
+                    },
+                    other => {
+                        let reason = if other.is_none() {
+                            "account_removed"
+                        } else {
+                            "account_disabled"
+                        };
+                        {
+                            let mut sessions = match context.sessions.lock() {
+                                Ok(s) => s,
+                                Err(poisoned) => poisoned.into_inner(),
+                            };
+                            sessions.terminate_user(&caller.username);
+                        }
+                        context.recorder.record(
+                            ServerEvent::AccessDenied,
+                            AuditRecord::failure(reason)
+                                .subject(caller.username.clone())
+                                .source(remote)
+                                .object(format!("{:?} {}", method, path)),
+                        );
+                        let _ = request.respond(json_response(
+                            403,
+                            error_body("Account is no longer authorized"),
+                        ));
+                        continue;
+                    }
+                }
+            };
+
+            // 5. Authorization, decided in one place for every route.
+            let needed = required_role(&method, &path);
+            if caller.role < needed {
+                context.recorder.record(
+                    ServerEvent::AccessDenied,
+                    AuditRecord::failure(format!("requires_{}", needed))
+                        .subject(caller.username.clone())
+                        .source(remote)
+                        .object(format!("{:?} {}", method, path)),
+                );
+                let _ = request.respond(json_response(403, error_body("Insufficient privilege")));
+                continue;
+            }
+
+            // 6. Session-scoped and administrative routes, then the repository API.
+            let response = if path == "/api/v1/auth/logout" {
+                handle_logout(&context, &token, &caller, remote)
+            } else if path == "/api/v1/auth/whoami" {
+                json_response(200, whoami_body(&caller))
+            } else if path.starts_with("/api/v1/admin/") {
+                handle_admin(&context, &method, &path, &body, &caller, remote)
+            } else {
+                match route_request(method.clone(), &url, &body, &repo_root) {
+                    Ok((status, body)) => {
+                        context.recorder.record(
+                            ServerEvent::ApiRequest,
+                            AuditRecord::success()
+                                .subject(caller.username.clone())
+                                .source(remote)
+                                .object(format!("{:?} {} -> {}", method, path, status)),
+                        );
+                        json_response(status, body)
+                    }
+                    Err(e) => {
+                        // The internal message stays server-side; the caller gets
+                        // the sanitized one. Both reach the audit log, because an
+                        // assessor reading it needs the detail.
+                        eprintln!("API error: {}", e.internal_message());
+                        context.recorder.record(
+                            ServerEvent::ApiRequest,
+                            AuditRecord::failure(e.internal_message())
+                                .subject(caller.username.clone())
+                                .source(remote)
+                                .object(format!("{:?} {}", method, path)),
+                        );
+                        json_response(500, error_body(e.user_message()))
+                    }
+                }
+            };
+            let _ = request.respond(response);
         }
-
-        // 6. Session-scoped and administrative routes, then the repository API.
-        let response = if path == "/api/v1/auth/logout" {
-            handle_logout(&context, &token, &caller, remote)
-        } else if path == "/api/v1/auth/whoami" {
-            json_response(200, whoami_body(&caller))
-        } else if path.starts_with("/api/v1/admin/") {
-            handle_admin(&context, &method, &path, &body, &caller, remote)
-        } else {
-            match route_request(method.clone(), &url, &body, &repo_root) {
-                Ok((status, body)) => {
-                    context.recorder.record(
-                        ServerEvent::ApiRequest,
-                        AuditRecord::success()
-                            .subject(caller.username.clone())
-                            .source(remote)
-                            .object(format!("{:?} {} -> {}", method, path, status)),
-                    );
-                    json_response(status, body)
-                }
-                Err(e) => {
-                    // The internal message stays server-side; the caller gets
-                    // the sanitized one. Both reach the audit log, because an
-                    // assessor reading it needs the detail.
-                    eprintln!("API error: {}", e.internal_message());
-                    context.recorder.record(
-                        ServerEvent::ApiRequest,
-                        AuditRecord::failure(e.internal_message())
-                            .subject(caller.username.clone())
-                            .source(remote)
-                            .object(format!("{:?} {}", method, path)),
-                    );
-                    json_response(500, error_body(&e.user_message()))
-                }
-            }
-        };
-        let _ = request.respond(response);
-    }
 
         context
             .recorder
@@ -376,7 +384,12 @@ fn bearer_token(request: &tiny_http::Request) -> Option<String> {
     request
         .headers()
         .iter()
-        .find(|h| h.field.as_str().as_str().eq_ignore_ascii_case("authorization"))
+        .find(|h| {
+            h.field
+                .as_str()
+                .as_str()
+                .eq_ignore_ascii_case("authorization")
+        })
         .and_then(|h| h.value.as_str().strip_prefix("Bearer "))
         .map(|t| t.trim().to_string())
         .filter(|t| !t.is_empty())
@@ -404,7 +417,10 @@ fn handle_login(
         .to_string();
 
     if username.is_empty() || password.is_empty() {
-        return json_response(400, error_body("Both 'username' and 'password' are required"));
+        return json_response(
+            400,
+            error_body("Both 'username' and 'password' are required"),
+        );
     }
 
     let outcome = {
@@ -503,7 +519,10 @@ fn handle_logout(
             .source(remote)
             .object("/api/v1/auth/logout"),
     );
-    json_response(200, r#"{"status":"ok","message":"Session terminated"}"#.to_string())
+    json_response(
+        200,
+        r#"{"status":"ok","message":"Session terminated"}"#.to_string(),
+    )
 }
 
 /// `GET /api/v1/auth/whoami`
@@ -585,8 +604,14 @@ fn handle_admin(
                 Ok(v) => v,
                 Err(_) => return json_response(400, error_body("Invalid JSON")),
             };
-            let username = payload.get("username").and_then(|v| v.as_str()).unwrap_or("");
-            let password = payload.get("password").and_then(|v| v.as_str()).unwrap_or("");
+            let username = payload
+                .get("username")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let password = payload
+                .get("password")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
             let role = payload
                 .get("role")
                 .and_then(|v| v.as_str())
@@ -604,7 +629,10 @@ fn handle_admin(
             };
             match result {
                 Ok(()) => {
-                    audit(Ok("created"), format!("create user={} role={}", username, role));
+                    audit(
+                        Ok("created"),
+                        format!("create user={} role={}", username, role),
+                    );
                     json_response(
                         201,
                         serde_json::json!({"status":"ok","message":"Account created"}).to_string(),
@@ -639,7 +667,10 @@ fn handle_admin(
                     };
                     audit(
                         Ok("removed"),
-                        format!("remove user={} sessions_terminated={}", username, terminated),
+                        format!(
+                            "remove user={} sessions_terminated={}",
+                            username, terminated
+                        ),
                     );
                     json_response(
                         200,
@@ -741,7 +772,10 @@ pub fn user_password(
         .map_err(LitError::Config)?;
     Ok(ServerAdminResponse {
         action: "user-password".to_string(),
-        message: format!("Password changed for '{}'; any lockout is cleared", username),
+        message: format!(
+            "Password changed for '{}'; any lockout is cleared",
+            username
+        ),
         users: None,
     })
 }
@@ -757,7 +791,12 @@ pub fn user_set_disabled(
         .set_disabled(&username, disabled)
         .map_err(LitError::Config)?;
     Ok(ServerAdminResponse {
-        action: if disabled { "user-disable" } else { "user-enable" }.to_string(),
+        action: if disabled {
+            "user-disable"
+        } else {
+            "user-enable"
+        }
+        .to_string(),
         message: format!(
             "Account '{}' {}",
             username,

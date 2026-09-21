@@ -214,7 +214,11 @@ impl ServerContext {
         notes.push(format!("bind={}", self.options.bind));
         notes.push(format!(
             "tls={}",
-            if self.options.tls.is_some() { "on" } else { "off" }
+            if self.options.tls.is_some() {
+                "on"
+            } else {
+                "off"
+            }
         ));
         if self.options.tls.is_none() && self.options.allow_plaintext {
             notes.push("plaintext_override=yes".to_string());
@@ -237,15 +241,30 @@ mod tests {
     fn read_routes_require_only_reader() {
         assert_eq!(required_role(&Method::Get, "/api/v1/status"), Role::Reader);
         assert_eq!(required_role(&Method::Get, "/api/v1/log"), Role::Reader);
-        assert_eq!(required_role(&Method::Get, "/api/v1/show/abc123"), Role::Reader);
+        assert_eq!(
+            required_role(&Method::Get, "/api/v1/show/abc123"),
+            Role::Reader
+        );
     }
 
     #[test]
     fn writing_requires_contributor_and_rewriting_requires_maintainer() {
-        assert_eq!(required_role(&Method::Post, "/api/v1/commit"), Role::Contributor);
-        assert_eq!(required_role(&Method::Post, "/api/v1/add"), Role::Contributor);
-        assert_eq!(required_role(&Method::Post, "/api/v1/merge"), Role::Maintainer);
-        assert_eq!(required_role(&Method::Post, "/api/v1/checkout"), Role::Maintainer);
+        assert_eq!(
+            required_role(&Method::Post, "/api/v1/commit"),
+            Role::Contributor
+        );
+        assert_eq!(
+            required_role(&Method::Post, "/api/v1/add"),
+            Role::Contributor
+        );
+        assert_eq!(
+            required_role(&Method::Post, "/api/v1/merge"),
+            Role::Maintainer
+        );
+        assert_eq!(
+            required_role(&Method::Post, "/api/v1/checkout"),
+            Role::Maintainer
+        );
     }
 
     #[test]
@@ -262,8 +281,14 @@ mod tests {
 
     #[test]
     fn an_unlisted_route_fails_closed() {
-        assert_eq!(required_role(&Method::Post, "/api/v1/brand-new"), Role::Admin);
-        assert_eq!(required_role(&Method::Delete, "/api/v1/status"), Role::Admin);
+        assert_eq!(
+            required_role(&Method::Post, "/api/v1/brand-new"),
+            Role::Admin
+        );
+        assert_eq!(
+            required_role(&Method::Delete, "/api/v1/status"),
+            Role::Admin
+        );
     }
 
     #[test]

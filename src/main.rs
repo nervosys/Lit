@@ -52,7 +52,6 @@ struct Cli {
     command: Commands,
 }
 
-
 /// Read a server account password without putting it on the command line.
 ///
 /// Lit is a zero-prompt tool, so there is no interactive fallback: the password
@@ -1950,19 +1949,19 @@ fn run() {
                         let output = formatter::format_error(&err, err.error_code(), format);
                         use std::io::Write;
                         let _ = std::io::stderr().write_all(&output);
-                        let _ = std::io::stderr().write_all(b"
-");
+                        let _ = std::io::stderr().write_all(
+                            b"
+",
+                        );
                         process::exit(1);
                     }
                 };
                 options.bind = format!("{}:{}", bind, port);
                 options.tls = match (tls_cert, tls_key) {
-                    (Some(certificate), Some(private_key)) => {
-                        Some(lit::server::tls::TlsPaths {
-                            certificate,
-                            private_key,
-                        })
-                    }
+                    (Some(certificate), Some(private_key)) => Some(lit::server::tls::TlsPaths {
+                        certificate,
+                        private_key,
+                    }),
                     // clap's `requires` makes the mixed cases unreachable.
                     _ => None,
                 };
@@ -2000,8 +1999,10 @@ fn run() {
                             let output = formatter::format_error(&e, e.error_code(), format);
                             use std::io::Write;
                             let _ = std::io::stderr().write_all(&output);
-                            let _ = std::io::stderr().write_all(b"
-");
+                            let _ = std::io::stderr().write_all(
+                                b"
+",
+                            );
                             process::exit(1);
                         }
                     };
@@ -2027,8 +2028,10 @@ fn run() {
                             let output = formatter::format_error(&e, e.error_code(), format);
                             use std::io::Write;
                             let _ = std::io::stderr().write_all(&output);
-                            let _ = std::io::stderr().write_all(b"
-");
+                            let _ = std::io::stderr().write_all(
+                                b"
+",
+                            );
                             process::exit(1);
                         }
                     };

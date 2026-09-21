@@ -353,7 +353,9 @@ pub(crate) fn json_content_type() -> Header {
     Header::from_bytes("Content-Type", "application/json").unwrap()
 }
 
-pub(crate) fn read_body(request: &mut tiny_http::Request) -> Result<String, crate::errors::LitError> {
+pub(crate) fn read_body(
+    request: &mut tiny_http::Request,
+) -> Result<String, crate::errors::LitError> {
     // `body_length()` reports the declared Content-Length, and is `None` for a
     // chunked request. Trusting it alone — as this did, via `unwrap_or(0)` —
     // let a chunked body skip the cap entirely and be read into memory without
@@ -890,7 +892,10 @@ mod tests {
         for i in 0..RATE_LIMIT_MAX_REQUESTS {
             assert!(limiter.check(client), "request {} should be allowed", i);
         }
-        assert!(!limiter.check(client), "the request past the limit is refused");
+        assert!(
+            !limiter.check(client),
+            "the request past the limit is refused"
+        );
     }
 
     #[test]

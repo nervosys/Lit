@@ -47,9 +47,8 @@ impl Banner {
                 customized: false,
             }),
             Some(p) => {
-                let text = fs::read_to_string(p).map_err(|e| {
-                    format!("Failed to read banner file {}: {}", p.display(), e)
-                })?;
+                let text = fs::read_to_string(p)
+                    .map_err(|e| format!("Failed to read banner file {}: {}", p.display(), e))?;
                 if text.trim().is_empty() {
                     return Err(format!("Banner file {} is empty", p.display()));
                 }

@@ -260,7 +260,10 @@ fn an_admin_can_administer() {
     let server = start(|_| {});
     let token = login(&server, "admin1", PW_ADMIN);
     assert_eq!(get(&server.url("/api/v1/admin/users"), Some(&token)), 200);
-    assert_eq!(get(&server.url("/api/v1/admin/sessions"), Some(&token)), 200);
+    assert_eq!(
+        get(&server.url("/api/v1/admin/sessions"), Some(&token)),
+        200
+    );
 }
 
 #[test]
@@ -268,7 +271,10 @@ fn an_unlisted_route_fails_closed_even_for_a_reader() {
     let server = start(|_| {});
     let token = login(&server, "read1", PW_READER);
     // Not in the route table, so it requires Admin and a reader is refused.
-    assert_eq!(get(&server.url("/api/v1/does-not-exist"), Some(&token)), 403);
+    assert_eq!(
+        get(&server.url("/api/v1/does-not-exist"), Some(&token)),
+        403
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -345,7 +351,10 @@ fn repeated_failures_lock_the_account_and_the_right_password_does_not_help() {
         None,
         serde_json::json!({"username": "read1", "password": PW_READER}),
     );
-    assert_eq!(status, 423, "a lock must not be bypassable with the real password");
+    assert_eq!(
+        status, 423,
+        "a lock must not be bypassable with the real password"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -540,7 +549,10 @@ fn every_decision_reaches_the_audit_log_attributed() {
     let log = std::fs::read_to_string(&audit_path).expect("an audit log");
 
     assert!(log.contains("SERVER_START"));
-    assert!(log.contains("AUTH_FAILURE"), "a failed login must be recorded");
+    assert!(
+        log.contains("AUTH_FAILURE"),
+        "a failed login must be recorded"
+    );
     assert!(log.contains("AUTH_SUCCESS"));
     assert!(
         log.contains("ACCESS_DENIED"),
@@ -592,7 +604,11 @@ fn binding_a_routable_address_without_tls_is_refused() {
         Ok(_) => panic!("plaintext on a routable address should be refused"),
         Err(e) => e.internal_message().to_string(),
     };
-    assert!(err.contains("03.13.08"), "error should cite the control: {}", err);
+    assert!(
+        err.contains("03.13.08"),
+        "error should cite the control: {}",
+        err
+    );
 
     // And the override is honoured when the operator asks for it explicitly.
     let mut allowed = options;

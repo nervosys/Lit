@@ -92,8 +92,8 @@ impl TlsMaterial {
 }
 
 fn read_pem(path: &Path, what: &str) -> Result<Vec<u8>, String> {
-    let bytes =
-        fs::read(path).map_err(|e| format!("Failed to read TLS {} {}: {}", what, path.display(), e))?;
+    let bytes = fs::read(path)
+        .map_err(|e| format!("Failed to read TLS {} {}: {}", what, path.display(), e))?;
     if bytes.is_empty() {
         return Err(format!("TLS {} {} is empty", what, path.display()));
     }

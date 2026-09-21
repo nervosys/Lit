@@ -167,8 +167,9 @@ impl AuditRecorder {
         let Some(log) = &self.log else {
             return;
         };
-        let message = serde_json::to_string(&record)
-            .unwrap_or_else(|_| r#"{"outcome":"failure","reason":"unserializable record"}"#.to_string());
+        let message = serde_json::to_string(&record).unwrap_or_else(|_| {
+            r#"{"outcome":"failure","reason":"unserializable record"}"#.to_string()
+        });
         if let Err(e) = log.log(event.as_str(), &message) {
             eprintln!(
                 "AUDIT FAILURE: could not record {}: {} — the event above is not in the log",
@@ -187,7 +188,10 @@ mod tests {
     fn a_disabled_recorder_accepts_events_without_writing() {
         let recorder = AuditRecorder::disabled();
         assert!(!recorder.is_enabled());
-        recorder.record(ServerEvent::AuthSuccess, AuditRecord::success().subject("alice"));
+        recorder.record(
+            ServerEvent::AuthSuccess,
+            AuditRecord::success().subject("alice"),
+        );
     }
 
     #[test]
@@ -206,7 +210,8 @@ mod tests {
 
     #[test]
     fn a_pre_authentication_record_omits_the_subject_rather_than_inventing_one() {
-        let record = AuditRecord::failure("rate_limited").source(Some("192.0.2.10".parse().unwrap()));
+        let record =
+            AuditRecord::failure("rate_limited").source(Some("192.0.2.10".parse().unwrap()));
         let json = serde_json::to_string(&record).unwrap();
         assert!(!json.contains("subject"));
     }
