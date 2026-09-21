@@ -213,7 +213,26 @@ impl BoundServer {
         let mut rate_limiter = RateLimiter::new();
 
         for mut request in server.incoming_requests() {
-            let remote: Option<IpAddr> = request.remote_addr().map(|a| a.ip());
+            // Who the request is from, which decides both its rate-limit bucket
+            // and what its audit records say. Behind a configured proxy this is
+            // the forwarded client; otherwise it is the TCP peer, and the
+            // forwarded header is ignored. See `server::proxy`.
+            let peer: Option<IpAddr> = request.remote_addr().map(|a| a.ip());
+            let forwarded = request
+                .headers()
+                .iter()
+                .find(|h| {
+                    h.field
+                        .as_str()
+                        .as_str()
+                        .eq_ignore_ascii_case("x-forwarded-for")
+                })
+                .map(|h| h.value.as_str().to_string());
+            let remote: Option<IpAddr> = crate::server::proxy::client_address(
+                peer,
+                forwarded.as_deref(),
+                &context.options.trusted_proxies,
+            );
             let method = request.method().clone();
             let url = request.url().to_string();
             let path = url.split('?').next().unwrap_or(&url).to_string();

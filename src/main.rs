@@ -136,6 +136,13 @@ enum ServerCommands {
         #[arg(long)]
         allow_plaintext: bool,
 
+        /// Address of a reverse proxy whose X-Forwarded-For may be believed.
+        /// Repeatable. Omit it and the header is ignored entirely, which is the
+        /// safe default: it is caller-supplied, and trusting it from anyone
+        /// lets every client choose its own audit source and rate-limit bucket.
+        #[arg(long = "trusted-proxy", value_name = "IP")]
+        trusted_proxy: Vec<std::net::IpAddr>,
+
         /// Terminate a session after this many seconds idle
         #[arg(long, default_value = "900")]
         idle_timeout: u64,
@@ -1937,6 +1944,7 @@ fn run() {
                 audit_log,
                 no_audit,
                 allow_plaintext,
+                trusted_proxy,
                 idle_timeout,
                 max_lifetime,
                 max_attempts,
@@ -1972,6 +1980,7 @@ fn run() {
                 options.audit_path = audit_log;
                 options.audit_enabled = !no_audit;
                 options.allow_plaintext = allow_plaintext;
+                options.trusted_proxies = trusted_proxy;
                 options.session_policy = lit::server::session::SessionPolicy {
                     idle_timeout: std::time::Duration::from_secs(idle_timeout),
                     max_lifetime: std::time::Duration::from_secs(max_lifetime),

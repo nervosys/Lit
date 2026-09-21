@@ -188,21 +188,44 @@ proxy, every connection comes from the proxy, so:
    material loss. Your failed-login trail will name accounts correctly and
    locations uselessly.
 
-Lit does **not** read `X-Forwarded-For`, deliberately: a forwarded header is
-caller-supplied, and honouring it by default would let anyone spoof their source
-address in your audit log and sidestep the rate limiter entirely. That is worse
-than the problem it solves.
+Both are fixed by telling Lit which addresses are proxies:
 
-So until Lit grows an explicit trusted-proxy setting, do the following:
+```bash
+lit server serve --bind 127.0.0.1 --port 3000 \
+  --trusted-proxy 127.0.0.1 \
+  --banner /etc/lit/banner.txt
+```
 
-- **Rate limit at the proxy**, per real client address, and treat Lit's limiter
-  as a backstop rather than the control. `limit_req` in nginx, `stick-table` in
-  HAProxy.
-- **Log the real client address at the proxy**, and correlate with Lit's audit
-  log on timestamp and account name. Note this correlation step in your SSP —
-  an assessor testing `03.03.02` will ask where the source address comes from,
-  and "the proxy's access log, joined on timestamp" is a defensible answer that
-  needs to be written down in advance.
+With that set, a request arriving from `127.0.0.1` has its `X-Forwarded-For`
+believed, and the client address it names is what the rate limiter buckets on
+and what the audit log records. Repeat `--trusted-proxy` for each proxy address.
+
+**Without it, the header is ignored entirely**, and that is the right default.
+`X-Forwarded-For` is caller-supplied: a server that believes it from anyone lets
+every client choose what its audit records say and which rate-limit bucket it
+lands in, which is worse than the problem it solves. Lit therefore reads the
+header only on connections from an address you have named.
+
+Make sure your proxy actually sets it, and **overwrites** rather than appends to
+any header the client sent:
+
+```nginx
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+```
+
+Lit walks the chain from the right, stepping over addresses that are themselves
+trusted proxies and taking the first that is not — so a client that prepends a
+chain of its own invention cannot get those entries used. But that only holds if
+the proxy appends the address it actually received from, which is what
+`$proxy_add_x_forwarded_for` does.
+
+Worth doing anyway, whether or not you set `--trusted-proxy`:
+
+- **Rate limit at the proxy** too, per real client address. `limit_req` in
+  nginx, `stick-table` in HAProxy. Lit's limiter is a backstop, not your only
+  control.
+- **Log the real client address at the proxy**, so you have a second source if
+  the correlation is ever questioned.
 
 This is also where **multi-factor authentication** goes (`03.05.03`). Lit does
 not implement MFA. An authenticating proxy doing OIDC/SAML with MFA in front of

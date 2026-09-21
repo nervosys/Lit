@@ -20,6 +20,7 @@
 pub mod audit;
 pub mod auth;
 pub mod banner;
+pub mod proxy;
 pub mod session;
 pub mod tls;
 
@@ -58,6 +59,12 @@ pub struct ServerOptions {
     /// Serve plaintext on a routable address anyway. Requires the operator to
     /// say so explicitly, and is recorded in the audit log at startup.
     pub allow_plaintext: bool,
+    /// Addresses that are reverse proxies, and whose `X-Forwarded-For` may
+    /// therefore be believed. Empty by default, which ignores the header: it is
+    /// caller-supplied, and trusting it from anyone would let every client
+    /// choose what its audit records say and which rate-limit bucket it lands
+    /// in. See `server::proxy`.
+    pub trusted_proxies: Vec<std::net::IpAddr>,
 }
 
 impl ServerOptions {
@@ -74,6 +81,7 @@ impl ServerOptions {
             session_policy: SessionPolicy::default(),
             lockout_policy: LockoutPolicy::default(),
             allow_plaintext: false,
+            trusted_proxies: Vec::new(),
         })
     }
 
@@ -225,6 +233,12 @@ impl ServerContext {
         }
         if !self.banner.customized {
             notes.push("banner=default_placeholder".to_string());
+        }
+        if !self.options.trusted_proxies.is_empty() {
+            notes.push(format!(
+                "trusted_proxies={}",
+                self.options.trusted_proxies.len()
+            ));
         }
         self.recorder.record(
             ServerEvent::ServerStart,
