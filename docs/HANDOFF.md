@@ -111,12 +111,28 @@ There are at least three now, and they did not converge on their own.
 - No MFA, no CUI marking. Both are documented as customer responsibility.
 - A residual lost-update race between two processes administering one store.
 
+### Decided: the per-request `stat` stays
+
+Re-checking the account store on every request costs one `fs::metadata` call,
+and an earlier draft left open whether that wanted a cache under load. It does
+not, and the reasoning is worth keeping so it is not reopened by instinct.
+
+Every authorized request already performs a SHA3-512 digest for the session
+lookup, JSON parsing, and an audit append — file open, write, HMAC-SHA256,
+close. A warm `stat` on NTFS is a single syscall in the low microseconds; the
+audit append on that same request costs strictly more. Caching would therefore
+trade immediate revocation, which is the entire point of the check, for less
+time than it takes to write the log line recording the request.
+
+Revisit only with a profile showing otherwise, and then with an explicit bound
+and a stated worst-case revocation delay — not an unbounded cache.
+
 ### The next things
 
-1. **Decide about the per-request `stat`.** Re-checking the account on every
-   request costs a `fs::metadata` call. That is the right default — revocation
-   should be immediate — but under real load it may want a short cache with an
-   explicit bound.
+Nothing outstanding in this area. What remains is inherently the deploying
+organization's: MFA, CUI marking, and FIPS-validated TLS in transit, each
+documented in `docs/NIST_800-171.md` §5 with the proxy pattern that addresses
+it.
 
 And the standing one, per §6: **look for the next instance of an old pattern**
 rather than the next new bug. That has now paid out four times in this section
