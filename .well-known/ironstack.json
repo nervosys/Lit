@@ -2,7 +2,7 @@
   "ironstack": "1",
   "id": "lit",
   "product": "Lit",
-  "layer": "tools",
+  "layer": "tooling",
   "role": "Agentic-first distributed version control; a Git replacement with pluggable content types beyond source code.",
   "surfaces": ["cli", "mcp"],
   "ontology": {
