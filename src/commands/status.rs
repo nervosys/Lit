@@ -10,7 +10,17 @@ use walkdir::WalkDir;
 const MAX_WALK_FILES: usize = 50_000;
 
 pub fn execute() -> Result<StatusResponse, crate::errors::LitError> {
-    let repo_root = find_repo_root()?;
+    execute_at(find_repo_root()?)
+}
+
+/// Like [`execute`], but against an explicit repository root instead of
+/// searching from the process's working directory.
+///
+/// The server needs this: it is handed the repository to serve, and a
+/// long-lived process must not depend on where it happened to be started.
+pub fn execute_at(
+    repo_root: std::path::PathBuf,
+) -> Result<StatusResponse, crate::errors::LitError> {
     let index = Index::load(&repo_root)?;
 
     let branch = get_current_branch(&repo_root).ok();

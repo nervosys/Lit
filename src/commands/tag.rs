@@ -13,8 +13,35 @@ pub fn execute(
     list: bool,
     commit: Option<String>,
 ) -> Result<TagResponse, crate::errors::LitError> {
-    let repo_root = find_repo_root()?;
+    execute_at(
+        find_repo_root()?,
+        name,
+        message,
+        annotate,
+        delete,
+        sign,
+        verify,
+        list,
+        commit,
+    )
+}
 
+/// Like [`execute`], but against an explicit repository root instead of
+/// searching from the process's working directory.
+///
+/// The server needs this: it is handed the repository to serve, and a
+/// long-lived process must not depend on where it happened to be started.
+pub fn execute_at(
+    repo_root: std::path::PathBuf,
+    name: Option<String>,
+    message: Option<String>,
+    annotate: bool,
+    delete: bool,
+    sign: bool,
+    verify: bool,
+    list: bool,
+    commit: Option<String>,
+) -> Result<TagResponse, crate::errors::LitError> {
     // List tags: `lit tag` with no args, or `lit tag --list`
     if list || (name.is_none() && !delete && !verify) {
         return list_tags(&repo_root);

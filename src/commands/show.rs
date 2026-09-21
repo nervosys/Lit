@@ -33,7 +33,18 @@ fn resolve_object(
 }
 
 pub fn execute(object: String) -> Result<ShowResponse, crate::errors::LitError> {
-    let repo_root = find_repo_root()?;
+    execute_at(find_repo_root()?, object)
+}
+
+/// Like [`execute`], but against an explicit repository root instead of
+/// searching from the process's working directory.
+///
+/// The server needs this: it is handed the repository to serve, and a
+/// long-lived process must not depend on where it happened to be started.
+pub fn execute_at(
+    repo_root: std::path::PathBuf,
+    object: String,
+) -> Result<ShowResponse, crate::errors::LitError> {
     let store = ObjectStore::new(&repo_root);
 
     let hash = resolve_object(&repo_root, object)?;

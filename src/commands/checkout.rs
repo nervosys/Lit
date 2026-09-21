@@ -8,8 +8,19 @@ pub fn execute(
     target: String,
     create_new: bool,
 ) -> Result<CheckoutResponse, crate::errors::LitError> {
-    let repo_root = find_repo_root()?;
+    execute_at(find_repo_root()?, target, create_new)
+}
 
+/// Like [`execute`], but against an explicit repository root instead of
+/// searching from the process's working directory.
+///
+/// The server needs this: it is handed the repository to serve, and a
+/// long-lived process must not depend on where it happened to be started.
+pub fn execute_at(
+    repo_root: std::path::PathBuf,
+    target: String,
+    create_new: bool,
+) -> Result<CheckoutResponse, crate::errors::LitError> {
     if create_new {
         use crate::core::read_head;
         let head_hash = read_head(&repo_root)?;

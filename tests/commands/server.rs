@@ -15,14 +15,14 @@
 //! a way that points at the audit log, that key is the first thing to suspect —
 //! it is the only state they do not own.
 //!
-//! **What is deliberately not covered here:** the routes that read or write the
-//! repository (`/status`, `/log`, `/commit`, …). Those reach `route_request`,
-//! which resolves the repository from the process's current working directory
-//! rather than from the `repo_root` it is handed — a pre-existing quirk
-//! inherited from `lit serve`, noted in `docs/HANDOFF.md` §0. Exercising them
-//! here would make these tests order-dependent for no gain, because the
-//! security surface below sits entirely *in front* of that call: an
-//! unauthorized request is refused before `route_request` is ever reached.
+//! Repository routes are covered too, but only just — see
+//! `a_repository_route_reads_the_repository_it_was_given`. That one test is
+//! load-bearing: `route_request` used to resolve the repository from the
+//! process's working directory for every route that delegates to `commands::*`,
+//! so a server could be handed one repository and serve another. The commands
+//! now take an explicit root, and that test is what keeps it that way — it
+//! passes a scratch repository that is deliberately *not* the working
+//! directory, so a regression to the old behaviour fails it.
 
 use lit::commands::server::{bind, BoundServer, ShutdownHandle};
 use lit::server::auth::{LockoutPolicy, Role, UserStore};
@@ -41,6 +41,9 @@ struct TestServer {
     shutdown: ShutdownHandle,
     thread: Option<std::thread::JoinHandle<()>>,
     users_path: PathBuf,
+    /// The repository handed to `bind`, for tests that need to put something
+    /// in it and then prove the server read *that* one.
+    repo: PathBuf,
     /// Held so the temporary directory outlives the server.
     _dir: TempDir,
 }
@@ -97,6 +100,49 @@ fn start(customize: impl FnOnce(&mut ServerOptions)) -> TestServer {
         shutdown,
         thread: Some(thread),
         users_path,
+        repo: dir.path().to_path_buf(),
+        _dir: dir,
+    }
+}
+
+/// Start a server over a real, initialized repository.
+///
+/// `start` hands the server a bare scratch directory, which is enough for every
+/// test that never reaches the repository. This one initializes an actual
+/// repository there, so the routes that read it have something to read.
+fn start_with_repo() -> TestServer {
+    let dir = TempDir::new().unwrap();
+    let repo = dir.path().join("repo");
+    std::fs::create_dir_all(&repo).unwrap();
+    lit::commands::init::execute(false, Some(repo.to_string_lossy().into_owned())).unwrap();
+
+    let users_path = dir.path().join("users.json");
+    {
+        let mut store = UserStore::open(&users_path, LockoutPolicy::default()).unwrap();
+        store.add_user("admin1", PW_ADMIN, Role::Admin).unwrap();
+        store.add_user("read1", PW_READER, Role::Reader).unwrap();
+    }
+
+    let mut options = ServerOptions::local(0).unwrap();
+    options.bind = "127.0.0.1:0".to_string();
+    options.users_path = users_path.clone();
+    options.audit_path = Some(dir.path().join("audit.log").to_string_lossy().into_owned());
+
+    let bound = bind(options, repo.clone()).expect("server should bind");
+    let addr = bound.local_addr().expect("an IP port");
+    let shutdown = bound.shutdown_handle();
+    let thread = std::thread::spawn(move || {
+        let _ = bound.run();
+    });
+
+    TestServer {
+        base: format!("http://{}", addr),
+        shutdown,
+        thread: Some(thread),
+        users_path,
+        // The repository actually served, which is a *subdirectory* of the
+        // scratch dir — not the scratch dir itself.
+        repo,
         _dir: dir,
     }
 }
@@ -496,6 +542,69 @@ fn a_weak_password_is_refused_over_the_api() {
     );
     assert_eq!(status, 400);
     assert!(body.contains("15 characters"), "body: {}", body);
+}
+
+// ---------------------------------------------------------------------------
+// The repository the server was handed is the one it serves
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_repository_route_reads_the_repository_it_was_given() {
+    // The test process's working directory is the Lit checkout, not the scratch
+    // repository handed to `bind`. Before the commands took an explicit root,
+    // `/status` resolved the repository from that working directory, so this
+    // request would have reported on the wrong repository — or, run from
+    // somewhere without one, failed outright. A regression to that behaviour
+    // fails here.
+    let server = start_with_repo();
+
+    // Put something in the scratch repository that could not possibly be in the
+    // working directory's repository. A 200 alone would not prove much — the
+    // Lit checkout is a valid repository too, so the old code path would also
+    // have answered 200, just about the wrong thing. The marker is what makes
+    // this test able to fail.
+    let marker = "only-in-the-scratch-repository.txt";
+    std::fs::write(server.repo.join(marker), "marker").unwrap();
+
+    let token = login(&server, "read1", PW_READER);
+    let response = ureq::get(&server.url("/api/v1/status"))
+        .set("Authorization", &format!("Bearer {}", token))
+        .call();
+
+    let body = match response {
+        Ok(r) => {
+            assert_eq!(r.status(), 200);
+            r.into_string().unwrap()
+        }
+        Err(ureq::Error::Status(code, r)) => panic!(
+            "status route failed with {}: {}",
+            code,
+            r.into_string().unwrap_or_default()
+        ),
+        Err(e) => panic!("transport error: {}", e),
+    };
+
+    assert!(
+        body.contains(marker),
+        "status reported on the wrong repository — the untracked marker file \
+         written into the served repository is absent from the response: {}",
+        body
+    );
+}
+
+#[test]
+fn a_reader_still_cannot_write_to_a_real_repository() {
+    // The same authorization boundary, now with a repository behind it — so
+    // this proves the refusal is the role check and not the command failing for
+    // want of a repository.
+    let server = start_with_repo();
+    let token = login(&server, "read1", PW_READER);
+    let (status, _) = post(
+        &server.url("/api/v1/commit"),
+        Some(&token),
+        serde_json::json!({"message": "nope"}),
+    );
+    assert_eq!(status, 403);
 }
 
 // ---------------------------------------------------------------------------

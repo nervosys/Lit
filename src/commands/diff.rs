@@ -18,7 +18,22 @@ pub fn execute(
     ref1: Option<String>,
     ref2: Option<String>,
 ) -> Result<DiffResponse, crate::errors::LitError> {
-    let repo_root = find_repo_root()?;
+    execute_at(find_repo_root()?, staged, stat, word_diff, ref1, ref2)
+}
+
+/// Like [`execute`], but against an explicit repository root instead of
+/// searching from the process's working directory.
+///
+/// The server needs this: it is handed the repository to serve, and a
+/// long-lived process must not depend on where it happened to be started.
+pub fn execute_at(
+    repo_root: std::path::PathBuf,
+    staged: bool,
+    stat: bool,
+    word_diff: bool,
+    ref1: Option<String>,
+    ref2: Option<String>,
+) -> Result<DiffResponse, crate::errors::LitError> {
     let store = ObjectStore::new(&repo_root);
 
     let file_diffs = if let Some(r1) = ref1 {

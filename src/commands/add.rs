@@ -6,7 +6,18 @@ use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
 pub fn execute(files: Vec<String>) -> Result<AddResponse, crate::errors::LitError> {
-    let repo_root = find_repo_root()?;
+    execute_at(find_repo_root()?, files)
+}
+
+/// Like [`execute`], but against an explicit repository root instead of
+/// searching from the process's working directory.
+///
+/// The server needs this: it is handed the repository to serve, and a
+/// long-lived process must not depend on where it happened to be started.
+pub fn execute_at(
+    repo_root: std::path::PathBuf,
+    files: Vec<String>,
+) -> Result<AddResponse, crate::errors::LitError> {
     let store = ObjectStore::new(&repo_root);
     let mut index = Index::load(&repo_root)?;
 

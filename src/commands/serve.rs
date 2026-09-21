@@ -420,7 +420,7 @@ pub(crate) fn route_request(
 
         // GET endpoints
         (Method::Get, "/api/v1/status") => {
-            let resp = commands::status::execute()?;
+            let resp = commands::status::execute_at(repo_root.to_path_buf())?;
             Ok((200, resp.to_json_output()))
         }
 
@@ -431,12 +431,12 @@ pub(crate) fn route_request(
             let oneline = parse_query_param(url, "oneline")
                 .map(|s| s == "true")
                 .unwrap_or(false);
-            let resp = commands::log::execute(count, oneline)?;
+            let resp = commands::log::execute_at(repo_root.to_path_buf(), count, oneline)?;
             Ok((200, resp.to_json_output()))
         }
 
         (Method::Get, "/api/v1/branches") => {
-            let resp = commands::branch::execute(None, false, true)?;
+            let resp = commands::branch::execute_at(repo_root.to_path_buf(), None, false, true)?;
             Ok((200, resp.to_json_output()))
         }
 
@@ -447,7 +447,7 @@ pub(crate) fn route_request(
             let stat = parse_query_param(url, "stat")
                 .map(|s| s == "true")
                 .unwrap_or(false);
-            let resp = commands::diff::execute(staged, stat, false, None, None)?;
+            let resp = commands::diff::execute_at(repo_root.to_path_buf(), staged, stat, false, None, None)?;
             Ok((200, resp.to_json_output()))
         }
 
@@ -459,17 +459,17 @@ pub(crate) fn route_request(
             if !is_valid_ref(object) {
                 return Ok((400, r#"{"status":"error","error":{"message":"Invalid object ref"}}"#.to_string()));
             }
-            let resp = commands::show::execute(object.to_string())?;
+            let resp = commands::show::execute_at(repo_root.to_path_buf(), object.to_string())?;
             Ok((200, resp.to_json_output()))
         }
 
         (Method::Get, "/api/v1/tags") => {
-            let resp = commands::tag::execute(None, None, false, false, false, false, true, None)?;
+            let resp = commands::tag::execute_at(repo_root.to_path_buf(), None, None, false, false, false, false, true, None)?;
             Ok((200, resp.to_json_output()))
         }
 
         (Method::Get, "/api/v1/remotes") => {
-            let resp = commands::remote::execute(Some(crate::RemoteCommands::List { verbose: true }))?;
+            let resp = commands::remote::execute_at(repo_root.to_path_buf(), Some(crate::RemoteCommands::List { verbose: true }))?;
             Ok((200, resp.to_json_output()))
         }
 
@@ -490,12 +490,12 @@ pub(crate) fn route_request(
             let max = parse_query_param(url, "max")
                 .and_then(|s| s.parse::<usize>().ok())
                 .unwrap_or(100);
-            let resp = commands::search::execute(query, messages, metadata, max)?;
+            let resp = commands::search::execute_at(repo_root.to_path_buf(), query, messages, metadata, max)?;
             Ok((200, resp.to_json_output()))
         }
 
         (Method::Get, "/api/v1/verify") => {
-            let resp = commands::verify::execute()?;
+            let resp = commands::verify::execute_at(repo_root.to_path_buf())?;
             Ok((200, resp.to_json_output()))
         }
 
@@ -515,7 +515,7 @@ pub(crate) fn route_request(
             if files.is_empty() {
                 return Ok((400, r#"{"status":"error","error":{"message":"Missing 'files' array"}}"#.to_string()));
             }
-            let resp = commands::add::execute(files)?;
+            let resp = commands::add::execute_at(repo_root.to_path_buf(), files)?;
             Ok((200, resp.to_json_output()))
         }
 
@@ -531,7 +531,7 @@ pub(crate) fn route_request(
                 .get("author")
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string());
-            let resp = commands::commit::execute(message, author)?;
+            let resp = commands::commit::execute_at(repo_root.to_path_buf(), message, author)?;
             Ok((200, resp.to_json_output()))
         }
 
@@ -548,7 +548,7 @@ pub(crate) fn route_request(
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string());
             let metadata = payload.get("metadata").cloned();
-            let resp = commands::snapshot::execute(message, author, metadata)?;
+            let resp = commands::snapshot::execute_at(repo_root.to_path_buf(), message, author, metadata)?;
             Ok((200, resp.to_json_output()))
         }
 
@@ -564,7 +564,7 @@ pub(crate) fn route_request(
                 .get("create")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
-            let resp = commands::checkout::execute(target, create)?;
+            let resp = commands::checkout::execute_at(repo_root.to_path_buf(), target, create)?;
             Ok((200, resp.to_json_output()))
         }
 
@@ -580,7 +580,7 @@ pub(crate) fn route_request(
                 .get("strategy")
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string());
-            let resp = commands::merge::execute(branch, strategy)?;
+            let resp = commands::merge::execute_at(repo_root.to_path_buf(), branch, strategy)?;
             Ok((200, resp.to_json_output()))
         }
 
@@ -595,7 +595,7 @@ pub(crate) fn route_request(
                 .get("delete")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
-            let resp = commands::branch::execute(name, delete, false)?;
+            let resp = commands::branch::execute_at(repo_root.to_path_buf(), name, delete, false)?;
             Ok((200, resp.to_json_output()))
         }
 

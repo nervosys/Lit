@@ -8,8 +8,20 @@ pub fn execute(
     delete: bool,
     _all: bool,
 ) -> Result<BranchResponse, crate::errors::LitError> {
-    let repo_root = find_repo_root()?;
+    execute_at(find_repo_root()?, name, delete, _all)
+}
 
+/// Like [`execute`], but against an explicit repository root instead of
+/// searching from the process's working directory.
+///
+/// The server needs this: it is handed the repository to serve, and a
+/// long-lived process must not depend on where it happened to be started.
+pub fn execute_at(
+    repo_root: std::path::PathBuf,
+    name: Option<String>,
+    delete: bool,
+    _all: bool,
+) -> Result<BranchResponse, crate::errors::LitError> {
     if delete {
         if let Some(branch_name) = name {
             // Check if trying to delete current branch

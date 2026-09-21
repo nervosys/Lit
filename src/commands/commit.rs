@@ -9,7 +9,19 @@ pub fn execute(
     message: String,
     author: Option<String>,
 ) -> Result<CommitResponse, crate::errors::LitError> {
-    let repo_root = find_repo_root()?;
+    execute_at(find_repo_root()?, message, author)
+}
+
+/// Like [`execute`], but against an explicit repository root instead of
+/// searching from the process's working directory.
+///
+/// The server needs this: it is handed the repository to serve, and a
+/// long-lived process must not depend on where it happened to be started.
+pub fn execute_at(
+    repo_root: std::path::PathBuf,
+    message: String,
+    author: Option<String>,
+) -> Result<CommitResponse, crate::errors::LitError> {
     let store = ObjectStore::new(&repo_root);
     let index = Index::load(&repo_root)?;
 
