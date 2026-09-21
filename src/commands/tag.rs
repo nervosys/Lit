@@ -31,6 +31,7 @@ pub fn execute(
 ///
 /// The server needs this: it is handed the repository to serve, and a
 /// long-lived process must not depend on where it happened to be started.
+#[allow(clippy::too_many_arguments)]
 pub fn execute_at(
     repo_root: std::path::PathBuf,
     name: Option<String>,
