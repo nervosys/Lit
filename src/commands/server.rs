@@ -162,6 +162,30 @@ pub fn execute_serve(options: ServerOptions) -> Result<ServeResponse, LitError> 
 }
 
 /// Bind the server's port and build its state, without serving anything yet.
+///
+/// # `repo_root` and the working directory
+///
+/// `repo_root` is not the only way the repository gets resolved, and that is a
+/// wart worth knowing about before calling this directly.
+///
+/// `route_request` honours `repo_root` for the routes that reach refs, the
+/// object store and `HEAD`, but the routes that delegate to `commands::*`
+/// resolve the repository themselves, from the process's working directory.
+/// Via [`execute_serve`] the two always agree, because `repo_root` comes from
+/// `find_repo_root()` on that same working directory — and if the working
+/// directory is not inside a repository the server refuses to start rather than
+/// serving the wrong one.
+///
+/// Called directly with an unrelated `repo_root`, they do **not** agree: some
+/// routes would act on `repo_root` and others on wherever the process happens
+/// to be. The integration tests pass a scratch directory and therefore exercise
+/// only the routes in front of that split — authentication, authorization,
+/// sessions and administration — which is why repository routes have no
+/// coverage there.
+///
+/// Fixing it means giving every `commands::*` entry point an explicit repository
+/// argument, which is a breaking change across about seventeen commands. Until
+/// then, pass the `repo_root` that the working directory resolves to.
 pub fn bind(options: ServerOptions, repo_root: PathBuf) -> Result<BoundServer, LitError> {
     let context = ServerContext::new(options).map_err(LitError::Config)?;
 

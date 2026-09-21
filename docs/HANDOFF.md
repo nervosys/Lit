@@ -28,10 +28,9 @@ log's attribution. Those tests are in `tests/commands/server.rs`, and they are
 the thing to keep honest — they are the only place a route wired to the wrong
 check would be caught.
 
-What is *not* covered, deliberately: the routes that touch the repository. They
-reach `route_request`, which resolves the repository from the process's working
-directory rather than from the `repo_root` it is handed. That is pre-existing,
-inherited from `lit serve`, and it is the next real thing to fix in this area.
+What is *not* covered, deliberately: the routes that touch the repository. See
+the note below on `repo_root` for why, and for a correction to what an earlier
+draft of this section claimed.
 
 Two environment traps cost most of a day here and will cost it again:
 
@@ -108,16 +107,33 @@ There are at least three now, and they did not converge on their own.
   why it is stated in `src/server/tls.rs` as well as in the docs.
 - No MFA, no CUI marking. Both are documented as customer responsibility.
 - A residual lost-update race between two processes administering one store.
-- `route_request` still resolves the repository from the process's working
-  directory rather than the `repo_root` it is handed. Pre-existing, inherited
-  from `lit serve`, and it matters more now that the server is long-lived.
+- **`route_request` resolves the repository two different ways.** Twelve places
+  honour the `repo_root` it is handed — refs, the object store, `HEAD` — while
+  the routes delegating to `commands::*` resolve it themselves from the
+  process's working directory.
+
+  An earlier draft of this section called that a live bug for a long-lived
+  server. It is not, and the correction matters for how it gets prioritised: via
+  `execute_serve` the two always agree, because `repo_root` comes from
+  `find_repo_root()` on that same working directory, and a server started
+  outside a repository refuses to start rather than serving the wrong one.
+
+  Where it does bite is the library entry point `bind()`, which takes an
+  arbitrary `repo_root`. Hand it one unrelated to the working directory and half
+  the routes act on each. That is why the integration tests cover only the
+  routes in front of the split — authentication, authorization, sessions,
+  administration — and not the repository ones.
+
+  The fix is an explicit repository argument on every `commands::*` entry point:
+  a breaking change across about seventeen commands, worth doing when something
+  else forces that surface open rather than on its own.
 
 ### The next things
 
-1. **Fix `route_request`'s working-directory assumption.** It is why the
-   repository routes have no integration coverage, and it is a genuine bug for a
-   long-lived server, not just a testing inconvenience. Fixing it makes those
-   routes testable in the same file, which is how it should be paid for.
+1. **Decide whether to unify how `route_request` resolves the repository.** See
+   the known-open list: it is a wart rather than a live bug, and the fix is a
+   breaking change across roughly seventeen command signatures. Doing it makes
+   the repository routes integration-testable, which is the return on it.
 2. **Decide about the per-request `stat`.** Re-checking the account on every
    request costs a `fs::metadata` call. That is the right default — revocation
    should be immediate — but under real load it may want a short cache with an

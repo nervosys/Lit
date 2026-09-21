@@ -236,9 +236,7 @@ mod tests {
         let peer = Some(ip("10.0.0.1"));
         let trusted = [ip("10.0.0.1")];
         let mut chain = vec!["198.51.100.1"];
-        for _ in 0..MAX_FORWARDED_HOPS {
-            chain.push("10.0.0.1");
-        }
+        chain.extend(std::iter::repeat_n("10.0.0.1", MAX_FORWARDED_HOPS));
         assert_eq!(
             client_address(peer, Some(&chain.join(", ")), &trusted),
             Some(ip("10.0.0.1"))
