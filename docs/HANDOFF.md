@@ -185,8 +185,27 @@ isolation on Linux, resource limits on Windows", not "isolation everywhere".
 
 Licensing checks out: HyperMachine is `AGPL-3.0-only OR LicenseRef-Commercial`,
 Lit is `AGPL-3.0-or-later`, so Lit can be used under AGPL-3.0-only terms.
-`hv2-sandbox` has no `publish = false`; confirm it is actually on crates.io
-before depending on it by version rather than path.
+
+**Blocked on publication, checked 2026-09-22.** `hv2-sandbox` is not on
+crates.io — the API returns `crate 'hv2-sandbox' does not exist` — and the
+published `hypermachine` umbrella (1.1.0) re-exports `agent`, `api`, `core`,
+`cpu`, `gpu`, `net` and `runtime`, but not `sandbox`. So there is no published
+path to it today.
+
+A path dependency is not an acceptable substitute: Cargo requires a version on
+every dependency when publishing, optional ones included, so a path-only dep
+would quietly make `litvc` unpublishable. Lit is on crates.io and the install
+docs say `cargo install litvc`, so that trade is not available.
+
+Either unblocks it, and both need a HyperMachine release:
+
+1. Publish `hv2-sandbox` standalone. Cleanest — Lit depends on one small crate
+   rather than pulling a hypervisor framework in behind it.
+2. Add `pub use hv2_sandbox as sandbox;` to the umbrella and publish that. One
+   line there, but it makes Lit depend on all of HyperMachine.
+
+Option 1 is the better shape, since Lit wants confinement and nothing else the
+framework offers.
 
 Keep the env scrub and tree copy — they are genuine hygiene and orthogonal to
 enforcement. The integration is to run the command through a `Sandbox` backend
