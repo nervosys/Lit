@@ -157,8 +157,41 @@ one was actively recruiting the unsafe use. That is the distinction worth
 keeping: a wrong claim in a README can be more dangerous than a bug in the code
 it describes.
 
-Real isolation is a per-platform project — job objects and AppContainer on
-Windows, namespaces with seccomp or Landlock on Linux — and is not started.
+**The substrate exists.** `hv2-sandbox`, in
+`nervosys/os/HyperMachine/crates/hv2-sandbox`, is built for exactly this and was
+written after its author found the same class of problem there — two things that
+"looked like sandboxes and confined nothing... between them they made not one
+confinement syscall".
+
+It fits Lit's case closely:
+
+- Its `Control` enum is the eight things Lit's README wrongly claimed, including
+  `NetworkIsolation`, `FilesystemIsolation` and `ProcessIsolation`.
+- `Sandbox::controls()` is **probed per host, not assumed**, and a spec asking
+  for a control the host cannot enforce returns `SandboxError::Unsupported`
+  rather than downgrading quietly. `SandboxSpec::best_effort` is the explicit
+  opt-out, and reports what it dropped.
+- `SandboxSpec::untrusted(memory, wall_clock)` is a ready-made preset for this
+  use.
+- Linux gets namespaces, `pivot_root`, cgroup v2, `RLIMIT_*` and
+  `no_new_privs`; Windows gets job-object memory, process-count and CPU-time
+  caps with kill-on-close; macOS gets `RLIMIT_*` only, and says so.
+
+The consequence worth planning around: **Windows, Lit's primary development
+platform, gets resource caps but no filesystem or network fence.** An
+`untrusted()` spec there would refuse to run. That is the correct outcome and
+the one the old README denied — but it means `lit sandbox` would become "real
+isolation on Linux, resource limits on Windows", not "isolation everywhere".
+
+Licensing checks out: HyperMachine is `AGPL-3.0-only OR LicenseRef-Commercial`,
+Lit is `AGPL-3.0-or-later`, so Lit can be used under AGPL-3.0-only terms.
+`hv2-sandbox` has no `publish = false`; confirm it is actually on crates.io
+before depending on it by version rather than path.
+
+Keep the env scrub and tree copy — they are genuine hygiene and orthogonal to
+enforcement. The integration is to run the command through a `Sandbox` backend
+and surface `controls()` in the command's output, so an operator can see what
+their host actually enforces.
 
 ### Open: UCAN is not an authorization mechanism yet (found 2026-09-22)
 
