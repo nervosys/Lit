@@ -259,7 +259,7 @@ pub(crate) fn restrict_to_owner(path: &Path) -> Result<(), String> {
     }
 
     #[cfg(windows)]
-    windows_restrict_to_owner(path)?;
+    windows_restrict_to_owner(path, false)?;
 
     Ok(())
 }
@@ -284,7 +284,7 @@ pub(crate) fn restrict_dir_to_owner(path: &Path) -> Result<(), String> {
     }
 
     #[cfg(windows)]
-    windows_restrict_to_owner(path)?;
+    windows_restrict_to_owner(path, true)?;
 
     Ok(())
 }
@@ -299,7 +299,7 @@ pub(crate) fn restrict_dir_to_owner(path: &Path) -> Result<(), String> {
 /// directory's inherited entries — otherwise an inherited "Users: Read" would
 /// survive and the restriction would be for nothing.
 #[cfg(windows)]
-fn windows_restrict_to_owner(path: &Path) -> Result<(), String> {
+fn windows_restrict_to_owner(path: &Path, inheritable: bool) -> Result<(), String> {
     use std::os::windows::ffi::OsStrExt;
     use windows::core::PWSTR;
     use windows::Win32::Foundation::{CloseHandle, LocalFree, HANDLE, HLOCAL};
@@ -309,7 +309,8 @@ fn windows_restrict_to_owner(path: &Path) -> Result<(), String> {
     };
     use windows::Win32::Security::{
         GetTokenInformation, TokenUser, ACL, DACL_SECURITY_INFORMATION, NO_INHERITANCE,
-        PROTECTED_DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, PSID, TOKEN_QUERY, TOKEN_USER,
+        PROTECTED_DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, PSID,
+        SUB_CONTAINERS_AND_OBJECTS_INHERIT, TOKEN_QUERY, TOKEN_USER,
     };
     use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 
@@ -338,11 +339,26 @@ fn windows_restrict_to_owner(path: &Path) -> Result<(), String> {
 
         let user_sid: PSID = (*(buffer.as_ptr() as *const TOKEN_USER)).User.Sid;
 
-        // One entry: this user, full control, not inherited by anything.
+        // One entry: this user, full control.
+        //
+        // A directory must pass the grant on to what is created inside it. The
+        // DACL is PROTECTED, so it carries no inherited entries, and with
+        // NO_INHERITANCE it hands none down either — every file created in the
+        // directory afterwards would get an empty DACL and be unreachable even
+        // by its owner. That is not hypothetical: it is why four encrypted-ref
+        // tests failed on Windows CI with "Access is denied" writing HEAD and
+        // "already exists" for a directory that plainly existed, the latter
+        // because the metadata call behind `is_dir` was being refused too.
+        //
+        // A file has no children, so it stays NO_INHERITANCE.
         let access = EXPLICIT_ACCESS_W {
             grfAccessPermissions: 0x001F_01FF, // FILE_ALL_ACCESS
             grfAccessMode: SET_ACCESS,
-            grfInheritance: NO_INHERITANCE,
+            grfInheritance: if inheritable {
+                SUB_CONTAINERS_AND_OBJECTS_INHERIT
+            } else {
+                NO_INHERITANCE
+            },
             Trustee: TRUSTEE_W {
                 pMultipleTrustee: std::ptr::null_mut(),
                 MultipleTrusteeOperation: Default::default(),
