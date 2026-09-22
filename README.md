@@ -2,7 +2,7 @@
 
 **The world's first universal version control system designed for AI agents first and humans second.**
 
-Lit is a complete Git replacement written in Rust — 67 commands, 30 MCP tools, post-quantum cryptographic security, sandboxed execution, and structured machine-readable output. Every interface is designed for autonomous agent workflows, with human-friendly output available via a single flag.
+Lit is a complete Git replacement written in Rust — 67 commands, 30 MCP tools, post-quantum cryptographic security, scrubbed execution environments, and structured machine-readable output. Every interface is designed for autonomous agent workflows, with human-friendly output available via a single flag.
 
 Unlike Git, Lit is not limited to source code. Its pluggable content type system versions **CAD models, EDA schematics, manuscripts, databases, scientific datasets, media assets, geospatial data**, and any other domain content — with domain-appropriate diff, merge, and storage strategies. Arbitrary agent profiles let CAD designers, EDA engineers, technical writers, DBAs, and data scientists work alongside software agents in a unified versioned workspace. Datacenter deployment features enable cluster sharding, replication, health monitoring, and Prometheus-style metrics for production-scale operation.
 
@@ -27,7 +27,7 @@ Git was designed in 2005 for human developers using terminals. Every interface �
 | **Trust scoring**       | None                        | Reputation tracking per agent            |
 | **Issues & PRs**        | None built-in               | Local-first, stored as git refs          |
 | **Federation**          | Centralized (GitHub/GitLab) | Content-addressed peer-to-peer           |
-| **Sandboxing**          | None                        | Process isolation with env/fs/net fences |
+| **Execution environment** | None                      | Cleared env, redirected HOME/TEMP, restricted PATH |
 | **Content types**       | Source code only            | CAD, EDA, CAM, simulation, AI models, manuscripts, DBs, media, etc. |
 | **Agent types**         | N/A                         | SWE, CAD, EDA, writer, DBA, reviewer, CI |
 | **Datacenter**          | N/A                         | Sharding, replication, metrics, health   |
@@ -42,7 +42,7 @@ Git was designed in 2005 for human developers using terminals. Every interface �
 - **67 CLI commands** — full Git-equivalent workflow plus agent-native extensions
 - **30 MCP tools** — LLM agents interact via Model Context Protocol tool calls
 - **Decentralized identity** -- DID-based identity with Ed25519 and ML-DSA-87 post-quantum keys
-- **UCAN capability delegation** -- fine-grained, cryptographically signed permission tokens
+- **UCAN capability delegation** -- fine-grained permission tokens. Issued, listed and revoked; **not yet consulted for any access decision**, and the current token signing is not a signature scheme — see the warning in `src/identity/ucan.rs` before building on it
 - **Agent trust scoring** -- reputation tracking with event-driven trust levels
 - **Local-first issues & PRs** -- issue tracker and pull requests stored as git refs
 - **Event subscriptions** -- subscribe to repository events (commits, branches, merges)
@@ -50,7 +50,7 @@ Git was designed in 2005 for human developers using terminals. Every interface �
 - **Content-addressed federation** -- peer-to-peer repository sync with want-list negotiation
 - **4 transport protocols** — HTTPS, SSH, `lit://` (custom TCP), stdio pipe
 - **Self-hosted server** — `lit server serve` adds named accounts, four roles, expiring sessions, account lockout, TLS, a pre-authentication system use notification, and an HMAC-chained audit record for every authorization decision. Mapped requirement-by-requirement against NIST SP 800-171r3, gaps included, in [`docs/NIST_800-171.md`](docs/NIST_800-171.md)
-- **Sandboxed execution** — run untrusted code in isolated environments with filesystem, environment, and network fences
+- **Scrubbed execution environments** — run a command against a copy of the working tree with a cleared environment, HOME/TEMP redirected, and a restricted PATH. This is hygiene, not a security boundary — see [Sandbox](#sandbox) for what it does not stop
 - **Intent → Commit → Converge** — agentic workflow replacing branch/PR with scoped intents, commit attachment, and trust-gated convergence
 - **Universal content types** — 100 built-in types making Lit a one-stop VCS for modern engineering: CAD & 3D modeling (STEP, IGES, STL, 3MF, DWG/DXF, SolidWorks, CATIA, Inventor, Fusion 360, Creo, Siemens NX, Solid Edge, Rhino, Parasolid, ACIS, JT, OBJ, FBX, glTF/GLB, USD, COLLADA, PLY, Blender, Alembic), EDA (KiCad, Gerber, Excellon, Altium, EAGLE, OrCAD, Verilog/SystemVerilog, VHDL, GDSII, OASIS, IPC-2581, Touchstone, LEF/DEF, SPICE), CAM (G-code, STEP-NC, APT, Mastercam), simulation/FEA/CFD (Nastran, Abaqus, ANSYS, LS-DYNA, OpenFOAM, COMSOL, Gmsh, VTK, CGNS, Exodus, Modelica, Simulink, FMU), AI/ML models (ONNX, SafeTensors, PyTorch, TensorFlow, Keras, GGUF/GGML, TensorRT, Core ML, TFLite, NumPy, checkpoints), plus manuscripts, databases, scientific data, media, geospatial, legal, and financial formats — each with domain-appropriate diff, merge, and storage strategies
 - **Datacenter deployment** — cluster node management, consistent-hash sharding, configurable replication (sync/async/semi-sync), health monitoring, Prometheus-style metrics, connection pooling, and chunked large-object transfer
@@ -181,7 +181,7 @@ lit swarm lease-list               # List all active leases
 
 ### Sandbox
 
-Run untrusted code in process-isolated environments with filesystem, environment, and network fences:
+Run a command against a copy of the working tree, with the environment scrubbed:
 
 ```bash
 lit sandbox init [name]            # Create sandbox from working tree
@@ -190,17 +190,36 @@ lit sandbox list                   # List all sandboxes
 lit sandbox destroy <name>         # Remove a sandbox
 ```
 
-Isolation layers:
+> **This is not a security boundary. Do not run untrusted code in it.**
+>
+> Earlier versions of this section described process isolation with filesystem
+> and network fences. That was wrong, and the wording invited exactly the use it
+> could not survive. `lit sandbox run` sets a working directory and replaces the
+> environment; it applies no kernel-enforced restriction of any kind.
 
-| Layer       | Protection                                               |
-| ----------- | -------------------------------------------------------- |
-| Filesystem  | Working tree copied into `.lit/sandboxes/<name>/`        |
-| Environment | `env_clear()` — only minimal vars exposed                |
-| Home / Temp | HOME, USERPROFILE, TEMP, TMP redirected to sandbox dir   |
-| PATH        | Restricted to system directories only                    |
-| Network     | `LIT_AIRGAPPED=1` — blocks all network protocols         |
-| Git config  | `GIT_CONFIG_NOSYSTEM=1` — prevents config file leaks     |
-| Credentials | Cleared — no cloud tokens, SSH keys, or API keys present |
+What it does:
+
+| Measure     | Effect                                                    |
+| ----------- | --------------------------------------------------------- |
+| Working dir | Working tree copied to `.lit/sandboxes/<name>/`, cwd set there |
+| Environment | `env_clear()`, then a small allow-list is set             |
+| Home / Temp | HOME, USERPROFILE, TEMP, TMP redirected into the sandbox  |
+| PATH        | Restricted to system directories                          |
+| Git config  | `GIT_CONFIG_NOSYSTEM=1`, so system config is not read     |
+| Credentials | Not inherited — no cloud tokens, SSH agent, or API keys in the environment |
+
+What it does **not** do:
+
+| Not protected | Why |
+| ------------- | --- |
+| Filesystem    | The process can read and write anything you can, via absolute paths or `..`. Copying the tree relocates the *default*, it does not fence anything |
+| Network       | `LIT_AIRGAPPED=1` is an environment variable that **only Lit itself honours**. Any other program opens sockets freely |
+| Processes     | No namespaces, job objects, AppContainer, seccomp, Landlock or rlimits are used anywhere |
+| Escalation    | The command runs as you, with your privileges |
+
+So it is good for keeping a build off your dotfiles and out of your credential
+helpers, and useless against code that is actually hostile. Real isolation needs
+OS mechanisms per platform and is not implemented.
 
 ### Identity & Trust
 

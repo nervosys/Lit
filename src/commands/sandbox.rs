@@ -1,3 +1,26 @@
+//! Scrubbed execution environments.
+//!
+//! # This is not a sandbox in the security sense
+//!
+//! [`execute_run`] sets a working directory and replaces the environment. That
+//! is all it does. No namespaces, job objects, AppContainer, seccomp, Landlock,
+//! chroot or rlimits are used here or anywhere else in the crate — grep for any
+//! of them and you will find nothing.
+//!
+//! A command run through it can read and write anything the invoking user can,
+//! by absolute path or `..`; can open any socket it likes, because
+//! `LIT_AIRGAPPED=1` is an environment variable that only Lit itself honours;
+//! and runs with the caller's full privileges.
+//!
+//! What it is good for is hygiene: keeping a build away from your dotfiles,
+//! credential helpers, SSH agent and system Git config, and giving it a clean
+//! tree to work in. That is worth having, and it is not a boundary.
+//!
+//! The README used to describe this as "process isolation with filesystem and
+//! network fences" and invite users to run untrusted code in it. It has been
+//! corrected. If you are about to rely on this against hostile code, do not —
+//! real isolation needs per-platform OS mechanisms that are not implemented.
+
 use crate::errors::LitError;
 use crate::response::SandboxResponse;
 use std::collections::HashMap;

@@ -133,6 +133,33 @@ time than it takes to write the log line recording the request.
 Revisit only with a profile showing otherwise, and then with an explicit bound
 and a stated worst-case revocation delay — not an unbounded cache.
 
+### Open: `lit sandbox` is not a sandbox (found 2026-09-22)
+
+`execute_run` sets a working directory and replaces the environment. Nothing
+else. There are no namespaces, job objects, AppContainer, seccomp, Landlock,
+chroot or rlimits anywhere in the crate — grepping for all of them returns
+nothing. A command run through it reads and writes whatever the caller can,
+opens any socket, and runs with the caller's privileges. `LIT_AIRGAPPED=1` is
+honoured by Lit and by nothing else.
+
+The feature is genuinely useful as hygiene: it keeps a build off your dotfiles,
+credential helpers, SSH agent and system Git config. It is not a boundary.
+
+**The serious part was the documentation, not the code.** The README described
+"process isolation with filesystem, environment and network fences" and told
+readers to run untrusted code in it, for a product marketed at CUI and
+classified environments. Someone following that sentence had no protection at
+all. Corrected 2026-09-22, in the README and in the module header where a
+caller will see it.
+
+Unlike the UCAN findings, which are dormant because nothing consults them, this
+one was actively recruiting the unsafe use. That is the distinction worth
+keeping: a wrong claim in a README can be more dangerous than a bug in the code
+it describes.
+
+Real isolation is a per-platform project — job objects and AppContainer on
+Windows, namespaces with seccomp or Landlock on Linux — and is not started.
+
 ### Open: UCAN is not an authorization mechanism yet (found 2026-09-22)
 
 `lit ucan` issues, lists and revokes tokens, and nothing consults one to make
