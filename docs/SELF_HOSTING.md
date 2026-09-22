@@ -288,6 +288,13 @@ lit server serve ... --audit-log /var/log/lit/audit.log
 # then ship /var/log/lit/audit.log with your usual collector
 ```
 
+A `SERVER_STOP` record is written when the serve loop exits, which means a
+server that is killed rather than stopped — `kill -9`, `Stop-Process -Force`, an
+OOM kill — leaves none. A missing stop record is therefore not by itself
+evidence of tampering, and an alert that treats it that way will cry wolf every
+time a host reboots ungracefully. Pair it with the next `SERVER_START` to tell
+an unclean shutdown from a gap.
+
 If the log cannot be written, Lit prints `AUDIT FAILURE:` on stderr naming the
 event that was lost, and keeps serving. If your policy requires it to stop
 instead, run it under a supervisor that watches for that string.

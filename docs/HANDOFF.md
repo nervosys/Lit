@@ -19,7 +19,13 @@ all of it.
 | `cargo test --test command_tests -- server::` | **all pass** (21 tests, real server on a real socket) |
 | `cargo clippy --all-targets` | **clean**, no warnings |
 | `cargo fmt --check` | clean |
-| The manual walkthrough, `docs/SELF_HOSTING.md` §6 | not run by hand — but §6's substance is covered by the integration tests |
+| The manual walkthrough, `docs/SELF_HOSTING.md` §6 | **run by hand 2026-09-22**, every step as documented |
+
+Worth knowing why that last row matters on its own: the integration tests drive
+the *library* — `bind` and `run` — so until that walkthrough, the CLI path had
+never been executed. Clap parsing, `lit server user add`, and `lit server serve`
+with its nine flags would have compiled cleanly with a typo in the dispatch and
+failed only in front of whoever tried it first.
 
 The security surface is exercised end to end: the banner before authentication,
 forged and expired tokens, role enforcement, routes that fail closed, lockout,
