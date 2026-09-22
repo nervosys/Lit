@@ -140,9 +140,34 @@ alone.
 
 ---
 
-## 1. Read this first: CI has not validated any of this
+## 1. CI (resolved 2026-09-21 — this section was stale and misleading)
 
-Every claim below was verified **locally**. GitHub Actions is not running:
+> **Read this box before the rest of the section.** The outage described below
+> ended. As of 2026-09-21 Actions is healthy — the nightly security workflow had
+> been passing daily for over a week — and CI runs on every push.
+>
+> **ubuntu-latest now passes the full matrix**: fmt, clippy, the whole test
+> suite, the ignored test, release build and docs. That is the first time this
+> codebase has ever been validated on Linux, and it closes the item this
+> section was written about.
+>
+> Windows and macOS do **not** pass. Four `core::refs::tests::test_encrypted_*`
+> tests fail there with `Failed to create ref directory: Cannot create a file
+> when that file already exists (os error 183)`. That is a real, pre-existing
+> Windows bug — flaky rather than deterministic, since the same tests pass
+> locally on Windows much of the time. It was twice written off during the
+> self-hosting work as parallel contention and then as a sandbox artifact.
+> Both explanations were wrong: it reproduces on a clean runner under
+> `--test-threads=1`, where neither applies. Treat it as open.
+>
+> The lesson worth carrying: **a section saying "CI has never run" ages into a
+> lie, and reading it as current cost twelve commits pushed to a red master.**
+> Check `gh run list` before trusting any claim about CI, including this one.
+
+### What the outage was (historical, 2026-08-06)
+
+Every claim in §2 onward was verified **locally** at the time. GitHub Actions
+was not running then:
 
 - 17 workflow runs are **queued** and never start.
 - The ones that started earlier failed on `Failed to resolve action download info: Service Unavailable` — GitHub could not fetch `actions/checkout` and friends.
@@ -162,7 +187,7 @@ policy and spending limit, which needs `admin:org` and was not readable from
 this account.
 
 **Do not read a green or red badge as a statement about this code** until runs
-actually execute.
+actually execute. (Superseded: they execute now. See the box above.)
 
 The local equivalent of the full CI matrix:
 
