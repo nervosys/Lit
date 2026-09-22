@@ -389,9 +389,21 @@ Fixed, with an end-to-end test.
 3. **Give `rotate-key` a non-interactive path.** See §3 — it currently cannot change a passphrase without a TTY.
 4. **Look for the next instance of an old pattern**, rather than the next new bug. Two of the last three findings were repeats of something already fixed elsewhere.
 
-**1.6.0 is published.** Tagged: no — `v1.6.0` does not exist, so the Release
+**1.6.0 is published.** ~~Tagged: no — `v1.6.0` does not exist, so the Release
 workflow has not built binaries or cut a GitHub release for it. That is the one
-piece of the usual release sequence still outstanding.
+piece of the usual release sequence still outstanding.~~
+
+**Corrected 2026-09-22:** it was tagged later the same day. `v1.6.0` is an
+annotated tag on `c8ee582`, and its GitHub release went out on 2026-08-07 with
+five binaries. Nothing was outstanding; this paragraph was written a few hours
+before the tag and never revisited.
+
+Left struck through rather than deleted, because it is the second time this
+document has misled a reader with a status note that was true when written —
+§1 was the first, and cost twelve commits pushed to a red master. **A sentence
+about the state of the world needs a date and a way to re-check it.** The
+re-check here was `git tag -l`, one command, and it was not run because the
+document sounded certain.
 
 The registry build was smoke-tested per §4: `cargo install litvc` → 1.6.0, an
 encrypted repository resolved its own key file under `~/.lit/keys/`, and
