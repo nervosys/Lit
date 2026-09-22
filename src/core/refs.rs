@@ -177,10 +177,32 @@ pub fn write_ref(repo_path: &Path, ref_name: &str, hash: &str) -> Result<(), Str
     let ref_path = get_lit_dir(repo_path).join("refs").join(ref_name);
 
     if let Some(parent) = ref_path.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("Failed to create ref directory: {}", e))?;
+        create_ref_dir(parent)?;
     }
 
     write_ref_file(&ref_path, repo_path, &format!("{}\n", hash))
+}
+
+/// Create a ref's parent directory, tolerating a spurious "already exists".
+///
+/// `create_dir_all` is meant to succeed when the directory is already there,
+/// but it only reaches that conclusion via an `is_dir` check after the failed
+/// `mkdir` — and `is_dir` is a metadata call that returns false when it errors
+/// rather than propagating. On Windows that call fails transiently while
+/// another process holds a handle on the directory, typically a virus scanner,
+/// and the caller is handed `ERROR_ALREADY_EXISTS` for a directory that plainly
+/// exists. Four `test_encrypted_*` tests failed exactly this way on CI while
+/// passing locally.
+///
+/// Re-checking after the failure costs one stat and turns a spurious error back
+/// into the success it should have been. A directory that genuinely cannot be
+/// created still fails, because `is_dir` is false then too.
+fn create_ref_dir(parent: &Path) -> Result<(), String> {
+    match fs::create_dir_all(parent) {
+        Ok(()) => Ok(()),
+        Err(_) if parent.is_dir() => Ok(()),
+        Err(e) => Err(format!("Failed to create ref directory: {}", e)),
+    }
 }
 
 /// Write an encrypted reference file
@@ -193,7 +215,7 @@ pub fn write_ref_encrypted(
     let ref_path = get_lit_dir(repo_path).join("refs").join(ref_name);
 
     if let Some(parent) = ref_path.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("Failed to create ref directory: {}", e))?;
+        create_ref_dir(parent)?;
     }
 
     let data = format!("{}\n", hash);

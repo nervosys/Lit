@@ -653,11 +653,19 @@ mod tests {
     fn test_use_refreshes_the_timeout() {
         // Expiry is by idle time, so a repository in active use should not
         // start prompting again in the middle of the work it is being used for.
-        let mut store = Store::new(Duration::from_millis(120));
+        //
+        // The margin between the sleep and the timeout is what makes this
+        // test honest or flaky, and it was 50ms against 120ms — barely twice
+        // over. `thread::sleep` guarantees a lower bound, not an upper one, and
+        // on a loaded CI runner a 50ms sleep overshoots 120ms often enough that
+        // this failed on macOS. Ten times the headroom costs 800ms of wall
+        // clock and removes the guesswork; the property under test is
+        // unchanged, since what matters is that each `get` resets the clock.
+        let mut store = Store::new(Duration::from_secs(2));
         store.put("repo".to_string(), "hunter2".to_string());
 
         for _ in 0..4 {
-            std::thread::sleep(Duration::from_millis(50));
+            std::thread::sleep(Duration::from_millis(200));
             assert!(store.get("repo").is_some(), "use should keep it alive");
         }
     }
