@@ -133,6 +133,33 @@ time than it takes to write the log line recording the request.
 Revisit only with a profile showing otherwise, and then with an explicit bound
 and a stated worst-case revocation delay — not an unbounded cache.
 
+### Open: UCAN is not an authorization mechanism yet (found 2026-09-22)
+
+`lit ucan` issues, lists and revokes tokens, and nothing consults one to make
+an access decision. `has_capability` is reached only from `delegate` and tests;
+`verify` is called from nowhere. Three defects sit behind that, and they are
+harmless only because of it:
+
+1. `sign`/`verify` are `SHA3-256(key ‖ payload)` with the private key on one
+   side and the public key on the other. They agree only if the keys are the
+   same bytes, so verification against a real public key always fails — and
+   making it pass by signing with the public key would let anyone mint tokens.
+   `crypto::signatures` already has ML-DSA-87; that is what this should use.
+2. `has_capability` matches on `resource.starts_with(cap.resource)` with no
+   delimiter, so `repo/a` grants `repo/anything`. `delegate` subsets through
+   that check, so a narrow token can mint a broader child.
+3. `delegate` never checks `is_valid`, so an expired token can issue children
+   with fresh expirations, and it returns the child unsigned.
+
+**Do not wire UCAN into any access decision before fixing these.** Doing so
+converts three dormant defects into a live bypass in one step. The repair is one
+piece of work on the delegation model, not three patches; the module
+documentation in `src/identity/ucan.rs` carries the same warning where someone
+about to use it will see it.
+
+Found by reading, not by a test — the module's own tests pass, because they
+assert the behaviour described above rather than the behaviour intended.
+
 ### The next things
 
 Nothing outstanding in this area. What remains is inherently the deploying

@@ -4,6 +4,39 @@
 //! Example: "You can push to branch 'feature' for 1 hour."
 //!
 //! Based on UCAN spec: https://ucan.xyz
+//!
+//! # Do not authorize anything on these tokens yet
+//!
+//! Nothing in Lit consults a UCAN to make an access decision. `lit ucan` issues,
+//! lists and revokes them; [`UcanToken::has_capability`] is reached only from
+//! [`UcanToken::delegate`] and from tests, and [`UcanToken::verify`] is called
+//! from nowhere at all. That makes the problems below latent rather than
+//! exploitable — and it is the only reason they are, so wiring this into a real
+//! decision without fixing them first would turn three dormant defects into a
+//! live authorization bypass.
+//!
+//! 1. **`sign` and `verify` are not a signature scheme.** `sign` computes
+//!    `SHA3-256(private_key ‖ payload)` and `verify` computes
+//!    `SHA3-256(public_key ‖ payload)`. Those agree only when the two keys are
+//!    the same bytes, so verification against a real public key always fails —
+//!    and making it succeed by signing with the public key would let anyone
+//!    holding that public key mint tokens. There is no asymmetry here. Real
+//!    post-quantum signing already exists in `crypto::signatures` (ML-DSA-87)
+//!    and is what this should use.
+//!
+//! 2. **Resource matching has no boundary.** `has_capability` accepts
+//!    `resource.starts_with(&cap.resource)`, so a capability for `repo/a`
+//!    matches the resource `repo/anything`. Because `delegate` performs its
+//!    subset check through `has_capability`, a narrowly scoped token can mint a
+//!    child that is broader than itself.
+//!
+//! 3. **`delegate` checks neither validity nor signatures, and does not sign.**
+//!    It never calls [`UcanToken::is_valid`], so an expired token can issue
+//!    children with fresh expirations, and the child it returns carries an empty
+//!    signature.
+//!
+//! Fixing these is one coherent piece of work on the delegation model rather
+//! than three separate patches. See `docs/HANDOFF.md`.
 
 use crate::errors::LitError;
 use serde::{Deserialize, Serialize};
