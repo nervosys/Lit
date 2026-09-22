@@ -146,19 +146,26 @@ alone.
 > ended. As of 2026-09-21 Actions is healthy — the nightly security workflow had
 > been passing daily for over a week — and CI runs on every push.
 >
-> **ubuntu-latest now passes the full matrix**: fmt, clippy, the whole test
-> suite, the ignored test, release build and docs. That is the first time this
-> codebase has ever been validated on Linux, and it closes the item this
-> section was written about.
+> **The full matrix is green** — ubuntu, windows and macos, plus the GUI
+> backend and the website. As of `ad5d98d` all five jobs pass together, which
+> had never happened before. This section was written when none of it ran.
 >
-> Windows and macOS do **not** pass. Four `core::refs::tests::test_encrypted_*`
-> tests fail there with `Failed to create ref directory: Cannot create a file
-> when that file already exists (os error 183)`. That is a real, pre-existing
-> Windows bug — flaky rather than deterministic, since the same tests pass
-> locally on Windows much of the time. It was twice written off during the
-> self-hosting work as parallel contention and then as a sandbox artifact.
-> Both explanations were wrong: it reproduces on a clean runner under
-> `--test-threads=1`, where neither applies. Treat it as open.
+> Getting there took two real fixes, both in code that predates the
+> self-hosting work:
+>
+> - **macOS** failed `crypto::agent::tests::test_use_refreshes_the_timeout`, a
+>   wall-clock test probing a 120ms timeout with 50ms sleeps. `thread::sleep`
+>   guarantees a lower bound, not an upper one, so the margin was never real.
+> - **Windows** failed four `core::refs::tests::test_encrypted_*` tests, and the
+>   cause was a genuine bug: `restrict_dir_to_owner` set a PROTECTED DACL at
+>   NO_INHERITANCE, so files created in a restricted directory inherited an
+>   empty DACL and could not be opened by anyone — including their owner. See
+>   §3 of the 1.6.0 notes for why this area was already suspect.
+>
+> Those Windows failures were twice written off during the self-hosting work as
+> parallel contention and then as a sandbox artifact. Both were wrong. They
+> reproduced on a clean runner under `--test-threads=1`, where neither
+> explanation applies, and the actual cause was in production code.
 >
 > The lesson worth carrying: **a section saying "CI has never run" ages into a
 > lie, and reading it as current cost twelve commits pushed to a red master.**

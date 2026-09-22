@@ -7,7 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-> **Validated by test, not by clippy.** `cargo test --lib` passes in full (167
+> **Validated on all three platforms.** CI is green across ubuntu, windows and
+> macos — fmt, clippy, the full test suite, the ignored test, release build and
+> docs — as of `ad5d98d`. That is the first time this repository has had the
+> whole matrix pass at once.
+
+> **Superseded, kept for the record.** `cargo test --lib` passes in full (167
 > tests), and `cargo test --test command_tests -- server::` passes (21 tests
 > driving a real server over a real socket). Clippy has not been run. See
 > `docs/HANDOFF.md` §0.
@@ -28,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **A directory restricted to its owner made its own contents unreachable** — `restrict_dir_to_owner` set a PROTECTED DACL carrying a single ACE at NO_INHERITANCE. PROTECTED keeps no inherited entries and NO_INHERITANCE hands none down, so every file created in such a directory afterwards received an empty DACL: openable by nobody, the owner included. In production this was masked, because key files under `~/.lit/keys` are each explicitly restricted after creation and so get a DACL of their own; anything written there without that follow-up would have been lost to it. Directories now grant `SUB_CONTAINERS_AND_OBJECTS_INHERIT` so their contents inherit the same owner-only access, which is what the function always claimed to do. Files keep NO_INHERITANCE, having no children. Found because four `core::refs` encrypted-ref tests failed on Windows CI — they set their key file inside their own scratch directory, so `EncryptionManager::initialize` restricted the very tree they then tried to write to
 - **`--trusted-proxy` makes the audit source address true behind a reverse proxy** — Lit identifies a client by the TCP peer address, so behind the proxy these docs recommend for FIPS-validated TLS, every audit record named the proxy and the per-address rate limiter collapsed into one bucket shared by every user. Naming the proxy addresses makes `X-Forwarded-For` believable on connections from them, and the client address it reports is what the limiter buckets on and the audit log records. Without the flag the header is ignored entirely, which is the default and the safe one: it is caller-supplied, and believing it from anyone would let every client choose its own 03.03.02 source address and rate-limit bucket. The chain is walked from the right, stepping over addresses that are themselves trusted proxies and stopping at the first that is not, so a client cannot get entries of its own invention used; a malformed entry stops the walk rather than being skipped, since skipping would let one hide a hop behind junk
 - **An anonymous caller could write arbitrary text into the audit log** — a failed login recorded the attempted username verbatim, and with the body cap at 1 MB and the rate limiter at 100 requests per minute, that was enough to fill the disk the audit trail depends on. It also meant a password typed into the username field — the commonest way that field is wrong — sat in a log that is retained, forwarded to a SIEM and read by administrators. Oversized credentials are now rejected before any work is done on them, and the audited subject is the attempted name only when it is shaped like an account name. The name still belongs in the record, so this narrows what is stored rather than dropping it. Successful logins were never affected: that username comes from the account store
 - **A session no longer outlives the authority it was issued under** — a session carried the role it was minted with and was never re-checked against the account behind it, so an account disabled, demoted, or removed kept its open session working until that session happened to expire: up to eight hours on the defaults. Revocation has to bite now rather than eventually, so every request re-checks that account against the store. A session whose account has gone or been disabled is terminated on the spot and the request refused; a demoted account's session drops to its current role rather than the one it was minted with. The cost is a `stat` and a map lookup per request
