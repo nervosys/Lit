@@ -12,11 +12,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > docs — as of `ad5d98d`. That is the first time this repository has had the
 > whole matrix pass at once.
 
-> **Superseded, kept for the record.** `cargo test --lib` passes in full (167
-> tests), and `cargo test --test command_tests -- server::` passes (21 tests
-> driving a real server over a real socket). Clippy has not been run. See
-> `docs/HANDOFF.md` §0.
-
 ### Added
 
 - **`lit server serve` — a server actually meant to be hosted** — `lit serve` binds loopback, speaks plaintext HTTP, and accepts one shared bearer token. A shared token cannot say *who* acted, which means no audit record it produces can satisfy NIST SP 800-171r3 03.03.02, and audit is what every investigation rests on. The new command is a separate one rather than flags on the old: named accounts with four ordered roles (`reader`, `contributor`, `maintainer`, `admin`), authorization decided in exactly one place so an unlisted route fails closed, sessions with idle and absolute lifetime limits, windowed account lockout, TLS termination, an operator-supplied system use notification served before authentication, and an HMAC-chained audit record for every authentication and authorization decision. Two commands, not one flag, because conflating them is how a development server ends up on a routable address
