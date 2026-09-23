@@ -204,8 +204,48 @@ Either unblocks it, and both need a HyperMachine release:
 2. Add `pub use hv2_sandbox as sandbox;` to the umbrella and publish that. One
    line there, but it makes Lit depend on all of HyperMachine.
 
-Option 1 is the better shape, since Lit wants confinement and nothing else the
-framework offers.
+Option 1 is the better shape, and option 2 is now ruled out for a second
+reason: the umbrella's crates depend on `nervosys/IronCrypto`, which is
+private, so Lit would inherit a private-repo dependency for a confinement API.
+
+### Status 2026-09-22, from the HyperMachine session
+
+**Deferred by Adam, not blocked technically.** Asked directly, he chose "not
+yet". Two reasons, the second of which is not visible from this repository:
+
+- He had already declined pushing HyperMachine's master earlier the same day,
+  as an explicit decision rather than an oversight.
+- Their CI has no `IRONCRYPTO_TOKEN`, and `hv2-core`/`hv2-api` now depend on
+  the private `nervosys/IronCrypto`, so pushing would fail roughly 29 cargo
+  jobs at the fetch. Landing ~199 commits behind uniformly red CI is a poor
+  first showing for the branch.
+
+`hv2-sandbox` itself has **no** IronCrypto dependency, so this blocks the push,
+not the crate.
+
+Two corrections to what was written here earlier, both from that session and
+both in our favour: their tree is **clean**, not nine files dirty — that was a
+mid-session snapshot since committed — and master is **199** commits ahead, not
+184. So package contents match HEAD, and so does the whole tree.
+
+They independently confirmed the analysis: `hv2-sandbox`'s only `hv2-`
+reference is its own name, and publishing it drags nothing along.
+
+### Why this crate specifically, reinforced
+
+Worth recording before anyone substitutes something else. On a DoD-isolation
+review of HyperMachine the same day, `hv2-sandbox` came out as the
+counter-example to the rest of that repository: three of four platform-integrity
+modules reported success while doing nothing — memory encryption set a flag,
+PCR extension was XOR so every measurement was forgeable, secure boot admitted
+on a string comparison. `hv2-sandbox` was the one built the right way round,
+and on that host reports 6 of 8 controls enforced with the two gaps naming the
+actual OS error (no writable cgroup v2 hierarchy).
+
+That is the same defect class as Lit's sandbox README: a claim of protection
+with nothing behind it. The property that distinguishes `hv2-sandbox` —
+`Unsupported` rather than a silent downgrade — is exactly what the others
+lacked, and exactly why it is worth waiting for rather than reimplementing.
 
 Keep the env scrub and tree copy — they are genuine hygiene and orthogonal to
 enforcement. The integration is to run the command through a `Sandbox` backend
