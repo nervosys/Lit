@@ -79,6 +79,7 @@ rayon = "1.10"
 memmap2 = "0.9"
 rmp-serde = "1.3"
 byteorder = "1.5"
+hv2-sandbox = "1.1"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.58", features = [

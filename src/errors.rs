@@ -199,6 +199,19 @@ impl LitError {
     /// Actionable suggestions for agents to resolve the error
     pub fn suggestions(&self) -> Vec<&'static str> {
         match self {
+            // A strict sandbox run refuses when the host cannot enforce every
+            // control asked for, and the refusal is the feature — so it has to
+            // say something. Sanitized, it arrives as "Operation failed", which
+            // is worse than useless for a control decision the caller has to
+            // act on. The host's actual control set cannot go here because
+            // these are `&'static str`, so point at the run that reports it.
+            LitError::General(msg) if msg.contains("requested confinement") => {
+                vec![
+                    "This host cannot enforce every control that --strict requires",
+                    "Re-run without --strict to proceed with what it can enforce",
+                    "The non-strict run reports controls_enforced and controls_unenforced, the latter with the reason for each gap",
+                ]
+            }
             // The rendered message is deliberately sanitized, so these two
             // encryption cases would otherwise reach the user as a bare
             // "Operation failed" with nothing to act on.

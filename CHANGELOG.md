@@ -5,6 +5,17 @@ All notable changes to Lit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`lit sandbox run` now confines, and says how much** — the command previously set a working directory, called `env_clear()`, and made no confinement syscall at all, while the README advertised "process isolation with filesystem, environment and network fences" and invited readers to run untrusted code in it. It now runs through [`hv2-sandbox`](https://crates.io/crates/hv2-sandbox), which enforces what the host supports and **reports what it does not**. Every run fills `controls_enforced` and `controls_unenforced` on the response, the latter carrying the host's own reason for each gap — on Windows, for instance, "a job object does not isolate the network; use the microVM sandbox". `--strict` refuses the run rather than proceeding with less confinement than was asked for, and `--allow-network` opts out of network denial deliberately. On Windows that means job-object memory, process-count and CPU-time caps and no network or process isolation; on Linux, namespaces, `pivot_root`, cgroup v2 and `no_new_privs`, except that an unprivileged user with no writable cgroup v2 hierarchy is *told* the memory and process-count caps are missing rather than left to assume them. Filesystem isolation is deliberately not requested on any platform: it needs a root to pivot into plus a read-only mount set, and a sandbox directory is a copy of the working tree, not a root filesystem. The environment scrub and tree copy remain as hygiene, which is what they always were
+
+### Fixed
+
+- **A malformed remote ref panicked the federation want list** — `generate_want_list` sliced `&hash[..2]` and *then* checked `!hash.is_empty()`, so the guard protected nothing: an empty ref file panicked, a one-character file panicked, and a multi-byte first character panicked on a char boundary. It is reached from the federation CLI, where a truncated `.lit/refs/remotes/*` is an ordinary state, and the `unwrap_or_default()` at that call site catches an `Err` rather than an unwind. Now validated before slicing, with a test that panicked before the fix and passes after
+- **A strict sandbox refusal explained nothing** — `LitError`'s rendered message is deliberately sanitized, so the refusal that is the whole point of `--strict` arrived as "Operation failed". It now carries suggestions, following the pattern already used for the encryption cases that hit the same wall
+
 ## [1.7.0] - 2026-09-22
 
 > **Validated on all three platforms.** CI is green across ubuntu, windows and

@@ -2,7 +2,7 @@
 
 **The world's first universal version control system designed for AI agents first and humans second.**
 
-Lit is a complete Git replacement written in Rust — 67 commands, 30 MCP tools, post-quantum cryptographic security, scrubbed execution environments, and structured machine-readable output. Every interface is designed for autonomous agent workflows, with human-friendly output available via a single flag.
+Lit is a complete Git replacement written in Rust — 67 commands, 30 MCP tools, post-quantum cryptographic security, confined command execution, and structured machine-readable output. Every interface is designed for autonomous agent workflows, with human-friendly output available via a single flag.
 
 Unlike Git, Lit is not limited to source code. Its pluggable content type system versions **CAD models, EDA schematics, manuscripts, databases, scientific datasets, media assets, geospatial data**, and any other domain content — with domain-appropriate diff, merge, and storage strategies. Arbitrary agent profiles let CAD designers, EDA engineers, technical writers, DBAs, and data scientists work alongside software agents in a unified versioned workspace. Datacenter deployment features enable cluster sharding, replication, health monitoring, and Prometheus-style metrics for production-scale operation.
 
@@ -27,7 +27,7 @@ Git was designed in 2005 for human developers using terminals. Every interface �
 | **Trust scoring**       | None                        | Reputation tracking per agent            |
 | **Issues & PRs**        | None built-in               | Local-first, stored as git refs          |
 | **Federation**          | Centralized (GitHub/GitLab) | Content-addressed peer-to-peer           |
-| **Execution environment** | None                      | Cleared env, redirected HOME/TEMP, restricted PATH |
+| **Confined execution**  | None                        | OS-enforced limits, with per-host reporting of which |
 | **Content types**       | Source code only            | CAD, EDA, CAM, simulation, AI models, manuscripts, DBs, media, etc. |
 | **Agent types**         | N/A                         | SWE, CAD, EDA, writer, DBA, reviewer, CI |
 | **Datacenter**          | N/A                         | Sharding, replication, metrics, health   |
@@ -50,7 +50,7 @@ Git was designed in 2005 for human developers using terminals. Every interface �
 - **Content-addressed federation** -- peer-to-peer repository sync with want-list negotiation
 - **4 transport protocols** — HTTPS, SSH, `lit://` (custom TCP), stdio pipe
 - **Self-hosted server** — `lit server serve` adds named accounts, four roles, expiring sessions, account lockout, TLS, a pre-authentication system use notification, and an HMAC-chained audit record for every authorization decision. Mapped requirement-by-requirement against NIST SP 800-171r3, gaps included, in [`docs/NIST_800-171.md`](docs/NIST_800-171.md)
-- **Scrubbed execution environments** — run a command against a copy of the working tree with a cleared environment, HOME/TEMP redirected, and a restricted PATH. This is hygiene, not a security boundary — see [Sandbox](#sandbox) for what it does not stop
+- **Confined execution** — run a command against a copy of the working tree, through [`hv2-sandbox`](https://crates.io/crates/hv2-sandbox): namespaces, `pivot_root`, cgroup v2 and `no_new_privs` on Linux; job-object memory, process and CPU caps on Windows. Every run reports which controls the host actually enforced and, for the rest, why not — `--strict` refuses instead of under-confining. See [Sandbox](#sandbox)
 - **Intent → Commit → Converge** — agentic workflow replacing branch/PR with scoped intents, commit attachment, and trust-gated convergence
 - **Universal content types** — 100 built-in types making Lit a one-stop VCS for modern engineering: CAD & 3D modeling (STEP, IGES, STL, 3MF, DWG/DXF, SolidWorks, CATIA, Inventor, Fusion 360, Creo, Siemens NX, Solid Edge, Rhino, Parasolid, ACIS, JT, OBJ, FBX, glTF/GLB, USD, COLLADA, PLY, Blender, Alembic), EDA (KiCad, Gerber, Excellon, Altium, EAGLE, OrCAD, Verilog/SystemVerilog, VHDL, GDSII, OASIS, IPC-2581, Touchstone, LEF/DEF, SPICE), CAM (G-code, STEP-NC, APT, Mastercam), simulation/FEA/CFD (Nastran, Abaqus, ANSYS, LS-DYNA, OpenFOAM, COMSOL, Gmsh, VTK, CGNS, Exodus, Modelica, Simulink, FMU), AI/ML models (ONNX, SafeTensors, PyTorch, TensorFlow, Keras, GGUF/GGML, TensorRT, Core ML, TFLite, NumPy, checkpoints), plus manuscripts, databases, scientific data, media, geospatial, legal, and financial formats — each with domain-appropriate diff, merge, and storage strategies
 - **Datacenter deployment** — cluster node management, consistent-hash sharding, configurable replication (sync/async/semi-sync), health monitoring, Prometheus-style metrics, connection pooling, and chunked large-object transfer
@@ -184,20 +184,51 @@ lit swarm lease-list               # List all active leases
 Run a command against a copy of the working tree, with the environment scrubbed:
 
 ```bash
-lit sandbox init [name]            # Create sandbox from working tree
-lit sandbox run <name> -- <cmd>    # Run command inside sandbox
-lit sandbox list                   # List all sandboxes
-lit sandbox destroy <name>         # Remove a sandbox
+lit sandbox init [name]                    # Create sandbox from working tree
+lit sandbox run <name> -- <cmd>            # Run, confined as far as the host allows
+lit sandbox run <name> --strict -- <cmd>   # Refuse rather than under-confine
+lit sandbox run <name> --allow-network -- <cmd>
+lit sandbox list                           # List all sandboxes
+lit sandbox destroy <name>                 # Remove a sandbox
 ```
 
-> **This is not a security boundary. Do not run untrusted code in it.**
+> **How much this confines depends on your host, and it tells you which.**
 >
-> Earlier versions of this section described process isolation with filesystem
-> and network fences. That was wrong, and the wording invited exactly the use it
-> could not survive. `lit sandbox run` sets a working directory and replaces the
-> environment; it applies no kernel-enforced restriction of any kind.
+> Earlier versions claimed process isolation with filesystem and network fences
+> and provided none — a working directory and an environment scrub, no
+> kernel-enforced restriction of any kind. It now runs through
+> [`hv2-sandbox`](https://crates.io/crates/hv2-sandbox), which enforces what the
+> host can and **reports the rest rather than implying it**.
+>
+> Every run prints `controls_enforced` and `controls_unenforced`, the latter with
+> the reason for each gap. Pass `--strict` to refuse the run instead of
+> proceeding with less.
 
-What it does:
+On Windows the backend is a job object, so a run reports something like:
+
+```json
+"controls_enforced": ["memory-limit","process-count-limit","cpu-time-limit","wall-clock-deadline"],
+"controls_unenforced": [
+  "network-isolation: a job object does not isolate the network; use the microVM sandbox",
+  "process-isolation: a job object bounds a process set but does not hide the rest of the process table",
+  "no-new-privileges: Windows has no no-new-privileges bit; a restricted token would be a different mechanism with different semantics"
+]
+```
+
+Linux gets namespaces, `pivot_root`, cgroup v2 and `no_new_privs` — though an
+unprivileged user with no writable cgroup v2 hierarchy loses the memory and
+process-count caps, and is told so. macOS gets `RLIMIT_*` only.
+
+**Filesystem isolation is not requested**, on any platform. Confining the
+filesystem means giving the backend a root to pivot into plus the host paths to
+mount read-only, and a sandbox directory is a copy of your working tree, not a
+root filesystem — a workload pivoted into it would find none of its own tools.
+Choosing that mount set is a design decision, not a default.
+
+So: genuine confinement on Linux, resource limits on Windows, and in both cases
+an honest statement of which. Do not infer more than `controls_enforced` says.
+
+Environment hygiene, applied on every platform regardless:
 
 | Measure     | Effect                                                    |
 | ----------- | --------------------------------------------------------- |
@@ -208,18 +239,9 @@ What it does:
 | Git config  | `GIT_CONFIG_NOSYSTEM=1`, so system config is not read     |
 | Credentials | Not inherited — no cloud tokens, SSH agent, or API keys in the environment |
 
-What it does **not** do:
-
-| Not protected | Why |
-| ------------- | --- |
-| Filesystem    | The process can read and write anything you can, via absolute paths or `..`. Copying the tree relocates the *default*, it does not fence anything |
-| Network       | `LIT_AIRGAPPED=1` is an environment variable that **only Lit itself honours**. Any other program opens sockets freely |
-| Processes     | No namespaces, job objects, AppContainer, seccomp, Landlock or rlimits are used anywhere |
-| Escalation    | The command runs as you, with your privileges |
-
-So it is good for keeping a build off your dotfiles and out of your credential
-helpers, and useless against code that is actually hostile. Real isolation needs
-OS mechanisms per platform and is not implemented.
+Note that `LIT_AIRGAPPED=1` above is honoured by Lit and by nothing else — it is
+not a network fence. Network denial, where it is enforced at all, comes from the
+sandbox backend and appears in `controls_enforced`.
 
 ### Identity & Trust
 

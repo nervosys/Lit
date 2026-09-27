@@ -1552,6 +1552,20 @@ pub struct SandboxResponse {
     pub message: String,
     pub output: Option<String>,
     pub exit_code: Option<i32>,
+    /// Confinement controls this host actually enforced for a `run`.
+    ///
+    /// Reported rather than promised. What a host can enforce differs between
+    /// Linux, Windows and macOS, and on Linux between a privileged and an
+    /// unprivileged user — an unprivileged Linux user typically has no writable
+    /// cgroup v2 hierarchy and so gets no memory or process-count cap. A caller
+    /// that needs to know what it got has to be told, not reassured.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub controls_enforced: Vec<String>,
+    /// Controls that were asked for and not enforced, with the reason.
+    ///
+    /// Only ever non-empty for a best-effort run. A strict run refuses instead.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub controls_unenforced: Vec<String>,
 }
 
 impl CommandResponse for SandboxResponse {
@@ -1568,10 +1582,22 @@ impl CommandResponse for SandboxResponse {
                 }
             }
         }
+        // Say what was actually enforced. A caller reading only "command
+        // completed successfully" has no way to know whether it ran confined or
+        // merely ran, and that gap is the whole defect this feature had.
+        if !self.controls_enforced.is_empty() {
+            out.push_str("enforced: ");
+            out.push_str(&self.controls_enforced.join(", "));
+            out.push('\n');
+        }
+        for gap in &self.controls_unenforced {
+            out.push_str("NOT enforced: ");
+            out.push_str(gap);
+            out.push('\n');
+        }
         out
     }
 }
-
 // ============================================================================
 // Phase 6 Response Types (Decentralized Features)
 // ============================================================================

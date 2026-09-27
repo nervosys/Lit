@@ -1104,6 +1104,18 @@ enum SandboxCommands {
     Run {
         /// Sandbox name
         name: String,
+
+        /// Refuse to run if this host cannot enforce the requested confinement,
+        /// instead of running with less. Without it the run proceeds and reports
+        /// every control it did not get.
+        #[arg(long)]
+        strict: bool,
+
+        /// Allow the command to reach the network. Denied by default, and denial
+        /// is only enforced where the host can — see controls_enforced.
+        #[arg(long)]
+        allow_network: bool,
+
         /// Command and arguments to run (after --)
         #[arg(last = true)]
         cmd: Vec<String>,
@@ -2140,7 +2152,19 @@ fn run() {
         // Sandbox
         Commands::Sandbox { command } => match command {
             SandboxCommands::Init { name } => run!(commands::sandbox::execute_init(name)),
-            SandboxCommands::Run { name, cmd } => run!(commands::sandbox::execute_run(name, cmd)),
+            SandboxCommands::Run {
+                name,
+                strict,
+                allow_network,
+                cmd,
+            } => run!(commands::sandbox::execute_run_with(
+                name,
+                cmd,
+                commands::sandbox::RunOptions {
+                    strict,
+                    allow_network,
+                },
+            )),
             SandboxCommands::List => run!(commands::sandbox::execute_list()),
             SandboxCommands::Destroy { name } => run!(commands::sandbox::execute_destroy(name)),
         },

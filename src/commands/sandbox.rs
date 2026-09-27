@@ -1,32 +1,38 @@
 //! Scrubbed execution environments.
 //!
-//! # This is not a sandbox in the security sense
+//! # How much this confines, and how you know
 //!
-//! [`execute_run`] sets a working directory and replaces the environment. That
-//! is all it does. No namespaces, job objects, AppContainer, seccomp, Landlock,
-//! chroot or rlimits are used here or anywhere else in the crate — grep for any
-//! of them and you will find nothing.
+//! Confinement comes from [`hv2_sandbox`], which enforces what the host can and
+//! reports what it cannot. This module adds the environment scrub and the tree
+//! copy, which are hygiene — they keep a build away from dotfiles, credential
+//! helpers, the SSH agent and system Git config — and are not a boundary.
 //!
-//! A command run through it can read and write anything the invoking user can,
-//! by absolute path or `..`; can open any socket it likes, because
-//! `LIT_AIRGAPPED=1` is an environment variable that only Lit itself honours;
-//! and runs with the caller's full privileges.
+//! The division matters because this module used to *be* the whole story: it set
+//! a working directory, called `env_clear`, and made no confinement syscall at
+//! all, while the README advertised "process isolation with filesystem and
+//! network fences" and invited readers to run untrusted code in it.
 //!
-//! What it is good for is hygiene: keeping a build away from your dotfiles,
-//! credential helpers, SSH agent and system Git config, and giving it a clean
-//! tree to work in. That is worth having, and it is not a boundary.
+//! What replaced that is not a promise of isolation either. It is a report:
+//! every run fills `controls_enforced` and `controls_unenforced` on the
+//! response, the latter carrying the host's own reason for each gap, and
+//! [`RunOptions::strict`] refuses the run rather than proceeding with less.
+//! On Windows that means resource caps and no network or process isolation; on
+//! Linux, namespaces and cgroups unless the user lacks a writable cgroup v2
+//! hierarchy, in which case the memory and process-count caps are reported
+//! missing rather than assumed present.
 //!
-//! The README used to describe this as "process isolation with filesystem and
-//! network fences" and invite users to run untrusted code in it. It has been
-//! corrected. If you are about to rely on this against hostile code, do not —
-//! real isolation needs per-platform OS mechanisms that are not implemented.
+//! Filesystem isolation is deliberately not requested — see the comment on the
+//! spec in [`execute_run_with`].
 
 use crate::errors::LitError;
 use crate::response::SandboxResponse;
+use hv2_sandbox::{
+    Control, Controls, FilesystemPolicy, NetworkPolicy, ProcessSandbox, Sandbox, SandboxCommand,
+    SandboxSpec,
+};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use walkdir::WalkDir;
 
 /// Metadata file placed inside every sandbox root.
@@ -119,11 +125,38 @@ pub fn execute_init(name: Option<String>) -> Result<SandboxResponse, LitError> {
         message: format!("sandbox '{}' created", name),
         output: None,
         exit_code: None,
+        controls_enforced: Vec::new(),
+        controls_unenforced: Vec::new(),
     })
 }
 
 /// Run a command inside an existing sandbox with restricted environment.
+/// How strictly [`execute_run_with`] should confine the command.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct RunOptions {
+    /// Refuse to run when this host cannot enforce a requested control, rather
+    /// than running with less confinement than was asked for.
+    ///
+    /// Off by default so the command still works everywhere: Windows enforces
+    /// no filesystem or network boundary, and an unprivileged Linux user
+    /// usually has no writable cgroup v2 hierarchy. That default is paid for
+    /// honestly — a best-effort run reports every control it did not get.
+    pub strict: bool,
+    /// Let the command reach the network. The default denies it, and denial is
+    /// only *enforced* where the host can; read `controls_enforced` to see.
+    pub allow_network: bool,
+}
+
 pub fn execute_run(name: String, cmd: Vec<String>) -> Result<SandboxResponse, LitError> {
+    execute_run_with(name, cmd, RunOptions::default())
+}
+
+/// Like [`execute_run`], with explicit confinement options.
+pub fn execute_run_with(
+    name: String,
+    cmd: Vec<String>,
+    options: RunOptions,
+) -> Result<SandboxResponse, LitError> {
     let repo_root = crate::core::find_repo_root()?;
     validate_sandbox_name(&name)?;
     let sb_dir = sandbox_dir(&repo_root, &name);
@@ -145,16 +178,43 @@ pub fn execute_run(name: String, cmd: Vec<String>) -> Result<SandboxResponse, Li
     let program = &cmd[0];
     let args = &cmd[1..];
 
-    // Build a minimal, sandboxed environment.
+    // The environment scrub is hygiene and stays: it keeps a build away from
+    // dotfiles, credential helpers, the SSH agent and system Git config. It is
+    // not confinement. The sandbox below is.
     let env = sandboxed_env(&sb_dir);
 
-    let result = Command::new(program)
-        .args(args)
-        .current_dir(&sb_dir)
-        .env_clear()
-        .envs(&env)
-        .output()
-        .map_err(|e| LitError::io(format!("failed to spawn command: {e}")))?;
+    let sandbox = ProcessSandbox::new();
+    let controls = sandbox.controls();
+
+    let spec = SandboxSpec {
+        network: if options.allow_network {
+            NetworkPolicy::Host
+        } else {
+            NetworkPolicy::Denied
+        },
+        // Deliberately Host. Isolating the filesystem means handing the backend
+        // a root to pivot into plus the host paths to mount read-only, and a
+        // sandbox directory is a copy of the working tree, not a root
+        // filesystem — a workload pivoted into it would find none of its own
+        // tools. Choosing that mount set is a design decision, not a default.
+        filesystem: FilesystemPolicy::Host,
+        isolate_processes: true,
+        no_new_privileges: true,
+        best_effort: !options.strict,
+        ..SandboxSpec::default()
+    };
+
+    let mut command = SandboxCommand::new(program).args(args).working_dir(&sb_dir);
+    for (key, value) in &env {
+        command = command.env(key, value);
+    }
+
+    let result = sandbox.run(&command, &spec).map_err(|e| {
+        LitError::general(format!(
+            "sandbox '{name}' could not run under the requested confinement: {e}. This host enforces {}. Re-run without --strict to proceed with less.",
+            describe_controls(&controls)
+        ))
+    })?;
 
     let stdout = String::from_utf8_lossy(&result.stdout).to_string();
     let stderr = String::from_utf8_lossy(&result.stderr).to_string();
@@ -164,19 +224,34 @@ pub fn execute_run(name: String, cmd: Vec<String>) -> Result<SandboxResponse, Li
         format!("{stdout}\n{stderr}")
     };
 
-    let code = result.status.code().unwrap_or(-1);
+    let code = result.exit_code.unwrap_or(-1);
 
     Ok(SandboxResponse {
         action: "run".into(),
         name,
         path: sb_dir.display().to_string(),
-        message: if result.status.success() {
-            "command completed successfully".into()
-        } else {
-            format!("command exited with code {code}")
+        // A workload the sandbox killed for exceeding a limit did not merely
+        // exit non-zero, and reporting it as an exit code hides the one fact
+        // the caller most needs.
+        message: match result.killed_by {
+            Some(control) => format!(
+                "command killed by the sandbox for exceeding its {}",
+                control_name(control)
+            ),
+            None if result.succeeded() => "command completed successfully".into(),
+            None => match result.signal {
+                Some(sig) => format!("command was terminated by signal {sig}"),
+                None => format!("command exited with code {code}"),
+            },
         },
         output: Some(combined),
         exit_code: Some(code),
+        controls_enforced: controls
+            .enforced()
+            .iter()
+            .map(|c| control_name(*c).to_string())
+            .collect(),
+        controls_unenforced: unenforced_report(&controls, &result.unenforced),
     })
 }
 
@@ -211,6 +286,8 @@ pub fn execute_list() -> Result<SandboxResponse, LitError> {
         message,
         output: None,
         exit_code: None,
+        controls_enforced: Vec::new(),
+        controls_unenforced: Vec::new(),
     })
 }
 
@@ -238,6 +315,8 @@ pub fn execute_destroy(name: String) -> Result<SandboxResponse, LitError> {
         message: format!("sandbox '{}' destroyed", name),
         output: None,
         exit_code: None,
+        controls_enforced: Vec::new(),
+        controls_unenforced: Vec::new(),
     })
 }
 
@@ -306,6 +385,48 @@ fn copy_tree(src: &Path, dst: &Path, repo_root: &Path) -> Result<(), LitError> {
 ///
 /// Only essential system paths and the sandbox HOME are exposed.
 /// Secrets, cloud tokens, user shell config, etc. are stripped.
+/// Name a control the way an operator would recognise it.
+fn control_name(control: Control) -> &'static str {
+    match control {
+        Control::Memory => "memory-limit",
+        Control::ProcessCount => "process-count-limit",
+        Control::CpuTime => "cpu-time-limit",
+        Control::WallClock => "wall-clock-deadline",
+        Control::NetworkIsolation => "network-isolation",
+        Control::FilesystemIsolation => "filesystem-isolation",
+        Control::ProcessIsolation => "process-isolation",
+        Control::NoNewPrivileges => "no-new-privileges",
+    }
+}
+
+/// A one-line summary of what this host enforces, for an error message.
+fn describe_controls(controls: &Controls) -> String {
+    let enforced = controls.enforced();
+    if enforced.is_empty() {
+        return "nothing".to_string();
+    }
+    enforced
+        .iter()
+        .map(|c| control_name(*c))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// What was asked for and not granted, each with the reason the host gave.
+///
+/// The reason matters more than the fact. "no writable cgroup v2 hierarchy:
+/// Permission denied" tells an operator to run as root or use a delegated
+/// cgroup; "unenforced" tells them nothing.
+fn unenforced_report(controls: &Controls, unenforced: &[Control]) -> Vec<String> {
+    unenforced
+        .iter()
+        .map(|c| match controls.reason(*c) {
+            Some(reason) => format!("{}: {}", control_name(*c), reason),
+            None => control_name(*c).to_string(),
+        })
+        .collect()
+}
+
 fn sandboxed_env(sandbox_root: &Path) -> HashMap<String, String> {
     let mut env = HashMap::new();
 
