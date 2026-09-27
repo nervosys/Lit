@@ -89,7 +89,15 @@ pub fn execute_init(name: Option<String>) -> Result<SandboxResponse, LitError> {
     } else {
         repo_root.clone()
     };
+    execute_init_from(repo_root, source, name)
+}
 
+/// Like [`execute_init`], with the repository root and source tree given.
+pub fn execute_init_from(
+    repo_root: std::path::PathBuf,
+    source: std::path::PathBuf,
+    name: Option<String>,
+) -> Result<SandboxResponse, LitError> {
     let name =
         name.unwrap_or_else(|| format!("sandbox-{}", chrono::Utc::now().format("%Y%m%d-%H%M%S")));
     validate_sandbox_name(&name)?;
@@ -158,6 +166,22 @@ pub fn execute_run_with(
     options: RunOptions,
 ) -> Result<SandboxResponse, LitError> {
     let repo_root = crate::core::find_repo_root()?;
+    execute_run_at(repo_root, name, cmd, options)
+}
+
+/// Like [`execute_run_with`], against an explicit repository root.
+///
+/// The confinement backend is the part worth testing, and testing it through
+/// the working directory would mean mutating process-global state from a test —
+/// so the root is a parameter. This is also what let the sandbox be exercised
+/// on Linux CI at all: without it, no test called the run path and the Linux
+/// namespace and cgroup code was compiled but never executed.
+pub fn execute_run_at(
+    repo_root: std::path::PathBuf,
+    name: String,
+    cmd: Vec<String>,
+    options: RunOptions,
+) -> Result<SandboxResponse, LitError> {
     validate_sandbox_name(&name)?;
     let sb_dir = sandbox_dir(&repo_root, &name);
 

@@ -31,6 +31,7 @@ mod reset;
 mod resolve;
 mod revert;
 mod rotate_key;
+mod sandbox;
 mod search;
 mod serve;
 mod server;
