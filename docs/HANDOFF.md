@@ -133,124 +133,58 @@ time than it takes to write the log line recording the request.
 Revisit only with a profile showing otherwise, and then with an explicit bound
 and a stated worst-case revocation delay — not an unbounded cache.
 
-### Open: `lit sandbox` is not a sandbox (found 2026-09-22)
+### Resolved: `lit sandbox` now confines (2026-09-22 → 2026-09-26)
 
-`execute_run` sets a working directory and replaces the environment. Nothing
-else. There are no namespaces, job objects, AppContainer, seccomp, Landlock,
-chroot or rlimits anywhere in the crate — grepping for all of them returns
-nothing. A command run through it reads and writes whatever the caller can,
-opens any socket, and runs with the caller's privileges. `LIT_AIRGAPPED=1` is
-honoured by Lit and by nothing else.
+**Was:** `execute_run` set a working directory, called `env_clear()`, and made no
+confinement syscall. Grepping the crate for namespaces, job objects,
+AppContainer, seccomp, Landlock, chroot and rlimits returned nothing. The README
+advertised "process isolation with filesystem, environment and network fences"
+and told readers to run untrusted code in it — for a project aimed at CUI
+environments. The documentation was the dangerous part, not the code: the
+feature did what it did, but anyone trusting the description had no protection.
 
-The feature is genuinely useful as hygiene: it keeps a build off your dotfiles,
-credential helpers, SSH agent and system Git config. It is not a boundary.
+**Now:** runs go through `hv2-sandbox` 1.1.0 (`4762d32`), published from
+HyperMachine at Adam's decision once its own blockers cleared. The env scrub and
+tree copy remain as the hygiene they always were.
 
-**The serious part was the documentation, not the code.** The README described
-"process isolation with filesystem, environment and network fences" and told
-readers to run untrusted code in it, for a product marketed at CUI and
-classified environments. Someone following that sentence had no protection at
-all. Corrected 2026-09-22, in the README and in the module header where a
-caller will see it.
+The crate was chosen for one property above the rest: `controls()` is probed per
+host rather than assumed, and a request the host cannot meet is an error instead
+of a silent downgrade. That is exactly the failure this command had.
 
-Unlike the UCAN findings, which are dormant because nothing consults them, this
-one was actively recruiting the unsafe use. That is the distinction worth
-keeping: a wrong claim in a README can be more dangerous than a bug in the code
-it describes.
+Every run fills `controls_enforced` and `controls_unenforced` on the response,
+the latter carrying the host's own reason per gap — on Windows, "a job object
+does not isolate the network; use the microVM sandbox". `--strict` refuses
+rather than under-confining; `--allow-network` opts out of denial deliberately.
 
-**The substrate exists.** `hv2-sandbox`, in
-`nervosys/os/HyperMachine/crates/hv2-sandbox`, is built for exactly this and was
-written after its author found the same class of problem there — two things that
-"looked like sandboxes and confined nothing... between them they made not one
-confinement syscall".
+**Filesystem isolation is deliberately not requested on any platform.** It needs
+a root to `pivot_root` into plus a read-only mount set, and a sandbox directory
+is a copy of the working tree, not a root filesystem — a workload pivoted into
+it would find none of its own tools. That mount set is a design decision, not a
+default to guess at. This is the obvious next increment if anyone wants it.
 
-It fits Lit's case closely:
+Two things this cost, both worth remembering:
 
-- Its `Control` enum is the eight things Lit's README wrongly claimed, including
-  `NetworkIsolation`, `FilesystemIsolation` and `ProcessIsolation`.
-- `Sandbox::controls()` is **probed per host, not assumed**, and a spec asking
-  for a control the host cannot enforce returns `SandboxError::Unsupported`
-  rather than downgrading quietly. `SandboxSpec::best_effort` is the explicit
-  opt-out, and reports what it dropped.
-- `SandboxSpec::untrusted(memory, wall_clock)` is a ready-made preset for this
-  use.
-- Linux gets namespaces, `pivot_root`, cgroup v2, `RLIMIT_*` and
-  `no_new_privs`; Windows gets job-object memory, process-count and CPU-time
-  caps with kill-on-close; macOS gets `RLIMIT_*` only, and says so.
+- **Running it found a defect compiling it could not.** The `--strict` refusal —
+  the entire point of the flag — reached the operator as "Operation failed",
+  because `LitError`'s rendered message is sanitized. A refusal that explains
+  nothing is worse than no refusal. Fixed by routing through the structured
+  `suggestions`, following the pattern `errors.rs` already used for the
+  encryption cases that hit the same wall.
+- **The first version of the tests was itself the same defect.** After
+  integrating, no test called the run path, so `hv2-sandbox`'s Linux backend —
+  the platform where the real confinement lives — was compiled by CI and
+  executed by nothing. Run `4762d32` went green on all five jobs without
+  touching it once. A test suite that only compiles a sandbox cannot tell it
+  apart from a sandbox that confines nothing. `ba1d130` adds four tests through
+  `execute_run_at` / `execute_init_from`, and they are confirmed from the job
+  logs to run and pass on ubuntu-latest and macos-latest as well as Windows.
 
-The consequence worth planning around: **Windows, Lit's primary development
-platform, gets resource caps but no filesystem or network fence.** An
-`untrusted()` spec there would refuse to run. That is the correct outcome and
-the one the old README denied — but it means `lit sandbox` would become "real
-isolation on Linux, resource limits on Windows", not "isolation everywhere".
-
-Licensing checks out: HyperMachine is `AGPL-3.0-only OR LicenseRef-Commercial`,
-Lit is `AGPL-3.0-or-later`, so Lit can be used under AGPL-3.0-only terms.
-
-**Blocked on publication, checked 2026-09-22.** `hv2-sandbox` is not on
-crates.io — the API returns `crate 'hv2-sandbox' does not exist` — and the
-published `hypermachine` umbrella (1.1.0) re-exports `agent`, `api`, `core`,
-`cpu`, `gpu`, `net` and `runtime`, but not `sandbox`. So there is no published
-path to it today.
-
-A path dependency is not an acceptable substitute: Cargo requires a version on
-every dependency when publishing, optional ones included, so a path-only dep
-would quietly make `litvc` unpublishable. Lit is on crates.io and the install
-docs say `cargo install litvc`, so that trade is not available.
-
-Either unblocks it, and both need a HyperMachine release:
-
-1. Publish `hv2-sandbox` standalone. Cleanest — Lit depends on one small crate
-   rather than pulling a hypervisor framework in behind it.
-2. Add `pub use hv2_sandbox as sandbox;` to the umbrella and publish that. One
-   line there, but it makes Lit depend on all of HyperMachine.
-
-Option 1 is the better shape, and option 2 is now ruled out for a second
-reason: the umbrella's crates depend on `nervosys/IronCrypto`, which is
-private, so Lit would inherit a private-repo dependency for a confinement API.
-
-### Status 2026-09-22, from the HyperMachine session
-
-**Deferred by Adam, not blocked technically.** Asked directly, he chose "not
-yet". Two reasons, the second of which is not visible from this repository:
-
-- He had already declined pushing HyperMachine's master earlier the same day,
-  as an explicit decision rather than an oversight.
-- Their CI has no `IRONCRYPTO_TOKEN`, and `hv2-core`/`hv2-api` now depend on
-  the private `nervosys/IronCrypto`, so pushing would fail roughly 29 cargo
-  jobs at the fetch. Landing ~199 commits behind uniformly red CI is a poor
-  first showing for the branch.
-
-`hv2-sandbox` itself has **no** IronCrypto dependency, so this blocks the push,
-not the crate.
-
-Two corrections to what was written here earlier, both from that session and
-both in our favour: their tree is **clean**, not nine files dirty — that was a
-mid-session snapshot since committed — and master is **199** commits ahead, not
-184. So package contents match HEAD, and so does the whole tree.
-
-They independently confirmed the analysis: `hv2-sandbox`'s only `hv2-`
-reference is its own name, and publishing it drags nothing along.
-
-### Why this crate specifically, reinforced
-
-Worth recording before anyone substitutes something else. On a DoD-isolation
-review of HyperMachine the same day, `hv2-sandbox` came out as the
-counter-example to the rest of that repository: three of four platform-integrity
-modules reported success while doing nothing — memory encryption set a flag,
-PCR extension was XOR so every measurement was forgeable, secure boot admitted
-on a string comparison. `hv2-sandbox` was the one built the right way round,
-and on that host reports 6 of 8 controls enforced with the two gaps naming the
-actual OS error (no writable cgroup v2 hierarchy).
-
-That is the same defect class as Lit's sandbox README: a claim of protection
-with nothing behind it. The property that distinguishes `hv2-sandbox` —
-`Unsupported` rather than a silent downgrade — is exactly what the others
-lacked, and exactly why it is worth waiting for rather than reimplementing.
-
-Keep the env scrub and tree copy — they are genuine hygiene and orthogonal to
-enforcement. The integration is to run the command through a `Sandbox` backend
-and surface `controls()` in the command's output, so an operator can see what
-their host actually enforces.
+One limit on that coverage, stated so nobody over-reads it: the strict test
+asserts a disjunction — confined fully, or refused — so a pass does not reveal
+which branch a given host took. That was deliberate, to avoid encoding one
+runner's configuration as a requirement. HyperMachine PR #106 puts its
+`what_this_host_enforces` example in that repository's three-OS CI as a report,
+so the question now lives in the crate that can answer it.
 
 ### Open: UCAN is not an authorization mechanism yet (found 2026-09-22)
 
