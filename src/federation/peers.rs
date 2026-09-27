@@ -160,16 +160,32 @@ pub fn generate_want_list(repo_root: &Path) -> Result<Vec<String>, LitError> {
     let mut wants = Vec::new();
     for entry in fs::read_dir(&refs_dir).map_err(|e| LitError::io(format!("IO: {}", e)))? {
         let entry = entry.map_err(|e| LitError::io(format!("IO: {}", e)))?;
-        if let Ok(hash) = fs::read_to_string(entry.path()) {
-            let hash = hash.trim().to_string();
-            // Check if we have this object
+        if let Ok(contents) = fs::read_to_string(entry.path()) {
+            let hash = contents.trim();
+
+            // Validate before slicing. The emptiness check used to sit *after*
+            // `&hash[..2]`, so it guarded nothing: an empty or one-character
+            // ref file panicked on the slice, and a multi-byte first character
+            // panicked on a char boundary. This function is reached from the
+            // federation CLI, where a truncated or half-written remote ref is
+            // an ordinary state rather than an exotic one, and a panic there
+            // takes the whole process down — `unwrap_or_default` at the call
+            // site catches an `Err`, not an unwind.
+            //
+            // A hash needs two characters for the fan-out directory and at
+            // least one for the file name, and anything that is not hex cannot
+            // name an object we store.
+            if hash.len() < 3 || !hash.chars().all(|c| c.is_ascii_hexdigit()) {
+                continue;
+            }
+
             let obj_path = repo_root
                 .join(".lit")
                 .join("objects")
                 .join(&hash[..2])
                 .join(&hash[2..]);
-            if !obj_path.exists() && !hash.is_empty() {
-                wants.push(hash);
+            if !obj_path.exists() {
+                wants.push(hash.to_string());
             }
         }
     }
@@ -191,6 +207,42 @@ mod tests {
     /// during unwind, so neither does.
     fn tmp_dir() -> TempDir {
         TempDir::new().unwrap()
+    }
+
+    /// A remote ref file that is empty, truncated, or not a hash at all must not
+    /// take the process down. `generate_want_list` builds the object path by
+    /// slicing the file's contents, and it is reached from the federation CLI
+    /// where a half-written ref file is not an exotic state.
+    #[test]
+    fn a_malformed_remote_ref_does_not_panic_the_want_list() {
+        let dir = tmp_dir();
+        let remotes = dir.path().join(".lit").join("refs").join("remotes");
+        fs::create_dir_all(&remotes).unwrap();
+
+        // Each of these would have panicked on `&hash[..2]`, which ran before
+        // the emptiness check that was supposed to guard it.
+        fs::write(remotes.join("empty"), "").unwrap();
+        fs::write(remotes.join("one-char"), "a").unwrap();
+        fs::write(
+            remotes.join("whitespace"),
+            "   
+",
+        )
+        .unwrap();
+        fs::write(remotes.join("two-char"), "ab").unwrap();
+        // A multi-byte character would panic on a char boundary rather than a
+        // length check.
+        fs::write(remotes.join("multibyte"), "é1234").unwrap();
+        // And one genuine-looking hash, so the function is still doing its job.
+        fs::write(remotes.join("real"), "abc123def4567890").unwrap();
+
+        let wants = generate_want_list(dir.path()).expect("must not error");
+
+        assert_eq!(
+            wants,
+            vec!["abc123def4567890".to_string()],
+            "only the well-formed hash should be wanted"
+        );
     }
 
     #[test]
