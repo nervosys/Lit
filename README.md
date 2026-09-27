@@ -223,9 +223,16 @@ blocks the user-namespace id-map write, and when the namespaces go, network,
 process *and* filesystem isolation go with them. No writable cgroup hierarchy
 costs the memory and process-count caps on top.
 
-Granting it back, where you control the host, needs
-`sysctl -w kernel.apparmor_restrict_unprivileged_userns=0` and a delegated
-cgroup. macOS gets `RLIMIT_*` only.
+Granting it back, where you control the host, takes two things: the sysctl above
+set to `0` (or an AppArmor profile permitting user namespaces for the calling
+program), and a cgroup delegated to your user — for instance running under
+`systemd-run --user --scope -p Delegate=yes ...`, or from a service with
+`Delegate=yes`. macOS gets `RLIMIT_*` only.
+
+You should not need this README to find that out. Each entry in
+`controls_unenforced` carries the reason from the host itself, naming the
+mechanism that refused and the way round it, so the run that fell short tells
+you how to fix it.
 
 **This is the reason the report exists.** Even a platform-level rule of thumb —
 "Linux is the strong one" — is wrong often enough to be dangerous. The only
