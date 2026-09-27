@@ -179,9 +179,41 @@ Two things this cost, both worth remembering:
   `execute_run_at` / `execute_init_from`, and they are confirmed from the job
   logs to run and pass on ubuntu-latest and macos-latest as well as Windows.
 
-One limit on that coverage, stated so nobody over-reads it: the strict test
-asserts a disjunction — confined fully, or refused — so a pass does not reveal
-which branch a given host took. That was deliberate, to avoid encoding one
+**Which branch Linux CI took: the refusal.** Answered 2026-09-27 by
+HyperMachine's own CI, after it added `what_this_host_enforces` to its three-OS
+job on this suggestion. GitHub's `ubuntu-latest` enforces **1 of 4** containment
+controls for an unprivileged user: AppArmor's
+`kernel.apparmor_restrict_unprivileged_userns=1`, the default on recent Ubuntu,
+blocks the user-namespace id-map write, and without namespaces there is no
+network, process or filesystem isolation. No writable cgroup costs the caps too.
+
+So Lit's sandbox on a default modern Ubuntu is weaker than the README implied
+before this was known — corrected there. The disjunction in the strict test was
+the right call: asserting success would have failed on the very platform
+supposedly strongest, and asserting refusal would have encoded one runner's
+AppArmor policy as a requirement.
+
+Wanting the success branch on Lit's CI is possible —
+`sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0` plus a delegated
+cgroup, per the Sandbox Containment job in HyperMachine's ci.yml — but it means
+weakening a kernel security control on the runner to test a security feature,
+which deserves a decision rather than a drive-by commit.
+
+Two upstream bugs surfaced from that same exercise, both found only once a job
+refused to let containment tests skip: `ProcessCount` had used `RLIMIT_NPROC`,
+which counts every thread the *user* owns host-wide, so a limit of 64 refused
+spawns with `EAGAIN` on any busy machine; and `/proc` was mounted after the
+`pivot_root`, which Ubuntu's kernel rejects with `EPERM` while WSL allows it.
+Lit is unaffected by the resulting behaviour change — a strict macOS spec asking
+for a process limit now refuses — because Lit's spec leaves `memory_bytes` and
+`max_processes` as `None` and never asks for `ProcessCount`.
+
+That their containment tests had been "passing by skipping" is the same defect
+class as everything else in this section, for the fourth time: a green signal
+that measured nothing.
+
+The original limit still stands: the strict test asserts a disjunction, so a
+pass does not by itself reveal which branch a host took. That was deliberate, to avoid encoding one
 runner's configuration as a requirement. HyperMachine PR #106 puts its
 `what_this_host_enforces` example in that repository's three-OS CI as a report,
 so the question now lives in the crate that can answer it.

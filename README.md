@@ -215,9 +215,22 @@ On Windows the backend is a job object, so a run reports something like:
 ]
 ```
 
-Linux gets namespaces, `pivot_root`, cgroup v2 and `no_new_privs` — though an
-unprivileged user with no writable cgroup v2 hierarchy loses the memory and
-process-count caps, and is told so. macOS gets `RLIMIT_*` only.
+Linux *can* do the most — namespaces, `pivot_root`, cgroup v2, `no_new_privs` —
+but do not assume it does. Measured on GitHub's `ubuntu-latest` by the crate's
+own CI, an unprivileged user gets **1 of 4** containment controls: AppArmor's
+`kernel.apparmor_restrict_unprivileged_userns=1` (the default on recent Ubuntu)
+blocks the user-namespace id-map write, and when the namespaces go, network,
+process *and* filesystem isolation go with them. No writable cgroup hierarchy
+costs the memory and process-count caps on top.
+
+Granting it back, where you control the host, needs
+`sysctl -w kernel.apparmor_restrict_unprivileged_userns=0` and a delegated
+cgroup. macOS gets `RLIMIT_*` only.
+
+**This is the reason the report exists.** Even a platform-level rule of thumb —
+"Linux is the strong one" — is wrong often enough to be dangerous. The only
+trustworthy statement about a given run is `controls_enforced` from that run, on
+that host, as that user.
 
 **Filesystem isolation is not requested**, on any platform. Confining the
 filesystem means giving the backend a root to pivot into plus the host paths to
