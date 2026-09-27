@@ -5,7 +5,18 @@ All notable changes to Lit will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.8.0] - 2026-09-27
+
+> **One technically breaking change, disclosed rather than buried.**
+> `SandboxResponse` gains two public fields, `controls_enforced` and
+> `controls_unenforced`. Adding a public field to a struct with all-public
+> fields breaks struct-literal construction, which strictly calls for a major
+> bump. It ships as a minor because the practical blast radius is nil — only Lit
+> constructs this type, and anything deserializing it is unaffected thanks to
+> serde defaults — but that is a judgement, not a technicality we satisfy, and
+> it should not be discovered by whoever hits it. The project has 68 all-public
+> response structs and no `#[non_exhaustive]` among them, so this will recur;
+> marking them is the fix, and belongs in a major.
 
 ### Added
 
