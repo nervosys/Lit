@@ -1,5 +1,7 @@
 # ![Lit — The Agentic-First Distributed Version Control System](https://raw.githubusercontent.com/nervosys/Lit/master/media/banner.png)
 
+English | [简体中文](README.zh-CN.md)
+
 **The world's first universal version control system designed for AI agents first and humans second.**
 
 Lit is a complete Git replacement written in Rust — 67 commands, 30 MCP tools, post-quantum cryptographic security, confined command execution, and structured machine-readable output. Every interface is designed for autonomous agent workflows, with human-friendly output available via a single flag.
