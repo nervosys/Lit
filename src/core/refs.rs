@@ -64,6 +64,44 @@ fn encryption_enabled(repo_path: &Path) -> bool {
         .unwrap_or(false)
 }
 
+/// Whether a ref name is safe to turn into a path under `.lit/refs`.
+///
+/// A ref name is used as a path component, so a name is also an instruction
+/// about where to write. `heads/../../tmp/pwn` walks out of `.lit` entirely,
+/// and on Windows so does a drive letter or a backslash. Callers that take a
+/// branch or tag name from the user — a CLI argument, an HTTP request, a
+/// remote ref — reach `write_ref`/`delete_ref` with it, so the check belongs
+/// here rather than in each of them.
+///
+/// This deliberately mirrors the rules `serve.rs` already applied to its own
+/// endpoints, so that one definition is the one that holds everywhere.
+pub fn is_valid_ref_name(name: &str) -> bool {
+    if name.is_empty() || name.len() > 256 {
+        return false;
+    }
+    // `..` is traversal, `//` and a leading `/` are absolute-ish, and a
+    // trailing `/` would make the ref a directory.
+    if name.contains("..") || name.contains("//") || name.starts_with('/') || name.ends_with('/') {
+        return false;
+    }
+    // Everything else outside this set is rejected, which is what keeps out
+    // `\` (a separator on Windows), `:` (a drive letter), NUL and control
+    // characters, since none of them are alphanumeric.
+    name.chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' || c == '/')
+}
+
+/// Reject a ref name that would escape the refs directory.
+fn validate_ref_name(ref_name: &str) -> Result<(), String> {
+    if is_valid_ref_name(ref_name) {
+        return Ok(());
+    }
+    Err(format!(
+        "Invalid reference name '{}': must be 1-256 characters of letters, digits, '-', '_', '.' or '/', with no '..', '//', or leading/trailing '/'",
+        ref_name
+    ))
+}
+
 /// Load the encrypted ref index, empty when there is none yet.
 ///
 /// A ref name is a filename, so a directory holding one file per ref leaks
@@ -122,6 +160,8 @@ pub fn find_repo_root() -> Result<PathBuf, String> {
 
 /// Read a reference file
 pub fn read_ref(repo_path: &Path, ref_name: &str) -> Result<String, String> {
+    validate_ref_name(ref_name)?;
+
     // An encrypted repository keeps its refs in one file so the names are not
     // exposed as directory entries. A repository that has not been migrated
     // still has them loose, so fall through to that rather than failing.
@@ -146,6 +186,8 @@ pub fn read_ref_encrypted(
     ref_name: &str,
     encryption: &Arc<Mutex<EncryptionManager>>,
 ) -> Result<String, String> {
+    validate_ref_name(ref_name)?;
+
     let ref_path = get_lit_dir(repo_path).join("refs").join(ref_name);
 
     if !ref_path.exists() {
@@ -168,6 +210,8 @@ pub fn read_ref_encrypted(
 
 /// Write a reference file
 pub fn write_ref(repo_path: &Path, ref_name: &str, hash: &str) -> Result<(), String> {
+    validate_ref_name(ref_name)?;
+
     if encryption_enabled(repo_path) {
         let mut refs = load_refs_index(repo_path)?;
         refs.insert(ref_name.to_string(), hash.to_string());
@@ -212,6 +256,8 @@ pub fn write_ref_encrypted(
     hash: &str,
     encryption: &Arc<Mutex<EncryptionManager>>,
 ) -> Result<(), String> {
+    validate_ref_name(ref_name)?;
+
     let ref_path = get_lit_dir(repo_path).join("refs").join(ref_name);
 
     if let Some(parent) = ref_path.parent() {
@@ -232,6 +278,8 @@ pub fn write_ref_encrypted(
 
 /// Delete a reference
 pub fn delete_ref(repo_path: &Path, ref_name: &str) -> Result<(), String> {
+    validate_ref_name(ref_name)?;
+
     let ref_path = get_lit_dir(repo_path).join("refs").join(ref_name);
 
     // Remove from both, since a part-migrated repository may hold it in either.
@@ -608,5 +656,99 @@ mod tests {
 
         // Reading should fail due to authentication tag mismatch
         assert!(read_ref_encrypted(&temp_dir, ref_name, &encryption).is_err());
+    }
+
+    #[test]
+    fn test_valid_ref_names_accepted() {
+        for name in [
+            "heads/main",
+            "heads/feature/login",
+            "tags/v1.0.0",
+            "remotes/origin/main",
+            "heads/release_2-0",
+        ] {
+            assert!(is_valid_ref_name(name), "should accept {:?}", name);
+        }
+    }
+
+    #[test]
+    fn test_traversal_ref_names_rejected() {
+        for name in [
+            "heads/../../tmp/pwn",
+            "../../etc/passwd",
+            "..",
+            "heads/../..",
+            "/etc/passwd",
+            "heads/",
+            "heads//main",
+            "",
+        ] {
+            assert!(!is_valid_ref_name(name), "should reject {:?}", name);
+        }
+    }
+
+    #[test]
+    fn test_windows_specific_ref_names_rejected() {
+        // A backslash is a separator on Windows and a drive letter escapes
+        // the repository entirely; a NUL would truncate the path.
+        for name in ["heads\\..\\..\\pwn", "C:\\tmp\\pwn", "heads/ma\0in"] {
+            assert!(!is_valid_ref_name(name), "should reject {:?}", name);
+        }
+    }
+
+    #[test]
+    fn test_write_ref_refuses_to_escape_the_repository() {
+        let temp = TempDir::new().unwrap();
+        let temp_dir = temp.path().to_path_buf();
+        fs::create_dir_all(get_lit_dir(&temp_dir).join("refs/heads")).unwrap();
+
+        let err = write_ref(&temp_dir, "heads/../../pwned", "abc123").unwrap_err();
+        assert!(
+            err.contains("Invalid reference name"),
+            "unexpected error: {}",
+            err
+        );
+
+        // Nothing was written outside the repository.
+        assert!(
+            !temp_dir.parent().unwrap().join("pwned").exists(),
+            "wrote a file outside the repository"
+        );
+    }
+
+    #[test]
+    fn test_delete_ref_refuses_to_escape_the_repository() {
+        let temp = TempDir::new().unwrap();
+        let temp_dir = temp.path().to_path_buf();
+        fs::create_dir_all(get_lit_dir(&temp_dir).join("refs/heads")).unwrap();
+
+        let outside = temp_dir.parent().unwrap().join("outside.txt");
+        fs::write(&outside, "do not delete me").unwrap();
+
+        let err = delete_ref(&temp_dir, "heads/../../outside.txt").unwrap_err();
+        assert!(
+            err.contains("Invalid reference name"),
+            "unexpected error: {}",
+            err
+        );
+        assert!(outside.exists(), "deleted a file outside the repository");
+    }
+
+    #[test]
+    fn test_read_ref_refuses_to_escape_the_repository() {
+        let temp = TempDir::new().unwrap();
+        let temp_dir = temp.path().to_path_buf();
+        fs::create_dir_all(get_lit_dir(&temp_dir).join("refs/heads")).unwrap();
+
+        let outside = temp_dir.parent().unwrap().join("secret.txt");
+        fs::write(&outside, "sensitive").unwrap();
+
+        // The path that used to be built would have landed on `secret.txt`.
+        let err = read_ref(&temp_dir, "heads/../../secret.txt").unwrap_err();
+        assert!(
+            err.contains("Invalid reference name"),
+            "unexpected error: {}",
+            err
+        );
     }
 }
