@@ -799,17 +799,14 @@ fn parse_query_param(url: &str, key: &str) -> Option<String> {
     None
 }
 
-/// Validate a ref name (branch, tag) — alphanumeric, hyphens, underscores, dots, slashes.
-/// Rejects empty strings, leading/trailing slashes, double dots, and path traversal.
+/// Validate a ref name (branch, tag).
+///
+/// The rules live in `core::refs` next to the code that turns a name into a
+/// path, so that a name rejected here is rejected on the way in through the
+/// CLI too. Keeping a second copy here is how the check ends up applied to
+/// HTTP requests and to nothing else.
 fn is_valid_ref(name: &str) -> bool {
-    if name.is_empty() || name.len() > 256 {
-        return false;
-    }
-    if name.contains("..") || name.contains("//") || name.starts_with('/') || name.ends_with('/') {
-        return false;
-    }
-    name.chars()
-        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' || c == '/')
+    crate::core::is_valid_ref_name(name)
 }
 
 /// Validate a hex-encoded object hash (up to 192 hex characters for SHA3-512+BLAKE3 composite).
